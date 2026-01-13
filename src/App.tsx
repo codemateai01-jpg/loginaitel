@@ -12,6 +12,7 @@ import EngineerLogin from "./pages/auth/EngineerLogin";
 import ClientLogin from "./pages/auth/ClientLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminTasks from "./pages/admin/AdminTasks";
+import AdminAgents from "./pages/admin/AdminAgents";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
 import AgentBuilder from "./pages/engineer/AgentBuilder";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
@@ -53,6 +54,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <AdminTasks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/agents"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminAgents />
                 </ProtectedRoute>
               }
             />
