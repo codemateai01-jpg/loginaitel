@@ -18,6 +18,9 @@ import ClientBatches from "./pages/client/ClientBatches";
 import CreateBatchCampaign from "./pages/client/CreateBatchCampaign";
 import ClientPhoneNumbers from "./pages/client/ClientPhoneNumbers";
 import BatchAnalytics from "./pages/client/BatchAnalytics";
+import ClientAgents from "./pages/client/ClientAgents";
+import ClientBilling from "./pages/client/ClientBilling";
+import ClientSettings from "./pages/client/ClientSettings";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
 import EngineerTasks from "./pages/engineer/EngineerTasks";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
@@ -234,6 +237,14 @@ const App = () => (
               }
             />
             <Route
+              path="/client/agents"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientAgents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/client/leads"
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
@@ -294,6 +305,22 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <MakeCallPage role="client" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/billing"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientBilling />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/settings"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientSettings />
                 </ProtectedRoute>
               }
             />
