@@ -610,7 +610,7 @@ export function CallDetailsDialog({
             {execution.total_cost !== undefined && (
               <div className="flex items-center gap-2">
                 <DollarSign className="h-4 w-4 text-yellow-600" />
-                <span>${execution.total_cost.toFixed(4)}</span>
+                <span>${(Number(execution.total_cost) || 0).toFixed(4)}</span>
               </div>
             )}
 
@@ -1050,13 +1050,13 @@ export function CallDetailsDialog({
                       {Object.entries(execution.cost_breakdown).map(([key, value]) => (
                         <div key={key} className="flex justify-between p-2 bg-muted/50 border border-border">
                           <span className="text-sm capitalize">{key}</span>
-                          <span className="text-sm font-mono">${(value || 0).toFixed(4)}</span>
+                          <span className="text-sm font-mono">${(Number(value) || 0).toFixed(4)}</span>
                         </div>
                       ))}
                     </div>
                     <div className="flex justify-between p-2 mt-2 bg-primary/10 border-2 border-primary">
                       <span className="font-medium">Total</span>
-                      <span className="font-mono font-medium">${(execution.total_cost || 0).toFixed(4)}</span>
+                      <span className="font-mono font-medium">${(Number(execution.total_cost) || 0).toFixed(4)}</span>
                     </div>
                   </div>
                 )}
