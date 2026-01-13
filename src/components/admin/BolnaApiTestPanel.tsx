@@ -251,12 +251,13 @@ export function BolnaApiTestPanel() {
       return;
     }
 
-    // Extract original prompt for comparison
+    // Extract original config and prompt for comparison
     const agentData = getResult.data as Record<string, unknown>;
+    const originalAgentConfig = agentData?.agent_config as Record<string, unknown>;
     const originalPrompt = (agentData?.agent_prompts as Record<string, unknown>)?.task_1 as Record<string, string> | undefined;
     const originalSystemPrompt = originalPrompt?.system_prompt || "N/A";
 
-    // Step 2: PUT update with new system prompt
+    // Step 2: PUT update with new system prompt (must include agent_config per Bolna API)
     const putIdx = results.length;
     addResult({
       endpoint: `update-agent (PUT)`,
@@ -265,6 +266,7 @@ export function BolnaApiTestPanel() {
     });
 
     const updateBody = {
+      agent_config: originalAgentConfig,
       agent_prompts: {
         task_1: {
           system_prompt: testPrompt
