@@ -94,17 +94,34 @@ export function UserManagement() {
     },
   });
 
-  // Add user mutation (using edge function would be ideal for production)
+  // Add user mutation using edge function
   const addUserMutation = useMutation({
     mutationFn: async (userData: typeof newUser) => {
-      // In production, this would call an edge function to create the user
-      // For now, we'll show a message
-      toast.info("User invitation sent", {
-        description: `An invitation will be sent to ${userData.email}`,
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const response = await supabase.functions.invoke("create-user", {
+        body: {
+          email: userData.email,
+          password: userData.password,
+          full_name: userData.full_name || null,
+          phone: userData.phone || null,
+          role: userData.role,
+        },
       });
-      return userData;
+
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to create user");
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
     },
     onSuccess: () => {
+      toast.success("User created successfully");
       setIsAddDialogOpen(false);
       setNewUser({
         email: "",
@@ -114,6 +131,9 @@ export function UserManagement() {
         role: "client",
       });
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (error) => {
+      toast.error(`Failed to create user: ${error.message}`);
     },
   });
 
@@ -232,6 +252,19 @@ export function UserManagement() {
                     setNewUser({ ...newUser, full_name: e.target.value })
                   }
                   className="border-2"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Password *</Label>
+                <Input
+                  type="password"
+                  required
+                  value={newUser.password}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, password: e.target.value })
+                  }
+                  className="border-2"
+                  placeholder="Minimum 6 characters"
                 />
               </div>
               <div className="space-y-2">

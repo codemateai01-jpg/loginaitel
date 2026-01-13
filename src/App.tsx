@@ -30,6 +30,7 @@ import AdminCalls from "./pages/admin/AdminCalls";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPhoneNumbers from "./pages/admin/AdminPhoneNumbers";
 import AdminRealTimeMonitor from "./pages/admin/AdminRealTimeMonitor";
+import BatchCallHistory from "./pages/admin/BatchCallHistory";
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <AdminRealTimeMonitor />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/call-history"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <BatchCallHistory />
                 </ProtectedRoute>
               }
             />

@@ -19,6 +19,7 @@ import {
   Upload,
   Layers,
   Radio,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,6 +41,7 @@ const adminNavItems = [
   { icon: Phone, label: "Calls", href: "/admin/calls" },
   { icon: Layers, label: "Batch Calls", href: "/admin/batches" },
   { icon: BarChart3, label: "Batch Analytics", href: "/admin/batch-analytics" },
+  { icon: History, label: "Call History", href: "/admin/call-history" },
   { icon: Phone, label: "Phone Numbers", href: "/admin/phone-numbers" },
   { icon: CreditCard, label: "Credits", href: "/admin/credits" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
