@@ -299,6 +299,20 @@ export async function updateBolnaAgent(
   return callBolnaProxy<BolnaAgent>("update-agent", { agent_id: agentId }, config);
 }
 
+// Update only the system prompt for an agent
+export async function updateBolnaAgentPrompt(
+  agentId: string,
+  systemPrompt: string
+): Promise<BolnaResponse<BolnaAgent>> {
+  return callBolnaProxy<BolnaAgent>("update-agent", { agent_id: agentId }, {
+    agent_prompts: {
+      task_1: {
+        system_prompt: systemPrompt,
+      },
+    },
+  });
+}
+
 export async function deleteBolnaAgent(agentId: string): Promise<BolnaResponse<{ message: string; state: string }>> {
   return callBolnaProxy<{ message: string; state: string }>("delete-agent", { agent_id: agentId });
 }

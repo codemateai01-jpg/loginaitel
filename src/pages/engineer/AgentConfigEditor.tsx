@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { updateBolnaAgentPrompt } from "@/lib/bolna";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -83,11 +84,22 @@ export default function AgentConfigEditor() {
     }
   }, [systemPrompt, selectedAgent]);
 
-  // Save mutation - only saves system prompt
+  // Save mutation - saves system prompt to both local DB and Bolna API
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedAgentId) throw new Error("No agent selected");
+      if (!selectedAgentId || !selectedAgent) throw new Error("No agent selected");
 
+      // First, update in Bolna API (two-way sync)
+      const bolnaResponse = await updateBolnaAgentPrompt(
+        selectedAgent.bolna_agent_id,
+        systemPrompt
+      );
+
+      if (bolnaResponse.error) {
+        throw new Error(`Failed to sync with Bolna: ${bolnaResponse.error}`);
+      }
+
+      // Then update in local database
       const { error } = await supabase
         .from("bolna_agents")
         .update({
@@ -100,7 +112,7 @@ export default function AgentConfigEditor() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-assigned-agents-editor"] });
-      toast.success("Agent configuration saved!");
+      toast.success("Agent prompt saved and synced with Bolna!");
       setHasChanges(false);
     },
     onError: (error) => {
