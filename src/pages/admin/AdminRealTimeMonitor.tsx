@@ -9,14 +9,15 @@ import {
   CheckCircle,
   XCircle,
   PhoneOff,
-  Users,
-  TrendingUp,
+  Eye,
   Zap,
   Radio,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { CallDetailsDialog } from "@/components/calls/CallDetailsDialog";
 
 interface LiveCall {
   id: string;
@@ -27,7 +28,14 @@ interface LiveCall {
   duration_seconds: number | null;
   connected: boolean | null;
   started_at: string | null;
+  ended_at: string | null;
   created_at: string;
+  transcript: string | null;
+  recording_url: string | null;
+  summary: string | null;
+  sentiment: string | null;
+  metadata: unknown;
+  external_call_id: string | null;
   lead?: {
     name: string | null;
     phone_number_masked: string | null;
@@ -75,6 +83,7 @@ const statusConfig: Record<
 
 export default function AdminRealTimeMonitor() {
   const queryClient = useQueryClient();
+  const [selectedCall, setSelectedCall] = useState<LiveCall | null>(null);
   const [recentEvents, setRecentEvents] = useState<
     Array<{ id: string; type: string; call: LiveCall; timestamp: Date }>
   >([]);
@@ -332,7 +341,8 @@ export default function AdminRealTimeMonitor() {
                     return (
                       <div
                         key={call.id}
-                        className={`p-4 ${status.pulse ? "animate-pulse" : ""}`}
+                        className={`p-4 cursor-pointer hover:bg-accent/50 transition-colors ${status.pulse ? "animate-pulse" : ""}`}
+                        onClick={() => setSelectedCall(call)}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
@@ -343,12 +353,25 @@ export default function AdminRealTimeMonitor() {
                               {call.lead?.phone_number_masked}
                             </p>
                           </div>
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border-2 ${status.className}`}
-                          >
-                            <StatusIcon className="h-3 w-3" />
-                            {status.label}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border-2 ${status.className}`}
+                            >
+                              <StatusIcon className="h-3 w-3" />
+                              {status.label}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCall(call);
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">
@@ -399,7 +422,11 @@ export default function AdminRealTimeMonitor() {
                     const StatusIcon = status.icon;
 
                     return (
-                      <div key={event.id} className="p-4">
+                      <div
+                        key={event.id}
+                        className="p-4 cursor-pointer hover:bg-accent/50 transition-colors"
+                        onClick={() => setSelectedCall(event.call)}
+                      >
                         <div className="flex items-start justify-between mb-1">
                           <div className="flex items-center gap-2">
                             <span
@@ -421,9 +448,22 @@ export default function AdminRealTimeMonitor() {
                               {event.type}
                             </Badge>
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {format(event.timestamp, "HH:mm:ss")}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {format(event.timestamp, "HH:mm:ss")}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCall(event.call);
+                              }}
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                         <p className="text-sm">
                           Call to{" "}
@@ -451,6 +491,25 @@ export default function AdminRealTimeMonitor() {
           </span>
           <span className="text-sm font-medium">Live</span>
         </div>
+
+        {/* Call Details Dialog */}
+        <CallDetailsDialog
+          call={
+            selectedCall
+              ? {
+                  ...selectedCall,
+                  lead: selectedCall.lead
+                    ? {
+                        name: selectedCall.lead.name,
+                        phone_number: selectedCall.lead.phone_number_masked || "",
+                      }
+                    : undefined,
+                }
+              : null
+          }
+          open={!!selectedCall}
+          onOpenChange={(open) => !open && setSelectedCall(null)}
+        />
       </div>
     </DashboardLayout>
   );
