@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/AuthContext";
 
 const stats = [
   {
@@ -67,13 +68,16 @@ const leaderboard = [
 ];
 
 export default function EngineerDashboard() {
+  const { user } = useAuth();
+  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Engineer";
+
   return (
     <DashboardLayout role="engineer">
       <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome back, Rahul!</h1>
+            <h1 className="text-3xl font-bold mb-2">Welcome back, {displayName}!</h1>
             <p className="text-muted-foreground">
               You're doing great this week. Keep it up!
             </p>

@@ -11,6 +11,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const stats = [
   {
@@ -99,13 +100,16 @@ const agents = [
 ];
 
 export default function ClientDashboard() {
+  const { user } = useAuth();
+  const companyName = user?.user_metadata?.full_name || "Client";
+
   return (
     <DashboardLayout role="client">
       <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome, TechCorp!</h1>
+            <h1 className="text-3xl font-bold mb-2">Welcome, {companyName}!</h1>
             <p className="text-muted-foreground">
               Your voice campaigns are performing well.
             </p>

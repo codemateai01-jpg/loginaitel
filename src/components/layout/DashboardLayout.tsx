@@ -19,6 +19,7 @@ import {
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -58,6 +59,7 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { signOut } = useAuth();
 
   const navItems =
     role === "admin"
@@ -72,6 +74,11 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
       : role === "engineer"
       ? "Engineer Portal"
       : "Client Portal";
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -136,7 +143,7 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             <Button
               variant="outline"
               className="w-full justify-start gap-3"
-              onClick={() => navigate("/")}
+              onClick={handleLogout}
             >
               <LogOut className="h-5 w-5" />
               Logout

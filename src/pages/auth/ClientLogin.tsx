@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mic, ArrowLeft, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   InputOTP,
   InputOTPGroup,
@@ -16,37 +17,104 @@ export default function ClientLogin() {
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [companyName, setCompanyName] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Format phone to E.164 format
+  const formatPhone = (phoneNumber: string) => {
+    const cleaned = phoneNumber.replace(/\D/g, "");
+    if (cleaned.startsWith("91") && cleaned.length === 12) {
+      return `+${cleaned}`;
+    }
+    if (cleaned.length === 10) {
+      return `+91${cleaned}`;
+    }
+    return `+${cleaned}`;
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate OTP send - will be replaced with actual auth
-    setTimeout(() => {
+    try {
+      const formattedPhone = formatPhone(phone);
+      
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone,
+        options: {
+          data: isNewUser
+            ? {
+                full_name: companyName,
+                phone: formattedPhone,
+                role: "client",
+              }
+            : undefined,
+        },
+      });
+
+      if (error) throw error;
+
       toast({
         title: "OTP Sent!",
         description: "Please check your phone for the verification code.",
       });
       setOtpSent(true);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate OTP verification - will be replaced with actual auth
-    setTimeout(() => {
+    try {
+      const formattedPhone = formatPhone(phone);
+      
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: formattedPhone,
+        token: otp,
+        type: "sms",
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Check if user has client role
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
+
+        if (roleData?.role !== "client") {
+          await supabase.auth.signOut();
+          throw new Error("You don't have client access. Please use the correct login portal.");
+        }
+      }
+
       toast({
         title: "Welcome!",
         description: "You have been logged in successfully.",
       });
       navigate("/client");
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -84,6 +152,40 @@ export default function ClientLogin() {
 
           {!otpSent ? (
             <form onSubmit={handleSendOtp} className="space-y-6">
+              <div className="flex gap-2 mb-4">
+                <Button
+                  type="button"
+                  variant={!isNewUser ? "default" : "outline"}
+                  onClick={() => setIsNewUser(false)}
+                  className="flex-1"
+                >
+                  Existing Client
+                </Button>
+                <Button
+                  type="button"
+                  variant={isNewUser ? "default" : "outline"}
+                  onClick={() => setIsNewUser(true)}
+                  className="flex-1"
+                >
+                  New Client
+                </Button>
+              </div>
+
+              {isNewUser && (
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Company Name</Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="Your Company Name"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    required
+                    className="border-2"
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input
@@ -127,7 +229,7 @@ export default function ClientLogin() {
                   </InputOTPGroup>
                 </InputOTP>
                 <p className="text-xs text-muted-foreground">
-                  Sent to {phone}
+                  Sent to {formatPhone(phone)}
                 </p>
               </div>
 
@@ -143,7 +245,10 @@ export default function ClientLogin() {
                 type="button"
                 variant="ghost"
                 className="w-full"
-                onClick={() => setOtpSent(false)}
+                onClick={() => {
+                  setOtpSent(false);
+                  setOtp("");
+                }}
               >
                 Change Phone Number
               </Button>

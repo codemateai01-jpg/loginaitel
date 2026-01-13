@@ -5,11 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mic, ArrowLeft, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function EngineerLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [fullName, setFullName] = useState("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -17,15 +20,62 @@ export default function EngineerLogin() {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate login - will be replaced with actual auth
-    setTimeout(() => {
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: {
+              full_name: fullName,
+              role: "engineer",
+            },
+          },
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Account created!",
+          description: "You can now log in with your credentials.",
+        });
+        setIsSignUp(false);
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        // Check if user has engineer role
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
+
+        if (roleData?.role !== "engineer") {
+          await supabase.auth.signOut();
+          throw new Error("You don't have engineer access. Please use the correct login portal.");
+        }
+
+        toast({
+          title: "Welcome back!",
+          description: "You have been logged in successfully.",
+        });
+        navigate("/engineer");
+      }
+    } catch (error: any) {
       toast({
-        title: "Welcome back!",
-        description: "You have been logged in successfully.",
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
       });
-      navigate("/engineer");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -54,7 +104,9 @@ export default function EngineerLogin() {
               <Wrench className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Engineer Login</h1>
+              <h1 className="text-2xl font-bold">
+                {isSignUp ? "Create Engineer Account" : "Engineer Login"}
+              </h1>
               <p className="text-sm text-muted-foreground">
                 Prompt Engineer access
               </p>
@@ -62,6 +114,21 @@ export default function EngineerLogin() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {isSignUp && (
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="John Doe"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  className="border-2"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -84,6 +151,7 @@ export default function EngineerLogin() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
                 className="border-2"
               />
             </div>
@@ -93,15 +161,34 @@ export default function EngineerLogin() {
               className="w-full shadow-sm"
               disabled={loading}
             >
-              {loading ? "Logging in..." : "Login"}
+              {loading ? "Please wait..." : isSignUp ? "Create Account" : "Login"}
             </Button>
           </form>
 
           <p className="text-sm text-muted-foreground text-center mt-6">
-            Forgot your password?{" "}
-            <Link to="/reset-password" className="underline hover:text-foreground">
-              Reset it here
-            </Link>
+            {isSignUp ? (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => setIsSignUp(false)}
+                  className="underline hover:text-foreground"
+                >
+                  Login
+                </button>
+              </>
+            ) : (
+              <>
+                Need an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => setIsSignUp(true)}
+                  className="underline hover:text-foreground"
+                >
+                  Create one
+                </button>
+              </>
+            )}
           </p>
         </div>
       </main>

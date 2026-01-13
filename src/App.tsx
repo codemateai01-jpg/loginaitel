@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Landing from "./pages/Landing";
 import LoginSelect from "./pages/auth/LoginSelect";
 import AdminLogin from "./pages/auth/AdminLogin";
@@ -25,31 +27,82 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          
-          {/* Auth Routes */}
-          <Route path="/login" element={<LoginSelect />} />
-          <Route path="/login/admin" element={<AdminLogin />} />
-          <Route path="/login/engineer" element={<EngineerLogin />} />
-          <Route path="/login/client" element={<ClientLogin />} />
-          
-          {/* Admin Routes */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/tasks" element={<AdminTasks />} />
-          
-          {/* Engineer Routes */}
-          <Route path="/engineer" element={<EngineerDashboard />} />
-          <Route path="/engineer/agents" element={<AgentBuilder />} />
-          <Route path="/engineer/leaderboard" element={<EngineerLeaderboard />} />
-          
-          {/* Client Routes */}
-          <Route path="/client" element={<ClientDashboard />} />
-          <Route path="/client/leads" element={<ClientLeads />} />
-          
-          {/* Catch-all */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            
+            {/* Auth Routes */}
+            <Route path="/login" element={<LoginSelect />} />
+            <Route path="/login/admin" element={<AdminLogin />} />
+            <Route path="/login/engineer" element={<EngineerLogin />} />
+            <Route path="/login/client" element={<ClientLogin />} />
+            
+            {/* Admin Routes - Protected */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/tasks"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminTasks />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Engineer Routes - Protected */}
+            <Route
+              path="/engineer"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <EngineerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/engineer/agents"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <AgentBuilder />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/engineer/leaderboard"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <EngineerLeaderboard />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Client Routes - Protected */}
+            <Route
+              path="/client"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/leads"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientLeads />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Catch-all */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

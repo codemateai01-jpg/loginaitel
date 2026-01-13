@@ -7,10 +7,10 @@ import {
   CreditCard,
   TrendingUp,
   Clock,
-  CheckCircle,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const stats = [
   {
@@ -79,6 +79,8 @@ const pendingApprovals = [
 ];
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+
   return (
     <DashboardLayout role="admin">
       <div className="space-y-8">
@@ -86,7 +88,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
           <p className="text-muted-foreground">
-            Platform overview and management
+            Welcome back, {user?.email?.split("@")[0] || "Admin"}
           </p>
         </div>
 
