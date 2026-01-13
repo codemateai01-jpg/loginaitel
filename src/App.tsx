@@ -6,25 +6,26 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Landing from "./pages/Landing";
+import NotFound from "./pages/NotFound";
 import LoginSelect from "./pages/auth/LoginSelect";
-import AdminLogin from "./pages/auth/AdminLogin";
-import EngineerLogin from "./pages/auth/EngineerLogin";
 import ClientLogin from "./pages/auth/ClientLogin";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminTasks from "./pages/admin/AdminTasks";
-import AdminAgents from "./pages/admin/AdminAgents";
-import AdminCalls from "./pages/admin/AdminCalls";
-import AdminPhoneNumbers from "./pages/admin/AdminPhoneNumbers";
-import EngineerDashboard from "./pages/engineer/EngineerDashboard";
-import AgentEditor from "./pages/engineer/AgentEditor";
-import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
-import EngineerTasks from "./pages/engineer/EngineerTasks";
+import EngineerLogin from "./pages/auth/EngineerLogin";
+import AdminLogin from "./pages/auth/AdminLogin";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientLeads from "./pages/client/ClientLeads";
 import ClientCalls from "./pages/client/ClientCalls";
 import ClientBatches from "./pages/client/ClientBatches";
 import ClientPhoneNumbers from "./pages/client/ClientPhoneNumbers";
-import NotFound from "./pages/NotFound";
+import EngineerDashboard from "./pages/engineer/EngineerDashboard";
+import EngineerTasks from "./pages/engineer/EngineerTasks";
+import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
+import AgentEditor from "./pages/engineer/AgentEditor";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminAgents from "./pages/admin/AdminAgents";
+import AdminCalls from "./pages/admin/AdminCalls";
+import AdminTasks from "./pages/admin/AdminTasks";
+import AdminPhoneNumbers from "./pages/admin/AdminPhoneNumbers";
+import AdminRealTimeMonitor from "./pages/admin/AdminRealTimeMonitor";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <AdminPhoneNumbers />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/monitor"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminRealTimeMonitor />
                 </ProtectedRoute>
               }
             />
