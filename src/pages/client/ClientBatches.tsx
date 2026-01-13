@@ -156,9 +156,13 @@ export default function ClientBatches() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <Button onClick={() => setCreateDialogOpen(true)} variant="outline">
               <Plus className="h-4 w-4 mr-2" />
-              Create Batch
+              Quick Create
+            </Button>
+            <Button onClick={() => window.location.href = "/client/batches/create"}>
+              <Users className="h-4 w-4 mr-2" />
+              New Campaign
             </Button>
           </div>
         </div>

@@ -15,6 +15,7 @@ import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientLeads from "./pages/client/ClientLeads";
 import ClientCalls from "./pages/client/ClientCalls";
 import ClientBatches from "./pages/client/ClientBatches";
+import CreateBatchCampaign from "./pages/client/CreateBatchCampaign";
 import ClientPhoneNumbers from "./pages/client/ClientPhoneNumbers";
 import BatchAnalytics from "./pages/client/BatchAnalytics";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
@@ -244,6 +245,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client", "admin"]}>
                   <ClientBatches />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/batches/create"
+              element={
+                <ProtectedRoute allowedRoles={["client", "admin"]}>
+                  <CreateBatchCampaign />
                 </ProtectedRoute>
               }
             />
