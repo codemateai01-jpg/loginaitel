@@ -243,9 +243,9 @@ export default function AdminAgents() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Agent Management</h1>
-              <p className="text-sm text-muted-foreground">
-                Sync and assign Bolna agents to clients
-              </p>
+            <p className="text-sm text-muted-foreground">
+              Sync and assign agents to clients
+            </p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -262,7 +262,7 @@ export default function AdminAgents() {
               ) : (
                 <>
                   <Download className="h-4 w-4 mr-2" />
-                  Sync from Bolna
+                  Sync Agents
                 </>
               )}
             </Button>
@@ -324,7 +324,7 @@ export default function AdminAgents() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Agent Name</TableHead>
-                  <TableHead>Bolna ID</TableHead>
+                  <TableHead>Agent ID</TableHead>
                   <TableHead>Assigned To</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Synced</TableHead>
