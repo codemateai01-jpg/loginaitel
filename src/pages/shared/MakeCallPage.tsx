@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,9 @@ import { Phone, Loader2, User, Clock, CheckCircle, XCircle, AlertCircle } from "
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { makeCall, getCallStatus } from "@/lib/bolna";
-import { useQuery } from "@tanstack/react-query";
+import { makeCall } from "@/lib/bolna";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CallProgressTracker } from "@/components/calls/CallProgressTracker";
 
 interface MakeCallPageProps {
   role: "admin" | "engineer" | "client";
@@ -48,6 +49,9 @@ interface RecentCall {
   id: string;
   status: string;
   created_at: string;
+  agent_id: string;
+  duration_seconds?: number;
+  external_call_id?: string;
   lead: {
     name: string | null;
     phone_number: string;
@@ -57,26 +61,43 @@ interface RecentCall {
   } | null;
 }
 
+interface ActiveCall {
+  id: string;
+  status: string;
+  created_at: string;
+  lead_name?: string;
+  phone_number?: string;
+  agent_name?: string;
+  external_call_id?: string;
+  duration_seconds?: number;
+}
+
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
-  queued: { label: "Queued", icon: <Clock className="h-4 w-4" />, className: "bg-muted text-muted-foreground" },
   initiated: { label: "Initiated", icon: <Phone className="h-4 w-4" />, className: "bg-blue-500/20 text-blue-600" },
+  queued: { label: "Queued", icon: <Clock className="h-4 w-4" />, className: "bg-muted text-muted-foreground" },
   ringing: { label: "Ringing", icon: <Phone className="h-4 w-4 animate-pulse" />, className: "bg-yellow-500/20 text-yellow-600" },
   "in-progress": { label: "In Progress", icon: <Phone className="h-4 w-4" />, className: "bg-green-500/20 text-green-600" },
   completed: { label: "Completed", icon: <CheckCircle className="h-4 w-4" />, className: "bg-green-500/20 text-green-600" },
   failed: { label: "Failed", icon: <XCircle className="h-4 w-4" />, className: "bg-destructive/20 text-destructive" },
   "no-answer": { label: "No Answer", icon: <AlertCircle className="h-4 w-4" />, className: "bg-yellow-500/20 text-yellow-600" },
   busy: { label: "Busy", icon: <AlertCircle className="h-4 w-4" />, className: "bg-yellow-500/20 text-yellow-600" },
+  canceled: { label: "Canceled", icon: <XCircle className="h-4 w-4" />, className: "bg-muted text-muted-foreground" },
+  "call-disconnected": { label: "Disconnected", icon: <XCircle className="h-4 w-4" />, className: "bg-destructive/20 text-destructive" },
 };
+
+const ACTIVE_STATUSES = ["initiated", "queued", "ringing", "in-progress"];
 
 export default function MakeCallPage({ role }: MakeCallPageProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [selectedLeadId, setSelectedLeadId] = useState<string>("");
   const [manualPhone, setManualPhone] = useState("");
   const [manualName, setManualName] = useState("");
   const [isCalling, setIsCalling] = useState(false);
   const [callMode, setCallMode] = useState<"lead" | "manual">("lead");
+  const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
 
   // Fetch agents
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
@@ -87,7 +108,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
         .select("id, agent_name, bolna_agent_id, client_id")
         .eq("status", "active");
 
-      // Clients only see their assigned agents
       if (role === "client" && user) {
         query = query.eq("client_id", user.id);
       }
@@ -99,7 +119,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     enabled: !!user,
   });
 
-  // Fetch leads (for clients, filter by their ID)
+  // Fetch leads
   const { data: leads = [], isLoading: loadingLeads } = useQuery({
     queryKey: ["leads-for-call", user?.id, role],
     queryFn: async () => {
@@ -107,7 +127,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
         .from("leads")
         .select("id, name, phone_number, client_id");
 
-      // Clients only see their leads
       if (role === "client" && user) {
         query = query.eq("client_id", user.id);
       }
@@ -119,7 +138,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     enabled: !!user,
   });
 
-  // Fetch recent calls
+  // Fetch recent calls with agent info
   const { data: recentCalls = [], refetch: refetchCalls } = useQuery({
     queryKey: ["recent-calls", user?.id, role],
     queryFn: async () => {
@@ -130,10 +149,12 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           status,
           created_at,
           agent_id,
+          duration_seconds,
+          external_call_id,
           lead:leads(name, phone_number)
         `)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(15);
 
       if (role === "client" && user) {
         query = query.eq("client_id", user.id);
@@ -142,14 +163,13 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Fetch agent names separately
       const agentIds = [...new Set((data || []).map(c => c.agent_id))];
-      const { data: agents } = await supabase
+      const { data: agentsData } = await supabase
         .from("bolna_agents")
         .select("id, agent_name")
         .in("id", agentIds);
       
-      const agentMap = new Map(agents?.map(a => [a.id, a.agent_name]) || []);
+      const agentMap = new Map(agentsData?.map(a => [a.id, a.agent_name]) || []);
       
       return (data || []).map(call => ({
         ...call,
@@ -158,6 +178,117 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     },
     enabled: !!user,
   });
+
+  // Update active calls from recent calls
+  useEffect(() => {
+    const active = recentCalls
+      .filter(call => ACTIVE_STATUSES.includes(call.status))
+      .map(call => ({
+        id: call.id,
+        status: call.status,
+        created_at: call.created_at,
+        lead_name: call.lead?.name || undefined,
+        phone_number: call.lead?.phone_number,
+        agent_name: call.agent?.agent_name,
+        external_call_id: call.external_call_id || undefined,
+        duration_seconds: call.duration_seconds,
+      }));
+    setActiveCalls(active);
+  }, [recentCalls]);
+
+  // Real-time subscription for call updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('call-status-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'calls',
+        },
+        async (payload) => {
+          console.log('Call update received:', payload);
+          
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updatedCall = payload.new as {
+              id: string;
+              status: string;
+              created_at: string;
+              lead_id: string;
+              agent_id: string;
+              external_call_id?: string;
+              duration_seconds?: number;
+              client_id: string;
+            };
+
+            // Filter by client_id for clients
+            if (role === "client" && updatedCall.client_id !== user.id) {
+              return;
+            }
+
+            // Fetch lead and agent info for the updated call
+            const [leadResult, agentResult] = await Promise.all([
+              supabase.from("leads").select("name, phone_number").eq("id", updatedCall.lead_id).single(),
+              supabase.from("bolna_agents").select("agent_name").eq("id", updatedCall.agent_id).single()
+            ]);
+
+            const newActiveCall: ActiveCall = {
+              id: updatedCall.id,
+              status: updatedCall.status,
+              created_at: updatedCall.created_at,
+              lead_name: leadResult.data?.name || undefined,
+              phone_number: leadResult.data?.phone_number,
+              agent_name: agentResult.data?.agent_name,
+              external_call_id: updatedCall.external_call_id,
+              duration_seconds: updatedCall.duration_seconds,
+            };
+
+            // Update active calls state
+            setActiveCalls(prev => {
+              const existing = prev.findIndex(c => c.id === updatedCall.id);
+              
+              if (ACTIVE_STATUSES.includes(updatedCall.status)) {
+                if (existing >= 0) {
+                  const updated = [...prev];
+                  updated[existing] = newActiveCall;
+                  return updated;
+                }
+                return [newActiveCall, ...prev];
+              } else {
+                // Remove from active if status is terminal
+                if (existing >= 0) {
+                  return prev.filter(c => c.id !== updatedCall.id);
+                }
+                return prev;
+              }
+            });
+
+            // Show toast for status changes
+            const statusInfo = statusConfig[updatedCall.status];
+            if (statusInfo && payload.eventType === 'UPDATE') {
+              const oldStatus = (payload.old as { status?: string })?.status;
+              if (oldStatus !== updatedCall.status) {
+                toast({
+                  title: `Call ${statusInfo.label}`,
+                  description: `${leadResult.data?.name || leadResult.data?.phone_number || 'Call'} is now ${statusInfo.label.toLowerCase()}`,
+                });
+              }
+            }
+
+            // Refetch recent calls to update the list
+            refetchCalls();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, role, toast, refetchCalls]);
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
@@ -175,7 +306,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     let leadId = selectedLeadId;
     let clientId = role === "client" ? user.id : selectedAgent?.client_id || user.id;
 
-    // If manual mode, create a temporary lead first
     if (callMode === "manual") {
       if (!manualPhone) {
         toast({
@@ -186,7 +316,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
         return;
       }
 
-      // Create lead in database
       const { data: newLead, error: leadError } = await supabase
         .from("leads")
         .insert({
@@ -235,16 +364,15 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
 
       toast({
         title: "Call Initiated!",
-        description: `Call queued successfully. Execution ID: ${data.execution_id}`,
+        description: `Call queued successfully`,
       });
 
-      // Reset form
       setSelectedLeadId("");
       setManualPhone("");
       setManualName("");
 
-      // Refresh recent calls
-      setTimeout(() => refetchCalls(), 2000);
+      // Immediate refetch
+      setTimeout(() => refetchCalls(), 500);
     } catch (err) {
       console.error("Call error:", err);
       toast({
@@ -257,27 +385,51 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     }
   };
 
+  const handleCallEnded = useCallback((callId: string) => {
+    setActiveCalls(prev => prev.filter(c => c.id !== callId));
+    refetchCalls();
+  }, [refetchCalls]);
+
   const formatPhoneDisplay = (phone: string) => {
-    if (role === "admin" || role === "engineer") {
-      return phone;
-    }
-    // Mask phone for clients in certain views
     return phone;
   };
+
+  // Filter completed calls for the history section
+  const completedCalls = recentCalls.filter(c => !ACTIVE_STATUSES.includes(c.status));
 
   return (
     <DashboardLayout role={role}>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Phone className="h-6 w-6" />
-            Make Call
-          </h1>
-          <p className="text-muted-foreground">
-            Initiate phone calls to leads using AI agents
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Phone className="h-6 w-6" />
+              Make Call
+            </h1>
+            <p className="text-muted-foreground">
+              Initiate phone calls to leads using AI agents
+            </p>
+          </div>
+          {activeCalls.length > 0 && (
+            <Badge variant="default" className="gap-2 animate-pulse">
+              <div className="w-2 h-2 bg-white rounded-full" />
+              {activeCalls.length} Active Call{activeCalls.length > 1 ? 's' : ''}
+            </Badge>
+          )}
         </div>
+
+        {/* Active Calls Progress Tracker */}
+        {activeCalls.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <CallProgressTracker 
+                activeCalls={activeCalls} 
+                onCallEnded={handleCallEnded}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Call Configuration */}
@@ -349,7 +501,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
                     )}
                   </div>
 
-                  {/* Selected Lead Info */}
                   {selectedLead && (
                     <div className="p-3 bg-muted/50 border-2 border-border">
                       <p className="font-medium">{selectedLead.name || "Unknown"}</p>
@@ -404,23 +555,23 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
             </CardContent>
           </Card>
 
-          {/* Recent Calls */}
+          {/* Call History */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent Calls</CardTitle>
+              <CardTitle>Call History</CardTitle>
               <CardDescription>
-                Your most recent call attempts
+                Recent completed calls
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {recentCalls.length === 0 ? (
+              {completedCalls.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  No recent calls
+                  No completed calls yet
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {recentCalls.map((call) => {
-                    const status = statusConfig[call.status] || statusConfig.queued;
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {completedCalls.map((call) => {
+                    const status = statusConfig[call.status] || statusConfig.completed;
                     return (
                       <div
                         key={call.id}
