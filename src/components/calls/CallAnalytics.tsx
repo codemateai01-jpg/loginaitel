@@ -96,8 +96,8 @@ export function CallAnalytics() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data: agents } = await supabase
-        .from("agents")
-        .select("id, name")
+        .from("bolna_agents")
+        .select("id, agent_name")
         .eq("client_id", user!.id);
 
       if (!agents?.length) return [];
@@ -116,7 +116,7 @@ export function CallAnalytics() {
             .eq("connected", true);
 
           return {
-            name: agent.name,
+            name: agent.agent_name,
             total: total || 0,
             connected: connected || 0,
             rate: total ? Math.round(((connected || 0) / total) * 100) : 0,

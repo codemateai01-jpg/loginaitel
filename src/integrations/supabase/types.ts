@@ -14,55 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
-      agents: {
+      bolna_agents: {
         Row: {
-          client_id: string
+          agent_config: Json | null
+          agent_name: string
+          bolna_agent_id: string
+          client_id: string | null
           created_at: string
-          created_by: string
-          description: string | null
+          current_system_prompt: string | null
           id: string
-          name: string
+          original_system_prompt: string | null
           status: string
-          system_prompt: string | null
-          task_id: string | null
+          synced_at: string
           updated_at: string
-          voice_config: Json | null
         }
         Insert: {
-          client_id: string
+          agent_config?: Json | null
+          agent_name: string
+          bolna_agent_id: string
+          client_id?: string | null
           created_at?: string
-          created_by: string
-          description?: string | null
+          current_system_prompt?: string | null
           id?: string
-          name: string
+          original_system_prompt?: string | null
           status?: string
-          system_prompt?: string | null
-          task_id?: string | null
+          synced_at?: string
           updated_at?: string
-          voice_config?: Json | null
         }
         Update: {
-          client_id?: string
+          agent_config?: Json | null
+          agent_name?: string
+          bolna_agent_id?: string
+          client_id?: string | null
           created_at?: string
-          created_by?: string
-          description?: string | null
+          current_system_prompt?: string | null
           id?: string
-          name?: string
+          original_system_prompt?: string | null
           status?: string
-          system_prompt?: string | null
-          task_id?: string | null
+          synced_at?: string
           updated_at?: string
-          voice_config?: Json | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "agents_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       calls: {
         Row: {
@@ -123,13 +115,6 @@ export type Database = {
           transcript?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "calls_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: false
-            referencedRelation: "agents"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "calls_lead_id_fkey"
             columns: ["lead_id"]
@@ -352,6 +337,7 @@ export type Database = {
       tasks: {
         Row: {
           assigned_to: string | null
+          bolna_agent_id: string | null
           completed_at: string | null
           created_at: string
           created_by: string
@@ -367,6 +353,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          bolna_agent_id?: string | null
           completed_at?: string | null
           created_at?: string
           created_by: string
@@ -382,6 +369,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          bolna_agent_id?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string
@@ -395,7 +383,15 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tasks_bolna_agent_id_fkey"
+            columns: ["bolna_agent_id"]
+            isOneToOne: false
+            referencedRelation: "bolna_agents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

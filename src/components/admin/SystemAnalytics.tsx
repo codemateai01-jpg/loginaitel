@@ -46,7 +46,7 @@ export function SystemAnalytics() {
 
       // Get total agents
       const { count: agentCount } = await supabase
-        .from("agents")
+        .from("bolna_agents")
         .select("*", { count: "exact", head: true });
 
       // Get total calls

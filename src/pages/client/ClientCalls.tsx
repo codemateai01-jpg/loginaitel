@@ -122,15 +122,15 @@ export default function ClientCalls() {
         .from("calls")
         .select(`
           *,
-          lead:leads(name, phone_number),
-          agent:agents(name)
+          lead:leads(name, phone_number)
         `)
         .eq("client_id", user!.id)
         .gte("created_at", startDate)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as Call[];
+      // Map to include agent placeholder since we removed the join
+      return data?.map(d => ({ ...d, agent: { name: 'Agent' } })) as Call[];
     },
   });
 
@@ -140,12 +140,12 @@ export default function ClientCalls() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("agents")
-        .select("id, name")
+        .from("bolna_agents")
+        .select("id, agent_name")
         .eq("client_id", user!.id);
 
       if (error) throw error;
-      return data;
+      return data?.map(a => ({ id: a.id, name: a.agent_name })) || [];
     },
   });
 

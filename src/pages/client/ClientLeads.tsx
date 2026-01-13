@@ -202,13 +202,13 @@ export default function ClientLeads() {
 
     try {
       const { data, error } = await supabase
-        .from("agents")
-        .select("id, name")
+        .from("bolna_agents")
+        .select("id, agent_name")
         .eq("client_id", user.id)
         .eq("status", "active");
 
       if (error) throw error;
-      setAgents(data || []);
+      setAgents(data?.map(a => ({ id: a.id, name: a.agent_name })) || []);
     } catch (err) {
       console.error("Fetch agents error:", err);
     }

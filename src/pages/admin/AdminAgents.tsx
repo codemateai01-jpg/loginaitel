@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -12,307 +10,277 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AgentReviewDialog } from "@/components/admin/AgentReviewDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { listBolnaAgents, getBolnaAgent } from "@/lib/bolna";
 import {
   Bot,
+  RefreshCw,
   Search,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
+  Users,
+  Download,
   Eye,
   Loader2,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
+import { format } from "date-fns";
 
-interface Agent {
+interface BolnaAgentFromAPI {
   id: string;
-  name: string;
-  description: string | null;
-  system_prompt: string | null;
-  status: string;
-  created_at: string;
-  created_by: string;
-  client_id: string;
-  task_id: string | null;
-  voice_config: Record<string, unknown> | null;
+  agent_name: string;
+  agent_type?: string;
+  agent_status?: string;
+  agent_prompts?: {
+    task_1?: {
+      system_prompt?: string;
+    };
+  };
 }
 
-const getStatusConfig = (status: string) => {
-  switch (status) {
-    case "pending":
-      return {
-        label: "Pending Review",
-        icon: Clock,
-        className: "bg-chart-4/20 text-chart-4 border-chart-4",
-      };
-    case "approved":
-      return {
-        label: "Approved",
-        icon: CheckCircle,
-        className: "bg-chart-2/20 text-chart-2 border-chart-2",
-      };
-    case "rejected":
-      return {
-        label: "Rejected",
-        icon: XCircle,
-        className: "bg-destructive/20 text-destructive border-destructive",
-      };
-    case "active":
-      return {
-        label: "Active",
-        icon: Bot,
-        className: "bg-primary/20 text-primary border-primary",
-      };
-    default:
-      return {
-        label: status,
-        icon: AlertCircle,
-        className: "bg-muted text-muted-foreground border-border",
-      };
-  }
-};
+interface SyncedAgent {
+  id: string;
+  bolna_agent_id: string;
+  agent_name: string;
+  client_id: string | null;
+  original_system_prompt: string | null;
+  current_system_prompt: string | null;
+  agent_config: Record<string, unknown>;
+  status: string;
+  synced_at: string;
+}
+
+interface Client {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+}
 
 export default function AdminAgents() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<SyncedAgent | null>(null);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
 
-  // Fetch all agents
-  const { data: agents = [], isLoading } = useQuery({
-    queryKey: ["admin-agents"],
+  // Fetch synced agents from our database
+  const { data: syncedAgents, isLoading: loadingAgents } = useQuery({
+    queryKey: ["synced-agents"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("agents")
+        .from("bolna_agents")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("synced_at", { ascending: false });
 
       if (error) throw error;
-      return data as Agent[];
+      return data as SyncedAgent[];
     },
   });
 
-  // Approve agent mutation
-  const approveAgentMutation = useMutation({
-    mutationFn: async ({ agentId, taskId }: { agentId: string; taskId: string | null }) => {
-      // Update agent status
-      const { error: agentError } = await supabase
-        .from("agents")
-        .update({ status: "approved" })
-        .eq("id", agentId);
+  // Fetch clients for assignment
+  const { data: clients } = useQuery({
+    queryKey: ["clients-for-assignment"],
+    queryFn: async () => {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "client");
 
-      if (agentError) throw agentError;
+      if (!roles?.length) return [];
 
-      // If linked to a task, mark task as completed
-      if (taskId) {
-        const { error: taskError } = await supabase
-          .from("tasks")
-          .update({ status: "completed" })
-          .eq("id", taskId);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, email, full_name")
+        .in("user_id", roles.map((r) => r.user_id));
 
-        if (taskError) throw taskError;
+      if (error) throw error;
+      return data as Client[];
+    },
+  });
+
+  // Sync agents from Bolna
+  const handleSyncAgents = async () => {
+    setIsSyncing(true);
+    try {
+      const { data: bolnaAgents, error } = await listBolnaAgents();
+
+      if (error || !bolnaAgents) {
+        throw new Error(error || "Failed to fetch agents from Bolna");
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-agents"] });
-      setReviewDialogOpen(false);
-      setSelectedAgent(null);
-      toast({
-        title: "Agent Approved!",
-        description: "The agent has been approved and is now active.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to approve agent. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
 
-  // Reject agent mutation
-  const rejectAgentMutation = useMutation({
+      let synced = 0;
+      let updated = 0;
+
+      for (const agent of bolnaAgents as BolnaAgentFromAPI[]) {
+        // Get full agent details including prompts
+        const { data: fullAgent } = await getBolnaAgent(agent.id);
+        
+        const systemPrompt = (fullAgent as BolnaAgentFromAPI)?.agent_prompts?.task_1?.system_prompt || "";
+        const agentConfig = fullAgent || agent;
+
+        // Check if already exists
+        const { data: existing } = await supabase
+          .from("bolna_agents")
+          .select("id")
+          .eq("bolna_agent_id", agent.id)
+          .maybeSingle();
+
+        if (existing) {
+          // Update existing
+          await supabase
+            .from("bolna_agents")
+            .update({
+              agent_name: agent.agent_name,
+              agent_config: JSON.parse(JSON.stringify(agentConfig)),
+              original_system_prompt: systemPrompt,
+              synced_at: new Date().toISOString(),
+            })
+            .eq("bolna_agent_id", agent.id);
+          updated++;
+        } else {
+          // Insert new
+          await supabase.from("bolna_agents").insert([{
+            bolna_agent_id: agent.id,
+            agent_name: agent.agent_name,
+            original_system_prompt: systemPrompt,
+            current_system_prompt: systemPrompt,
+            agent_config: JSON.parse(JSON.stringify(agentConfig)),
+          }]);
+          synced++;
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["synced-agents"] });
+
+      toast({
+        title: "Sync Complete",
+        description: `${synced} new agents synced, ${updated} updated.`,
+      });
+    } catch (error) {
+      console.error("Sync error:", error);
+      toast({
+        variant: "destructive",
+        title: "Sync Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Assign agent to client
+  const assignMutation = useMutation({
     mutationFn: async ({
       agentId,
-      taskId,
-      reason,
+      clientId,
     }: {
       agentId: string;
-      taskId: string | null;
-      reason: string;
+      clientId: string | null;
     }) => {
-      // Update agent status
-      const { error: agentError } = await supabase
-        .from("agents")
-        .update({ status: "rejected" })
+      const { error } = await supabase
+        .from("bolna_agents")
+        .update({ client_id: clientId })
         .eq("id", agentId);
 
-      if (agentError) throw agentError;
-
-      // If linked to a task, mark task as rejected with reason
-      if (taskId) {
-        const { error: taskError } = await supabase
-          .from("tasks")
-          .update({
-            status: "rejected",
-            rejection_reason: reason,
-          })
-          .eq("id", taskId);
-
-        if (taskError) throw taskError;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-agents"] });
-      setReviewDialogOpen(false);
-      setSelectedAgent(null);
+      queryClient.invalidateQueries({ queryKey: ["synced-agents"] });
+      setAssignDialogOpen(false);
       toast({
-        title: "Agent Rejected",
-        description: "The agent has been rejected and sent back for revision.",
+        title: "Agent Assigned",
+        description: "Agent has been assigned to the client.",
       });
     },
-    onError: () => {
+    onError: (error) => {
       toast({
-        title: "Error",
-        description: "Failed to reject agent. Please try again.",
         variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to assign",
       });
     },
   });
 
-  const handleReviewAgent = (agent: Agent) => {
-    setSelectedAgent(agent);
-    setReviewDialogOpen(true);
-  };
-
-  const handleApprove = () => {
-    if (selectedAgent) {
-      approveAgentMutation.mutate({
-        agentId: selectedAgent.id,
-        taskId: selectedAgent.task_id,
-      });
-    }
-  };
-
-  const handleReject = (reason: string) => {
-    if (selectedAgent) {
-      rejectAgentMutation.mutate({
-        agentId: selectedAgent.id,
-        taskId: selectedAgent.task_id,
-        reason,
-      });
-    }
-  };
-
-  // Filter agents
-  const filteredAgents = agents.filter(
+  const filteredAgents = syncedAgents?.filter(
     (agent) =>
-      agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      agent.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      agent.agent_name.toLowerCase().includes(search.toLowerCase()) ||
+      agent.bolna_agent_id.toLowerCase().includes(search.toLowerCase())
   );
 
-  const pendingAgents = filteredAgents.filter((a) => a.status === "pending");
-  const approvedAgents = filteredAgents.filter((a) => a.status === "approved" || a.status === "active");
-  const rejectedAgents = filteredAgents.filter((a) => a.status === "rejected");
-
-  const renderAgentTable = (agentList: Agent[], showActions = true) => (
-    <div className="border-2 border-border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-b-2 border-border hover:bg-transparent">
-            <TableHead className="font-bold">Agent Name</TableHead>
-            <TableHead className="font-bold">Description</TableHead>
-            <TableHead className="font-bold">Status</TableHead>
-            <TableHead className="font-bold">Created</TableHead>
-            <TableHead className="font-bold w-24">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {agentList.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                No agents found
-              </TableCell>
-            </TableRow>
-          ) : (
-            agentList.map((agent) => {
-              const statusConfig = getStatusConfig(agent.status);
-              const StatusIcon = statusConfig.icon;
-              return (
-                <TableRow key={agent.id} className="border-b-2 border-border">
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <Bot className="h-4 w-4 text-muted-foreground" />
-                      {agent.name}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground max-w-xs truncate">
-                    {agent.description || "No description"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={statusConfig.className}>
-                      <StatusIcon className="h-3 w-3 mr-1" />
-                      {statusConfig.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDistanceToNow(new Date(agent.created_at), { addSuffix: true })}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleReviewAgent(agent)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Review
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
+  const getClientName = (clientId: string | null) => {
+    if (!clientId) return "Unassigned";
+    const client = clients?.find((c) => c.user_id === clientId);
+    return client?.full_name || client?.email || "Unknown";
+  };
 
   return (
     <DashboardLayout role="admin">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Agent Management</h1>
-            <p className="text-muted-foreground">
-              Review, approve, and manage voice agents
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-accent border-2 border-border">
+              <Bot className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Agent Management</h1>
+              <p className="text-sm text-muted-foreground">
+                Sync and assign Bolna agents to clients
+              </p>
+            </div>
           </div>
+          <Button onClick={handleSyncAgents} disabled={isSyncing}>
+            {isSyncing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Sync from Bolna
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold">{agents.length}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="border-2 border-border bg-card p-4">
             <p className="text-sm text-muted-foreground">Total Agents</p>
+            <p className="text-2xl font-bold">{syncedAgents?.length || 0}</p>
           </div>
-          <div className="border-2 border-chart-4 bg-chart-4/10 p-4 text-center">
-            <p className="text-2xl font-bold text-chart-4">{pendingAgents.length}</p>
-            <p className="text-sm text-muted-foreground">Pending Review</p>
+          <div className="border-2 border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground">Assigned</p>
+            <p className="text-2xl font-bold">
+              {syncedAgents?.filter((a) => a.client_id).length || 0}
+            </p>
           </div>
-          <div className="border-2 border-chart-2 bg-chart-2/10 p-4 text-center">
-            <p className="text-2xl font-bold text-chart-2">{approvedAgents.length}</p>
-            <p className="text-sm text-muted-foreground">Approved</p>
+          <div className="border-2 border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground">Unassigned</p>
+            <p className="text-2xl font-bold">
+              {syncedAgents?.filter((a) => !a.client_id).length || 0}
+            </p>
           </div>
-          <div className="border-2 border-destructive bg-destructive/10 p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">{rejectedAgents.length}</p>
-            <p className="text-sm text-muted-foreground">Rejected</p>
+          <div className="border-2 border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground">Active Clients</p>
+            <p className="text-2xl font-bold">{clients?.length || 0}</p>
           </div>
         </div>
 
@@ -322,75 +290,185 @@ export default function AdminAgents() {
           <Input
             placeholder="Search agents..."
             className="pl-10 border-2"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="pending" className="space-y-4">
-          <TabsList className="grid grid-cols-3 w-full max-w-md">
-            <TabsTrigger value="pending" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Pending
-              {pendingAgents.length > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {pendingAgents.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="approved" className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
-              Approved
-            </TabsTrigger>
-            <TabsTrigger value="rejected" className="flex items-center gap-2">
-              <XCircle className="h-4 w-4" />
-              Rejected
-            </TabsTrigger>
-          </TabsList>
-
-          {isLoading ? (
-            <div className="border-2 border-border bg-card p-8 flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        {/* Agents Table */}
+        <div className="border-2 border-border bg-card">
+          {loadingAgents ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredAgents?.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 gap-4">
+              <Bot className="h-12 w-12 text-muted-foreground" />
+              <p className="text-muted-foreground">No agents found</p>
+              <Button variant="outline" onClick={handleSyncAgents}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Sync Agents
+              </Button>
             </div>
           ) : (
-            <>
-              <TabsContent value="pending">
-                {pendingAgents.length === 0 ? (
-                  <div className="border-2 border-border bg-card p-8 text-center">
-                    <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="font-bold mb-2">No Pending Agents</p>
-                    <p className="text-sm text-muted-foreground">
-                      All agents have been reviewed.
-                    </p>
-                  </div>
-                ) : (
-                  renderAgentTable(pendingAgents)
-                )}
-              </TabsContent>
-
-              <TabsContent value="approved">
-                {renderAgentTable(approvedAgents)}
-              </TabsContent>
-
-              <TabsContent value="rejected">
-                {renderAgentTable(rejectedAgents)}
-              </TabsContent>
-            </>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Agent Name</TableHead>
+                  <TableHead>Bolna ID</TableHead>
+                  <TableHead>Assigned To</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Synced</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredAgents?.map((agent) => (
+                  <TableRow key={agent.id}>
+                    <TableCell className="font-medium">
+                      {agent.agent_name}
+                    </TableCell>
+                    <TableCell>
+                      <code className="text-xs bg-muted px-2 py-1">
+                        {agent.bolna_agent_id.slice(0, 8)}...
+                      </code>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={agent.client_id ? "default" : "outline"}
+                        className={agent.client_id ? "" : "text-muted-foreground"}
+                      >
+                        {getClientName(agent.client_id)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={agent.status === "active" ? "default" : "secondary"}
+                      >
+                        {agent.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {format(new Date(agent.synced_at), "MMM d, HH:mm")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                              <DialogTitle>{agent.agent_name}</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-sm font-medium">
+                                  Bolna Agent ID
+                                </label>
+                                <p className="text-sm text-muted-foreground font-mono">
+                                  {agent.bolna_agent_id}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium">
+                                  System Prompt
+                                </label>
+                                <pre className="text-sm bg-muted p-3 rounded max-h-48 overflow-auto whitespace-pre-wrap">
+                                  {agent.current_system_prompt || "No prompt set"}
+                                </pre>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedAgent(agent);
+                            setSelectedClientId(agent.client_id || "");
+                            setAssignDialogOpen(true);
+                          }}
+                        >
+                          <Users className="h-4 w-4 mr-1" />
+                          Assign
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
-        </Tabs>
-      </div>
+        </div>
 
-      {/* Review Dialog */}
-      <AgentReviewDialog
-        open={reviewDialogOpen}
-        onOpenChange={setReviewDialogOpen}
-        agent={selectedAgent}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        isApproving={approveAgentMutation.isPending}
-        isRejecting={rejectAgentMutation.isPending}
-      />
+        {/* Assign Dialog */}
+        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Assign Agent to Client</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Agent: <strong>{selectedAgent?.agent_name}</strong>
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select Client</label>
+                <Select
+                  value={selectedClientId}
+                  onValueChange={setSelectedClientId}
+                >
+                  <SelectTrigger className="border-2">
+                    <SelectValue placeholder="Select a client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">
+                      <span className="text-muted-foreground">Unassigned</span>
+                    </SelectItem>
+                    {clients?.map((client) => (
+                      <SelectItem key={client.user_id} value={client.user_id}>
+                        {client.full_name || client.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setAssignDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedAgent) {
+                      assignMutation.mutate({
+                        agentId: selectedAgent.id,
+                        clientId:
+                          selectedClientId === "unassigned"
+                            ? null
+                            : selectedClientId,
+                      });
+                    }
+                  }}
+                  disabled={assignMutation.isPending}
+                >
+                  {assignMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Assign"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
     </DashboardLayout>
   );
 }
