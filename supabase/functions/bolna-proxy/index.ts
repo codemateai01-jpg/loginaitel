@@ -413,6 +413,170 @@ serve(async (req) => {
         });
         break;
 
+      // ==========================================
+      // BATCH MANAGEMENT
+      // ==========================================
+      case "create-batch": {
+        // Create batch for agent - requires multipart/form-data with CSV
+        if (userRole !== "admin" && userRole !== "client") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const createBatchAgentId = body?.agent_id;
+        const csvContent = body?.csv_content;
+        const fromPhoneNumber = body?.from_phone_number;
+
+        if (!createBatchAgentId || !csvContent) {
+          return new Response(
+            JSON.stringify({ error: "agent_id and csv_content are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Create FormData for multipart upload
+        const formData = new FormData();
+        formData.append("agent_id", createBatchAgentId);
+        formData.append("file", new Blob([csvContent], { type: "text/csv" }), "batch.csv");
+        if (fromPhoneNumber) {
+          formData.append("from_phone_number", fromPhoneNumber);
+        }
+
+        response = await fetch(`${BOLNA_API_BASE}/batches`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${BOLNA_API_KEY}`,
+          },
+          body: formData,
+        });
+        break;
+      }
+
+      case "get-batch": {
+        const getBatchId = url.searchParams.get("batch_id");
+        if (!getBatchId) {
+          return new Response(
+            JSON.stringify({ error: "batch_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/batches/${getBatchId}`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
+      case "list-batches": {
+        const listBatchesAgentId = url.searchParams.get("agent_id");
+        if (!listBatchesAgentId) {
+          return new Response(
+            JSON.stringify({ error: "agent_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/batches/${listBatchesAgentId}/all`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
+      case "schedule-batch": {
+        if (userRole !== "admin" && userRole !== "client") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const scheduleBatchId = url.searchParams.get("batch_id");
+        const scheduledAt = body?.scheduled_at;
+
+        if (!scheduleBatchId || !scheduledAt) {
+          return new Response(
+            JSON.stringify({ error: "batch_id and scheduled_at are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Schedule batch - uses multipart/form-data
+        const scheduleFormData = new FormData();
+        scheduleFormData.append("scheduled_at", scheduledAt);
+
+        response = await fetch(`${BOLNA_API_BASE}/batches/${scheduleBatchId}/schedule`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${BOLNA_API_KEY}`,
+          },
+          body: scheduleFormData,
+        });
+        break;
+      }
+
+      case "stop-batch": {
+        if (userRole !== "admin" && userRole !== "client") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const stopBatchId = url.searchParams.get("batch_id");
+        if (!stopBatchId) {
+          return new Response(
+            JSON.stringify({ error: "batch_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/batches/${stopBatchId}/stop`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
+      case "list-batch-executions": {
+        const batchExecId = url.searchParams.get("batch_id");
+        if (!batchExecId) {
+          return new Response(
+            JSON.stringify({ error: "batch_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/batches/${batchExecId}/executions`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
+      case "delete-batch": {
+        if (userRole !== "admin") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const deleteBatchId = url.searchParams.get("batch_id");
+        if (!deleteBatchId) {
+          return new Response(
+            JSON.stringify({ error: "batch_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/batches/${deleteBatchId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),

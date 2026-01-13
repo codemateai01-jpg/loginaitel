@@ -450,6 +450,72 @@ export async function listAgentExecutions(params: ListExecutionsParams): Promise
 }
 
 // ==========================================
+// BATCH MANAGEMENT
+// ==========================================
+
+export interface Batch {
+  batch_id: string;
+  humanized_created_at?: string;
+  created_at: string;
+  updated_at?: string;
+  status: "scheduled" | "created" | "queued" | "executed";
+  scheduled_at?: string;
+  from_phone_number?: string;
+  file_name?: string;
+  valid_contacts?: number;
+  total_contacts?: number;
+  execution_status?: Record<string, number>;
+}
+
+export interface CreateBatchRequest {
+  agent_id: string;
+  csv_content: string;
+  from_phone_number?: string;
+}
+
+export interface CreateBatchResponse {
+  batch_id: string;
+  state: "created";
+}
+
+export interface ScheduleBatchRequest {
+  scheduled_at: string; // ISO 8601 format
+}
+
+export interface BatchActionResponse {
+  message: string;
+  state: string;
+}
+
+export async function createBatch(options: CreateBatchRequest): Promise<BolnaResponse<CreateBatchResponse>> {
+  return callBolnaProxy<CreateBatchResponse>("create-batch", undefined, options);
+}
+
+export async function getBatch(batchId: string): Promise<BolnaResponse<Batch>> {
+  return callBolnaProxy<Batch>("get-batch", { batch_id: batchId });
+}
+
+export async function listBatches(agentId: string): Promise<BolnaResponse<Batch[]>> {
+  return callBolnaProxy<Batch[]>("list-batches", { agent_id: agentId });
+}
+
+export async function scheduleBatch(batchId: string, scheduledAt: string): Promise<BolnaResponse<BatchActionResponse>> {
+  return callBolnaProxy<BatchActionResponse>("schedule-batch", { batch_id: batchId }, { scheduled_at: scheduledAt });
+}
+
+export async function stopBatch(batchId: string): Promise<BolnaResponse<BatchActionResponse>> {
+  return callBolnaProxy<BatchActionResponse>("stop-batch", { batch_id: batchId });
+}
+
+export async function listBatchExecutions(batchId: string): Promise<BolnaResponse<CallExecution[]>> {
+  return callBolnaProxy<CallExecution[]>("list-batch-executions", { batch_id: batchId });
+}
+
+export async function deleteBatch(batchId: string): Promise<BolnaResponse<BatchActionResponse>> {
+  return callBolnaProxy<BatchActionResponse>("delete-batch", { batch_id: batchId });
+}
+
+// ==========================================
 // VOICES
 // ==========================================
 
