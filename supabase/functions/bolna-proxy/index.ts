@@ -224,6 +224,20 @@ serve(async (req) => {
           );
         }
 
+        // Get the Bolna agent ID from our database (body.agent_id is our internal UUID)
+        const { data: agentRecord } = await supabase
+          .from("bolna_agents")
+          .select("bolna_agent_id")
+          .eq("id", body.agent_id)
+          .maybeSingle();
+
+        if (!agentRecord?.bolna_agent_id) {
+          return new Response(
+            JSON.stringify({ error: "Agent not found in database" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         // Get lead phone number (only client or admin with client_id can access)
         const { data: lead } = await supabase
           .from("leads")
@@ -246,7 +260,7 @@ serve(async (req) => {
           );
         }
 
-        // Make outbound call via Bolna - POST /call
+        // Make outbound call via Bolna - POST /call using the actual Bolna agent ID
         response = await fetch(`${BOLNA_API_BASE}/call`, {
           method: "POST",
           headers: {
@@ -254,7 +268,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            agent_id: body.agent_id,
+            agent_id: agentRecord.bolna_agent_id,
             recipient_phone_number: lead.phone_number,
             from_phone_number: body.from_phone_number,
             user_data: body.user_data,
