@@ -13,6 +13,7 @@ import ClientLogin from "./pages/auth/ClientLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminAgents from "./pages/admin/AdminAgents";
+import AdminCalls from "./pages/admin/AdminCalls";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
 import AgentEditor from "./pages/engineer/AgentEditor";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
@@ -64,6 +65,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <AdminAgents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/calls"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminCalls />
                 </ProtectedRoute>
               }
             />
