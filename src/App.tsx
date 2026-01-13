@@ -14,6 +14,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminAgents from "./pages/admin/AdminAgents";
 import AdminCalls from "./pages/admin/AdminCalls";
+import AdminPhoneNumbers from "./pages/admin/AdminPhoneNumbers";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
 import AgentEditor from "./pages/engineer/AgentEditor";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
@@ -81,6 +82,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <ClientBatches />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/phone-numbers"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminPhoneNumbers />
                 </ProtectedRoute>
               }
             />
