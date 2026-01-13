@@ -342,19 +342,66 @@ serve(async (req) => {
           );
         }
         
-        response = await fetch(`${BOLNA_API_BASE}/execution/${executionId}`, {
+        // GET /executions/{execution_id}
+        response = await fetch(`${BOLNA_API_BASE}/executions/${executionId}`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
         break;
 
-      case "list-executions":
-        const execAgentId = url.searchParams.get("agent_id");
-        const queryParams = new URLSearchParams();
-        if (execAgentId) queryParams.set("agent_id", execAgentId);
+      case "get-execution-logs":
+        const logsExecutionId = url.searchParams.get("execution_id");
+        if (!logsExecutionId) {
+          return new Response(
+            JSON.stringify({ error: "execution_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         
-        response = await fetch(`${BOLNA_API_BASE}/execution/all?${queryParams}`, {
+        // GET /executions/{execution_id}/log
+        response = await fetch(`${BOLNA_API_BASE}/executions/${logsExecutionId}/log`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
+        break;
+
+      case "list-agent-executions":
+        // GET /v2/agent/{agent_id}/executions with pagination and filters
+        const listExecAgentId = url.searchParams.get("agent_id");
+        if (!listExecAgentId) {
+          return new Response(
+            JSON.stringify({ error: "agent_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const execQueryParams = new URLSearchParams();
+        
+        // Pagination
+        const pageNumber = url.searchParams.get("page_number");
+        const pageSize = url.searchParams.get("page_size");
+        if (pageNumber) execQueryParams.set("page_number", pageNumber);
+        if (pageSize) execQueryParams.set("page_size", pageSize);
+        
+        // Filters
+        const status = url.searchParams.get("status");
+        const callType = url.searchParams.get("call_type");
+        const provider = url.searchParams.get("provider");
+        const answeredByVoicemail = url.searchParams.get("answered_by_voice_mail");
+        const batchId = url.searchParams.get("batch_id");
+        const fromDate = url.searchParams.get("from");
+        const toDate = url.searchParams.get("to");
+        
+        if (status) execQueryParams.set("status", status);
+        if (callType) execQueryParams.set("call_type", callType);
+        if (provider) execQueryParams.set("provider", provider);
+        if (answeredByVoicemail) execQueryParams.set("answered_by_voice_mail", answeredByVoicemail);
+        if (batchId) execQueryParams.set("batch_id", batchId);
+        if (fromDate) execQueryParams.set("from", fromDate);
+        if (toDate) execQueryParams.set("to", toDate);
+        
+        response = await fetch(
+          `${BOLNA_API_BASE}/v2/agent/${listExecAgentId}/executions?${execQueryParams}`,
+          { headers: { Authorization: `Bearer ${BOLNA_API_KEY}` } }
+        );
         break;
 
       // ==========================================

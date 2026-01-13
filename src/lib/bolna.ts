@@ -352,23 +352,101 @@ export async function stopCall(executionId: string): Promise<BolnaResponse<StopC
 // EXECUTION / CALL HISTORY
 // ==========================================
 
+export interface CostBreakdown {
+  llm?: number;
+  network?: number;
+  platform?: number;
+  synthesizer?: number;
+  transcriber?: number;
+}
+
+export interface TelephonyData {
+  duration?: string;
+  to_number?: string;
+  from_number?: string;
+  recording_url?: string;
+  hosted_telephony?: boolean;
+  provider_call_id?: string;
+  call_type?: "outbound" | "inbound";
+  provider?: "twilio" | "plivo";
+  hangup_by?: string;
+  hangup_reason?: string;
+  hangup_provider_code?: number;
+}
+
 export interface CallExecution {
   id: string;
   agent_id: string;
-  duration: number;
-  status: string;
+  batch_id?: string;
+  conversation_time?: number;
+  total_cost?: number;
+  status: "completed" | "call-disconnected" | "no-answer" | "busy" | "failed" | "in-progress" | "canceled" | "balance-low" | "queued" | "ringing" | "initiated" | "stopped";
+  error_message?: string;
+  answered_by_voice_mail?: boolean;
   transcript?: string;
-  recording_url?: string;
   created_at: string;
+  updated_at?: string;
+  cost_breakdown?: CostBreakdown;
+  telephony_data?: TelephonyData;
+  extracted_data?: Record<string, unknown>;
+  context_details?: Record<string, unknown>;
+}
+
+export interface ExecutionLogEntry {
+  created_at: string;
+  type: "request" | "response";
+  component: string;
+  provider: string;
+  data: string;
+}
+
+export interface ExecutionLogsResponse {
+  data: ExecutionLogEntry[];
+}
+
+export interface ListExecutionsResponse {
+  page_number: number;
+  page_size: number;
+  total: number;
+  has_more: boolean;
+  data: CallExecution[];
+}
+
+export interface ListExecutionsParams {
+  agent_id: string;
+  page_number?: number;
+  page_size?: number;
+  status?: string;
+  call_type?: "inbound" | "outbound";
+  provider?: "twilio" | "plivo" | "websocket" | "web-call";
+  answered_by_voice_mail?: boolean;
+  batch_id?: string;
+  from?: string;
+  to?: string;
 }
 
 export async function getExecution(executionId: string): Promise<BolnaResponse<CallExecution>> {
   return callBolnaProxy<CallExecution>("get-execution", { execution_id: executionId });
 }
 
-export async function listExecutions(agentId?: string): Promise<BolnaResponse<CallExecution[]>> {
-  const params = agentId ? { agent_id: agentId } : undefined;
-  return callBolnaProxy<CallExecution[]>("list-executions", params);
+export async function getExecutionLogs(executionId: string): Promise<BolnaResponse<ExecutionLogsResponse>> {
+  return callBolnaProxy<ExecutionLogsResponse>("get-execution-logs", { execution_id: executionId });
+}
+
+export async function listAgentExecutions(params: ListExecutionsParams): Promise<BolnaResponse<ListExecutionsResponse>> {
+  const queryParams: Record<string, string> = { agent_id: params.agent_id };
+  
+  if (params.page_number !== undefined) queryParams.page_number = String(params.page_number);
+  if (params.page_size !== undefined) queryParams.page_size = String(params.page_size);
+  if (params.status) queryParams.status = params.status;
+  if (params.call_type) queryParams.call_type = params.call_type;
+  if (params.provider) queryParams.provider = params.provider;
+  if (params.answered_by_voice_mail !== undefined) queryParams.answered_by_voice_mail = String(params.answered_by_voice_mail);
+  if (params.batch_id) queryParams.batch_id = params.batch_id;
+  if (params.from) queryParams.from = params.from;
+  if (params.to) queryParams.to = params.to;
+  
+  return callBolnaProxy<ListExecutionsResponse>("list-agent-executions", queryParams);
 }
 
 // ==========================================
