@@ -577,6 +577,39 @@ serve(async (req) => {
         break;
       }
 
+      // ==========================================
+      // PHONE NUMBERS
+      // ==========================================
+      case "search-phone-numbers": {
+        const country = url.searchParams.get("country");
+        if (!country) {
+          return new Response(
+            JSON.stringify({ error: "country is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const phoneSearchParams = new URLSearchParams();
+        phoneSearchParams.set("country", country);
+        
+        const pattern = url.searchParams.get("pattern");
+        if (pattern) {
+          phoneSearchParams.set("pattern", pattern);
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/search?${phoneSearchParams}`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
+      case "list-phone-numbers": {
+        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/all`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),
