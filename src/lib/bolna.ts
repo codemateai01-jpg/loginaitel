@@ -416,6 +416,7 @@ export function buildAgentConfig(options: BuildAgentOptions): CreateAgentRequest
         provider_config: {
           voice: options.voiceName,
           voice_id: options.voiceId,
+          model: "sonic-2",
         } as CartesiaSynthConfig,
         stream: true,
         buffer_size: 250,
@@ -451,6 +452,7 @@ export function buildAgentConfig(options: BuildAgentOptions): CreateAgentRequest
               agent_type: "simple_llm_agent",
               agent_flow_type: "streaming",
               llm_config: {
+                agent_flow_type: "streaming",
                 provider: options.llmProvider,
                 family: options.llmFamily,
                 model: options.llmModel,
