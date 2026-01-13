@@ -43,6 +43,9 @@ import {
   Zap,
   Save,
   Loader2,
+  Sparkles,
+  Lightbulb,
+  TrendingDown,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Slider } from "@/components/ui/slider";
@@ -85,6 +88,10 @@ interface CallEvaluation {
   engagement_score: number;
   goal_achieved: boolean;
   notes: string;
+  ai_generated?: boolean;
+  key_moments?: string[];
+  improvement_suggestions?: string[];
+  evaluated_at?: string;
 }
 
 interface CallDetailsDialogProps {
@@ -293,6 +300,9 @@ export function CallDetailsDialog({
         engagement_score: evaluation.engagement_score,
         goal_achieved: evaluation.goal_achieved,
         notes: evaluation.notes,
+        key_moments: evaluation.key_moments,
+        improvement_suggestions: evaluation.improvement_suggestions,
+        ai_generated: evaluation.ai_generated,
       };
       
       const { error } = await supabase
@@ -320,6 +330,67 @@ export function CallDetailsDialog({
         variant: "destructive",
         title: "Save Failed",
         description: error instanceof Error ? error.message : "Failed to save evaluation",
+      });
+    },
+  });
+
+  // AI Evaluation mutation
+  const aiEvaluation = useMutation({
+    mutationFn: async () => {
+      if (!call) throw new Error("No call selected");
+      
+      const transcriptSource = execution?.transcript || call.transcript;
+      if (!transcriptSource) {
+        throw new Error("No transcript available for evaluation");
+      }
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/evaluate-call`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({
+            callId: call.id,
+            transcript: transcriptSource,
+            agentName: call.agent?.name,
+            leadName: call.lead?.name,
+            callDuration: call.duration_seconds,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "AI evaluation failed");
+      }
+
+      const data = await response.json();
+      return data.evaluation;
+    },
+    onSuccess: (evaluationResult) => {
+      setEvaluation({
+        ...evaluationResult,
+        ai_generated: true,
+      });
+      toast({
+        title: "AI Evaluation Complete",
+        description: "Call has been analyzed and scored by AI",
+      });
+      queryClient.invalidateQueries({ queryKey: ["recent-calls"] });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "AI Evaluation Failed",
+        description: error instanceof Error ? error.message : "Failed to analyze call",
       });
     },
   });
@@ -726,80 +797,169 @@ export function CallDetailsDialog({
           {/* Evaluation Tab */}
           <TabsContent value="evaluation" className="flex-1 min-h-0">
             <ScrollArea className="h-[300px]">
-              <div className="grid lg:grid-cols-3 gap-6 p-4">
-                {/* Overall Score */}
-                <div className="lg:col-span-1">
-                  <OverallScoreDisplay score={evaluation.overall_score} />
-                  
-                  {/* Goal Achievement */}
-                  <div className="mt-4 p-4 border-2 border-border">
-                    <Label className="text-sm font-medium mb-3 block">Goal Achieved?</Label>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={evaluation.goal_achieved ? "default" : "outline"}
-                        size="sm"
-                        className="flex-1 gap-2"
-                        onClick={() => setEvaluation(prev => ({ ...prev, goal_achieved: true }))}
-                      >
-                        <ThumbsUp className="h-4 w-4" />
-                        Yes
-                      </Button>
-                      <Button
-                        variant={!evaluation.goal_achieved ? "destructive" : "outline"}
-                        size="sm"
-                        className="flex-1 gap-2"
-                        onClick={() => setEvaluation(prev => ({ ...prev, goal_achieved: false }))}
-                      >
-                        <ThumbsDown className="h-4 w-4" />
-                        No
-                      </Button>
+              <div className="space-y-6 p-4">
+                {/* AI Evaluation Button */}
+                <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/20">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 border border-primary/20">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium">AI-Powered Evaluation</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically analyze transcript and score the call
+                      </p>
                     </div>
                   </div>
-                </div>
-
-                {/* Scoring Criteria */}
-                <div className="lg:col-span-2 space-y-6">
-                  {EVALUATION_CRITERIA.map((criterion) => (
-                    <ScoreSlider
-                      key={criterion.key}
-                      value={evaluation[criterion.key as keyof CallEvaluation] as number}
-                      onChange={(v) => updateEvaluationScore(criterion.key, v)}
-                      label={criterion.label}
-                      description={criterion.description}
-                      icon={criterion.icon}
-                    />
-                  ))}
-
-                  {/* Notes */}
-                  <div className="space-y-2">
-                    <Label>Evaluation Notes</Label>
-                    <Textarea
-                      placeholder="Add any observations or feedback about this call..."
-                      value={evaluation.notes}
-                      onChange={(e) => setEvaluation(prev => ({ ...prev, notes: e.target.value }))}
-                      className="min-h-[80px] border-2"
-                    />
-                  </div>
-
-                  {/* Save Button */}
-                  <Button 
-                    onClick={() => saveEvaluation.mutate()} 
-                    disabled={saveEvaluation.isPending}
-                    className="w-full"
+                  <Button
+                    onClick={() => aiEvaluation.mutate()}
+                    disabled={aiEvaluation.isPending || (!call?.transcript && !execution?.transcript)}
+                    variant="default"
+                    className="gap-2"
                   >
-                    {saveEvaluation.isPending ? (
+                    {aiEvaluation.isPending ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Analyzing...
                       </>
                     ) : (
                       <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Evaluation
+                        <Sparkles className="h-4 w-4" />
+                        Run AI Evaluation
                       </>
                     )}
                   </Button>
                 </div>
+
+                {/* AI Badge */}
+                {evaluation.ai_generated && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    AI Generated
+                    {evaluation.evaluated_at && (
+                      <span className="text-xs opacity-70">
+                        • {format(new Date(evaluation.evaluated_at), "MMM d, HH:mm")}
+                      </span>
+                    )}
+                  </Badge>
+                )}
+
+                <div className="grid lg:grid-cols-3 gap-6">
+                  {/* Overall Score */}
+                  <div className="lg:col-span-1">
+                    <OverallScoreDisplay score={evaluation.overall_score} />
+                    
+                    {/* Goal Achievement */}
+                    <div className="mt-4 p-4 border-2 border-border">
+                      <Label className="text-sm font-medium mb-3 block">Goal Achieved?</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={evaluation.goal_achieved ? "default" : "outline"}
+                          size="sm"
+                          className="flex-1 gap-2"
+                          onClick={() => setEvaluation(prev => ({ ...prev, goal_achieved: true }))}
+                        >
+                          <ThumbsUp className="h-4 w-4" />
+                          Yes
+                        </Button>
+                        <Button
+                          variant={!evaluation.goal_achieved ? "destructive" : "outline"}
+                          size="sm"
+                          className="flex-1 gap-2"
+                          onClick={() => setEvaluation(prev => ({ ...prev, goal_achieved: false }))}
+                        >
+                          <ThumbsDown className="h-4 w-4" />
+                          No
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scoring Criteria */}
+                  <div className="lg:col-span-2 space-y-6">
+                    {EVALUATION_CRITERIA.map((criterion) => (
+                      <ScoreSlider
+                        key={criterion.key}
+                        value={evaluation[criterion.key as keyof CallEvaluation] as number}
+                        onChange={(v) => updateEvaluationScore(criterion.key, v)}
+                        label={criterion.label}
+                        description={criterion.description}
+                        icon={criterion.icon}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* AI Insights Section */}
+                {(evaluation.key_moments?.length || evaluation.improvement_suggestions?.length) && (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Key Moments */}
+                    {evaluation.key_moments && evaluation.key_moments.length > 0 && (
+                      <div className="p-4 border-2 border-border bg-muted/30">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Star className="h-4 w-4 text-yellow-500" />
+                          <Label className="font-medium">Key Moments</Label>
+                        </div>
+                        <ul className="space-y-2">
+                          {evaluation.key_moments.map((moment, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm">
+                              <span className="text-primary font-bold">{i + 1}.</span>
+                              <span className="text-muted-foreground">{moment}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Improvement Suggestions */}
+                    {evaluation.improvement_suggestions && evaluation.improvement_suggestions.length > 0 && (
+                      <div className="p-4 border-2 border-border bg-muted/30">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Lightbulb className="h-4 w-4 text-orange-500" />
+                          <Label className="font-medium">Improvement Suggestions</Label>
+                        </div>
+                        <ul className="space-y-2">
+                          {evaluation.improvement_suggestions.map((suggestion, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm">
+                              <TrendingUp className="h-3 w-3 text-green-500 mt-1 shrink-0" />
+                              <span className="text-muted-foreground">{suggestion}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div className="space-y-2">
+                  <Label>Evaluation Notes</Label>
+                  <Textarea
+                    placeholder="Add any observations or feedback about this call..."
+                    value={evaluation.notes}
+                    onChange={(e) => setEvaluation(prev => ({ ...prev, notes: e.target.value }))}
+                    className="min-h-[80px] border-2"
+                  />
+                </div>
+
+                {/* Save Button */}
+                <Button 
+                  onClick={() => saveEvaluation.mutate()} 
+                  disabled={saveEvaluation.isPending}
+                  className="w-full"
+                >
+                  {saveEvaluation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Evaluation
+                    </>
+                  )}
+                </Button>
               </div>
             </ScrollArea>
           </TabsContent>
