@@ -22,6 +22,7 @@ export type Database = {
           client_id: string | null
           created_at: string
           current_system_prompt: string | null
+          engineer_id: string | null
           id: string
           original_system_prompt: string | null
           status: string
@@ -35,6 +36,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           current_system_prompt?: string | null
+          engineer_id?: string | null
           id?: string
           original_system_prompt?: string | null
           status?: string
@@ -48,6 +50,7 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           current_system_prompt?: string | null
+          engineer_id?: string | null
           id?: string
           original_system_prompt?: string | null
           status?: string
