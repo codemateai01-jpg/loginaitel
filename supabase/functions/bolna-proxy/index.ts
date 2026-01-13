@@ -389,15 +389,15 @@ serve(async (req) => {
         const executionData = await execResponse.json();
         console.log("Execution data from Bolna:", JSON.stringify(executionData));
 
-        // Map Bolna status to our status
+        // Map Bolna status to our DB status (Bolna uses hyphens, we use underscores)
         const bolnaStatus = executionData.status || "initiated";
         const telephonyData = executionData.telephony_data || {};
-        const conversationTime = executionData.conversation_time;
+        const conversationTime = executionData.conversation_time || executionData.conversation_duration;
         
         // Duration in seconds from telephony_data.duration (string) or conversation_time (number)
         let durationSeconds = 0;
         if (telephonyData.duration) {
-          durationSeconds = parseInt(telephonyData.duration, 10) || 0;
+          durationSeconds = Math.round(parseFloat(telephonyData.duration)) || 0;
         } else if (conversationTime !== undefined) {
           durationSeconds = Math.round(conversationTime);
         }
@@ -405,20 +405,34 @@ serve(async (req) => {
         // Determine if connected (45+ seconds)
         const isConnected = durationSeconds >= 45;
         
-        // Determine final status
-        let finalStatus = bolnaStatus;
-        if (bolnaStatus === "call-disconnected" || bolnaStatus === "completed") {
-          finalStatus = "completed";
-        }
+        // Map Bolna statuses to our DB constraint-valid statuses
+        const statusMap: Record<string, string> = {
+          "initiated": "initiated",
+          "queued": "initiated",
+          "ringing": "ringing",
+          "in-progress": "in_progress",
+          "in_progress": "in_progress",
+          "completed": "completed",
+          "call-disconnected": "completed",
+          "no-answer": "no_answer",
+          "no_answer": "no_answer",
+          "busy": "failed",
+          "failed": "failed",
+          "canceled": "failed",
+          "stopped": "failed",
+          "balance-low": "failed",
+        };
+        
+        const finalStatus = statusMap[bolnaStatus] || "initiated";
         
         // Build update object
         const updateData: Record<string, unknown> = {
           status: finalStatus,
         };
         
-        // Only update duration/connected/ended_at for terminal statuses
-        const terminalStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
-        if (terminalStatuses.includes(bolnaStatus)) {
+        // Terminal statuses for updating duration/connected/ended_at
+        const terminalBolnaStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
+        if (terminalBolnaStatuses.includes(bolnaStatus)) {
           updateData.duration_seconds = durationSeconds;
           updateData.connected = isConnected;
           updateData.ended_at = new Date().toISOString();
@@ -447,7 +461,7 @@ serve(async (req) => {
         }
 
         // Update lead status for terminal statuses
-        if (terminalStatuses.includes(bolnaStatus)) {
+        if (terminalBolnaStatuses.includes(bolnaStatus)) {
           const { data: callData } = await supabase
             .from("calls")
             .select("lead_id")
