@@ -3,28 +3,196 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { VoiceSelector, VoiceConfig, CARTESIA_VOICES } from "@/components/agent-builder/VoiceSelector";
+import { LLMSettings, LLMConfig, LLM_MODELS } from "@/components/agent-builder/LLMSettings";
+import { ConversationSettings, ConversationConfig } from "@/components/agent-builder/ConversationSettings";
+import { TranscriberSettings, TranscriberConfig } from "@/components/agent-builder/TranscriberSettings";
+import { TelephonySettings, TelephonyConfig } from "@/components/agent-builder/TelephonySettings";
+import { TestCallDialog } from "@/components/agent-builder/TestCallDialog";
+import { createBolnaAgent, buildAgentConfig, makeCall, BuildAgentOptions } from "@/lib/bolna";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Bot,
   Save,
-  Phone,
   Play,
-  Mic,
-  Settings,
-  Volume2,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { useState } from "react";
 
 export default function AgentBuilder() {
-  const [temperature, setTemperature] = useState([0.7]);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedAgentId, setSavedAgentId] = useState<string | null>(null);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+
+  // Basic Info
+  const [agentName, setAgentName] = useState("");
+  const [description, setDescription] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
+
+  // Voice Configuration
+  const [voiceConfig, setVoiceConfig] = useState<VoiceConfig>({
+    provider: "cartesia",
+    voiceId: CARTESIA_VOICES[0].id,
+    voiceName: CARTESIA_VOICES[0].name,
+  });
+
+  // LLM Configuration
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
+    model: LLM_MODELS[0].id,
+    provider: LLM_MODELS[0].provider,
+    family: LLM_MODELS[0].family,
+    temperature: 0.1,
+    maxTokens: 150,
+  });
+
+  // Transcriber Configuration
+  const [transcriberConfig, setTranscriberConfig] = useState<TranscriberConfig>({
+    model: "nova-3",
+    language: "en",
+  });
+
+  // Telephony Configuration
+  const [telephonyConfig, setTelephonyConfig] = useState<TelephonyConfig>({
+    provider: "plivo",
+  });
+
+  // Conversation Configuration
+  const [conversationConfig, setConversationConfig] = useState<ConversationConfig>({
+    hangupAfterSilence: 10,
+    callTerminate: 90,
+    interruptionWords: 2,
+    voicemailDetection: true,
+    backchanneling: true,
+    ambientNoise: false,
+    ambientNoiseTrack: "office-ambience",
+  });
+
+  const handleSaveAgent = async () => {
+    if (!agentName.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter an agent name",
+      });
+      return;
+    }
+
+    if (!systemPrompt.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter a system prompt",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Build agent config for Bolna API
+      const buildOptions: BuildAgentOptions = {
+        name: agentName,
+        systemPrompt,
+        welcomeMessage: welcomeMessage || undefined,
+        voiceProvider: voiceConfig.provider,
+        voiceId: voiceConfig.voiceId,
+        voiceName: voiceConfig.voiceName,
+        llmProvider: llmConfig.provider,
+        llmFamily: llmConfig.family,
+        llmModel: llmConfig.model,
+        temperature: llmConfig.temperature,
+        maxTokens: llmConfig.maxTokens,
+        transcriberModel: transcriberConfig.model,
+        language: transcriberConfig.language as "en" | "hi" | "es" | "fr",
+        telephonyProvider: telephonyConfig.provider,
+        hangupAfterSilence: conversationConfig.hangupAfterSilence,
+        callTerminate: conversationConfig.callTerminate,
+        interruptionWords: conversationConfig.interruptionWords,
+        voicemailDetection: conversationConfig.voicemailDetection,
+        backchanneling: conversationConfig.backchanneling,
+        ambientNoise: conversationConfig.ambientNoise,
+        ambientNoiseTrack: conversationConfig.ambientNoiseTrack,
+      };
+
+      const agentPayload = buildAgentConfig(buildOptions);
+      
+      // Create agent in Bolna
+      const { data: bolnaResponse, error: bolnaError } = await createBolnaAgent(agentPayload);
+
+      if (bolnaError || !bolnaResponse) {
+        throw new Error(bolnaError || "Failed to create agent in Bolna");
+      }
+
+      // Save agent to our database
+      const { error: dbError } = await supabase.from("agents").insert([{
+        name: agentName,
+        description,
+        system_prompt: systemPrompt,
+        voice_config: JSON.parse(JSON.stringify({
+          bolna_agent_id: bolnaResponse.agent_id,
+          provider: voiceConfig.provider,
+          voice_id: voiceConfig.voiceId,
+          voice_name: voiceConfig.voiceName,
+          llm: llmConfig,
+          transcriber: transcriberConfig,
+          telephony: telephonyConfig,
+          conversation: conversationConfig,
+        })),
+        created_by: user?.id || "",
+        client_id: user?.id || "",
+        status: "pending",
+      }]);
+
+      if (dbError) {
+        console.error("DB Error:", dbError);
+        throw new Error("Failed to save agent to database");
+      }
+
+      setSavedAgentId(bolnaResponse.agent_id);
+
+      toast({
+        title: "Agent Created!",
+        description: "Your agent has been created and is pending approval.",
+      });
+    } catch (error) {
+      console.error("Save error:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save agent",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTestCall = async (phoneNumber: string) => {
+    if (!savedAgentId || !user) {
+      return { success: false, message: "Please save the agent first" };
+    }
+
+    try {
+      const { data, error } = await makeCall({
+        agent_id: savedAgentId,
+        lead_id: "", // Test call - no lead
+        client_id: user.id,
+      });
+
+      if (error || !data) {
+        return { success: false, message: error || "Failed to initiate call" };
+      }
+
+      return { success: true, message: `Call queued! Execution ID: ${data.execution_id}` };
+    } catch (error) {
+      return { success: false, message: "Failed to make test call" };
+    }
+  };
 
   return (
     <DashboardLayout role="engineer">
@@ -43,12 +211,33 @@ export default function AgentBuilder() {
             </div>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" className="shadow-xs">
-              <Save className="h-4 w-4 mr-2" />
-              Save Draft
-            </Button>
-            <Button className="shadow-sm">
-              Submit for Approval
+            {savedAgentId && (
+              <Button
+                variant="outline"
+                className="shadow-xs"
+                onClick={() => setTestDialogOpen(true)}
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Test Agent
+              </Button>
+            )}
+            <Button onClick={handleSaveAgent} disabled={isSaving} className="shadow-sm">
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : savedAgentId ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Saved
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Create Agent
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -61,11 +250,13 @@ export default function AgentBuilder() {
               <h2 className="font-bold mb-4">Basic Information</h2>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Agent Name</Label>
+                  <Label htmlFor="name">Agent Name *</Label>
                   <Input
                     id="name"
                     placeholder="e.g., Customer Support Agent"
                     className="border-2"
+                    value={agentName}
+                    onChange={(e) => setAgentName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -74,16 +265,34 @@ export default function AgentBuilder() {
                     id="description"
                     placeholder="Brief description of the agent's purpose"
                     className="border-2"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="welcome">Welcome Message</Label>
+                  <Input
+                    id="welcome"
+                    placeholder="What the agent says when the call starts"
+                    className="border-2"
+                    value={welcomeMessage}
+                    onChange={(e) => setWelcomeMessage(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. This is the first thing the agent will say.
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* System Prompt */}
             <div className="border-2 border-border bg-card p-6">
-              <h2 className="font-bold mb-4">System Prompt</h2>
+              <h2 className="font-bold mb-4">System Prompt *</h2>
               <Textarea
-                placeholder="Define the agent's personality, behavior, and knowledge base..."
+                placeholder="Define the agent's personality, behavior, and knowledge base...
+
+Example:
+You are a friendly customer support agent for Acme Corp. Your role is to help customers with their inquiries about our products and services. Be professional, helpful, and concise. If you don't know something, honestly say so and offer to connect them with a human agent."
                 className="min-h-[200px] border-2 font-mono text-sm"
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
@@ -95,144 +304,71 @@ export default function AgentBuilder() {
 
             {/* Voice Configuration */}
             <div className="border-2 border-border bg-card p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Volume2 className="h-5 w-5" />
-                <h2 className="font-bold">Voice Configuration</h2>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Voice</Label>
-                  <Select>
-                    <SelectTrigger className="border-2">
-                      <SelectValue placeholder="Select voice" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alloy">Alloy (Neutral)</SelectItem>
-                      <SelectItem value="echo">Echo (Male)</SelectItem>
-                      <SelectItem value="fable">Fable (Female)</SelectItem>
-                      <SelectItem value="onyx">Onyx (Deep Male)</SelectItem>
-                      <SelectItem value="nova">Nova (Soft Female)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Language</Label>
-                  <Select>
-                    <SelectTrigger className="border-2">
-                      <SelectValue placeholder="Select language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en-IN">English (India)</SelectItem>
-                      <SelectItem value="en-US">English (US)</SelectItem>
-                      <SelectItem value="hi-IN">Hindi</SelectItem>
-                      <SelectItem value="ta-IN">Tamil</SelectItem>
-                      <SelectItem value="te-IN">Telugu</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <VoiceSelector value={voiceConfig} onChange={setVoiceConfig} />
             </div>
+
+            {/* Conversation Settings */}
+            <ConversationSettings
+              value={conversationConfig}
+              onChange={setConversationConfig}
+            />
           </div>
 
           {/* Sidebar Settings */}
           <div className="space-y-6">
             {/* LLM Settings */}
             <div className="border-2 border-border bg-card p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Settings className="h-5 w-5" />
-                <h2 className="font-bold">LLM Settings</h2>
-              </div>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label>Model</Label>
-                  <Select>
-                    <SelectTrigger className="border-2">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gpt-4">GPT-4</SelectItem>
-                      <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Temperature</Label>
-                    <span className="text-sm font-mono">{temperature[0]}</span>
-                  </div>
-                  <Slider
-                    value={temperature}
-                    onValueChange={setTemperature}
-                    max={1}
-                    step={0.1}
-                    className="cursor-pointer"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Lower = more focused, Higher = more creative
-                  </p>
-                </div>
-              </div>
+              <LLMSettings value={llmConfig} onChange={setLlmConfig} />
             </div>
 
             {/* Transcriber */}
             <div className="border-2 border-border bg-card p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Mic className="h-5 w-5" />
-                <h2 className="font-bold">Transcriber (STT)</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Provider</Label>
-                  <Select>
-                    <SelectTrigger className="border-2">
-                      <SelectValue placeholder="Select provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="deepgram">Deepgram</SelectItem>
-                      <SelectItem value="whisper">Whisper</SelectItem>
-                      <SelectItem value="google">Google STT</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <TranscriberSettings
+                value={transcriberConfig}
+                onChange={setTranscriberConfig}
+              />
             </div>
 
             {/* Telephony */}
             <div className="border-2 border-border bg-card p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Phone className="h-5 w-5" />
-                <h2 className="font-bold">Telephony</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Provider</Label>
-                  <Select>
-                    <SelectTrigger className="border-2">
-                      <SelectValue placeholder="Select provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="twilio">Twilio</SelectItem>
-                      <SelectItem value="plivo">Plivo</SelectItem>
-                      <SelectItem value="exotel">Exotel</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <TelephonySettings
+                value={telephonyConfig}
+                onChange={setTelephonyConfig}
+              />
             </div>
 
-            {/* Test Button (Disabled) */}
-            <Button
-              variant="outline"
-              className="w-full shadow-xs"
-              disabled
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Test Agent (Awaiting Approval)
-            </Button>
+            {/* Status Card */}
+            {savedAgentId ? (
+              <div className="border-2 border-green-500 bg-green-50 dark:bg-green-950 p-4">
+                <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span className="font-bold">Agent Created</span>
+                </div>
+                <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                  ID: {savedAgentId.slice(0, 8)}...
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Status: Pending Admin Approval
+                </p>
+              </div>
+            ) : (
+              <div className="border-2 border-border bg-muted/50 p-4">
+                <p className="text-sm text-muted-foreground">
+                  Fill in the details and click "Create Agent" to save your configuration.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Test Call Dialog */}
+      <TestCallDialog
+        open={testDialogOpen}
+        onOpenChange={setTestDialogOpen}
+        agentName={agentName}
+        onTestCall={handleTestCall}
+      />
     </DashboardLayout>
   );
 }

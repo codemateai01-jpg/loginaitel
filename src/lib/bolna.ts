@@ -106,6 +106,12 @@ export interface ElevenLabsSynthConfig {
   model: "eleven_turbo_v2_5" | "eleven_flash_v2_5";
 }
 
+export interface CartesiaSynthConfig {
+  voice: string;
+  voice_id: string;
+  model?: string;
+}
+
 export interface PollySynthConfig {
   voice: string;
   engine: string;
@@ -120,8 +126,8 @@ export interface DeepgramSynthConfig {
 }
 
 export interface SynthesizerConfig {
-  provider: "elevenlabs" | "polly" | "deepgram" | "styletts";
-  provider_config: ElevenLabsSynthConfig | PollySynthConfig | DeepgramSynthConfig;
+  provider: "elevenlabs" | "cartesia" | "polly" | "deepgram" | "styletts";
+  provider_config: ElevenLabsSynthConfig | CartesiaSynthConfig | PollySynthConfig | DeepgramSynthConfig;
   stream?: boolean;
   buffer_size?: number;
   audio_format?: "wav";
@@ -353,15 +359,62 @@ export async function listVoices(): Promise<BolnaResponse<BolnaVoice[]>> {
 // HELPER: Build agent config for v2 API
 // ==========================================
 
-export function buildAgentConfig(options: {
+export interface BuildAgentOptions {
   name: string;
   systemPrompt: string;
   welcomeMessage?: string;
-  voiceId?: string;
-  voiceName?: string;
-  language?: "en" | "hi" | "es" | "fr";
+  // Voice config
+  voiceProvider: "elevenlabs" | "cartesia";
+  voiceId: string;
+  voiceName: string;
+  // LLM config
+  llmProvider: string;
+  llmFamily: string;
+  llmModel: string;
+  temperature: number;
+  maxTokens: number;
+  // Transcriber config
+  transcriberModel: string;
+  language: "en" | "hi" | "es" | "fr";
+  // Telephony config
+  telephonyProvider: "twilio" | "plivo" | "exotel";
+  // Conversation config
+  hangupAfterSilence: number;
+  callTerminate: number;
+  interruptionWords: number;
+  voicemailDetection: boolean;
+  backchanneling: boolean;
+  ambientNoise: boolean;
+  ambientNoiseTrack: "office-ambience" | "coffee-shop" | "call-center";
+  // Optional
   webhookUrl?: string;
-}): CreateAgentRequest {
+}
+
+export function buildAgentConfig(options: BuildAgentOptions): CreateAgentRequest {
+  // Build synthesizer config based on provider
+  const synthesizerConfig: SynthesizerConfig = options.voiceProvider === "cartesia"
+    ? {
+        provider: "cartesia",
+        provider_config: {
+          voice: options.voiceName,
+          voice_id: options.voiceId,
+        } as CartesiaSynthConfig,
+        stream: true,
+        buffer_size: 250,
+        audio_format: "wav",
+      }
+    : {
+        provider: "elevenlabs",
+        provider_config: {
+          voice: options.voiceName,
+          voice_id: options.voiceId,
+          model: "eleven_turbo_v2_5",
+        } as ElevenLabsSynthConfig,
+        stream: true,
+        buffer_size: 250,
+        audio_format: "wav",
+      };
+
   return {
     agent_config: {
       agent_name: options.name,
@@ -380,48 +433,40 @@ export function buildAgentConfig(options: {
               agent_type: "simple_llm_agent",
               agent_flow_type: "streaming",
               llm_config: {
-                provider: "openai",
-                family: "openai",
-                model: "gpt-4.1-mini",
-                max_tokens: 150,
-                temperature: 0.1,
+                provider: options.llmProvider,
+                family: options.llmFamily,
+                model: options.llmModel,
+                max_tokens: options.maxTokens,
+                temperature: options.temperature,
               },
             },
-            synthesizer: {
-              provider: "elevenlabs",
-              provider_config: {
-                voice: options.voiceName || "Nila",
-                voice_id: options.voiceId || "V9LCAAi4tTlqe9JadbCo",
-                model: "eleven_turbo_v2_5",
-              },
-              stream: true,
-              buffer_size: 250,
-              audio_format: "wav",
-            },
+            synthesizer: synthesizerConfig,
             transcriber: {
               provider: "deepgram",
-              model: "nova-3",
-              language: options.language || "en",
+              model: options.transcriberModel as "nova-3" | "nova-2" | "nova-2-phonecall" | "nova-2-conversationalai",
+              language: options.language,
               stream: true,
               sampling_rate: 16000,
               encoding: "linear16",
               endpointing: 250,
             },
             input: {
-              provider: "plivo",
+              provider: options.telephonyProvider,
               format: "wav",
             },
             output: {
-              provider: "plivo",
+              provider: options.telephonyProvider,
               format: "wav",
             },
           },
           task_config: {
-            hangup_after_silence: 10,
-            call_terminate: 90,
-            voicemail: true,
-            number_of_words_for_interruption: 2,
-            backchanneling: true,
+            hangup_after_silence: options.hangupAfterSilence,
+            call_terminate: options.callTerminate,
+            voicemail: options.voicemailDetection,
+            number_of_words_for_interruption: options.interruptionWords,
+            backchanneling: options.backchanneling,
+            ambient_noise: options.ambientNoise,
+            ambient_noise_track: options.ambientNoiseTrack,
           },
         },
       ],
