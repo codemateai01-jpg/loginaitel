@@ -362,6 +362,118 @@ serve(async (req) => {
         });
         break;
 
+      case "sync-call-status": {
+        // Sync call status from Bolna to our database
+        const syncExecutionId = url.searchParams.get("execution_id");
+        const internalCallId = url.searchParams.get("call_id");
+        
+        if (!syncExecutionId || !internalCallId) {
+          return new Response(
+            JSON.stringify({ error: "execution_id and call_id are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Fetch execution data from Bolna
+        const execResponse = await fetch(`${BOLNA_API_BASE}/executions/${syncExecutionId}`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+
+        if (!execResponse.ok) {
+          return new Response(
+            JSON.stringify({ error: "Failed to fetch execution from Bolna" }),
+            { status: execResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const executionData = await execResponse.json();
+        console.log("Execution data from Bolna:", JSON.stringify(executionData));
+
+        // Map Bolna status to our status
+        const bolnaStatus = executionData.status || "initiated";
+        const telephonyData = executionData.telephony_data || {};
+        const conversationTime = executionData.conversation_time;
+        
+        // Duration in seconds from telephony_data.duration (string) or conversation_time (number)
+        let durationSeconds = 0;
+        if (telephonyData.duration) {
+          durationSeconds = parseInt(telephonyData.duration, 10) || 0;
+        } else if (conversationTime !== undefined) {
+          durationSeconds = Math.round(conversationTime);
+        }
+        
+        // Determine if connected (45+ seconds)
+        const isConnected = durationSeconds >= 45;
+        
+        // Determine final status
+        let finalStatus = bolnaStatus;
+        if (bolnaStatus === "call-disconnected" || bolnaStatus === "completed") {
+          finalStatus = "completed";
+        }
+        
+        // Build update object
+        const updateData: Record<string, unknown> = {
+          status: finalStatus,
+        };
+        
+        // Only update duration/connected/ended_at for terminal statuses
+        const terminalStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
+        if (terminalStatuses.includes(bolnaStatus)) {
+          updateData.duration_seconds = durationSeconds;
+          updateData.connected = isConnected;
+          updateData.ended_at = new Date().toISOString();
+          
+          // Get recording URL and transcript if available
+          if (telephonyData.recording_url) {
+            updateData.recording_url = telephonyData.recording_url;
+          }
+          if (executionData.transcript) {
+            updateData.transcript = executionData.transcript;
+          }
+        }
+
+        // Update call in database
+        const { error: updateError } = await supabase
+          .from("calls")
+          .update(updateData)
+          .eq("id", internalCallId);
+
+        if (updateError) {
+          console.error("Failed to update call:", updateError);
+          return new Response(
+            JSON.stringify({ error: "Failed to update call record" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Update lead status for terminal statuses
+        if (terminalStatuses.includes(bolnaStatus)) {
+          const { data: callData } = await supabase
+            .from("calls")
+            .select("lead_id")
+            .eq("id", internalCallId)
+            .single();
+            
+          if (callData?.lead_id) {
+            await supabase
+              .from("leads")
+              .update({ status: isConnected ? "connected" : "completed" })
+              .eq("id", callData.lead_id);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            status: finalStatus,
+            duration_seconds: durationSeconds,
+            connected: isConnected,
+            bolna_status: bolnaStatus
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "get-execution-logs":
         const logsExecutionId = url.searchParams.get("execution_id");
         if (!logsExecutionId) {

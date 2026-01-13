@@ -462,6 +462,21 @@ export async function getExecution(executionId: string): Promise<BolnaResponse<C
   return callBolnaProxy<CallExecution>("get-execution", { execution_id: executionId });
 }
 
+export interface SyncCallStatusResponse {
+  success: boolean;
+  status: string;
+  duration_seconds: number;
+  connected: boolean;
+  bolna_status: string;
+}
+
+export async function syncCallStatus(executionId: string, callId: string): Promise<BolnaResponse<SyncCallStatusResponse>> {
+  return callBolnaProxy<SyncCallStatusResponse>("sync-call-status", { 
+    execution_id: executionId, 
+    call_id: callId 
+  });
+}
+
 export async function getExecutionLogs(executionId: string): Promise<BolnaResponse<ExecutionLogsResponse>> {
   return callBolnaProxy<ExecutionLogsResponse>("get-execution-logs", { execution_id: executionId });
 }

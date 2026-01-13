@@ -23,7 +23,7 @@ import { Phone, Loader2, User, Clock, CheckCircle, XCircle, AlertCircle } from "
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { makeCall } from "@/lib/bolna";
+import { makeCall, syncCallStatus } from "@/lib/bolna";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CallProgressTracker } from "@/components/calls/CallProgressTracker";
 
@@ -296,6 +296,41 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
       supabase.removeChannel(channel);
     };
   }, [user, role, toast, refetchCalls]);
+
+  // Poll active calls to sync status from Bolna API
+  useEffect(() => {
+    if (activeCalls.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      console.log("Polling active calls for status updates...");
+      
+      for (const call of activeCalls) {
+        if (!call.external_call_id) continue;
+        
+        try {
+          const { data, error } = await syncCallStatus(call.external_call_id, call.id);
+          
+          if (error) {
+            console.error(`Failed to sync call ${call.id}:`, error);
+            continue;
+          }
+          
+          if (data) {
+            console.log(`Call ${call.id} synced:`, data);
+            
+            // If status changed, refetch to update UI
+            if (data.status !== call.status) {
+              refetchCalls();
+            }
+          }
+        } catch (err) {
+          console.error(`Error syncing call ${call.id}:`, err);
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [activeCalls, refetchCalls]);
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
