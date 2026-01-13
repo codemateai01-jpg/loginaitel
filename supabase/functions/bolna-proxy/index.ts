@@ -112,15 +112,26 @@ serve(async (req) => {
           );
         }
         
-        response = await fetch(`${BOLNA_API_BASE}/v2/agent`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${BOLNA_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
-        break;
+      console.log("Creating agent with config:", JSON.stringify(body, null, 2));
+      
+      response = await fetch(`${BOLNA_API_BASE}/v2/agent`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${BOLNA_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Bolna API error:", response.status, errorText);
+        return new Response(
+          JSON.stringify({ error: `Bolna API error: ${errorText}` }),
+          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      break;
 
       case "update-agent":
         // Only engineers can update agents

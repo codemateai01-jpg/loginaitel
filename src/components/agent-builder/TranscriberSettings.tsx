@@ -9,10 +9,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Mic } from "lucide-react";
 
-// Transcriber providers - renamed for Aitel branding
+// Transcriber providers - using Deepgram nova-3 for best quality
 const TRANSCRIBER_PROVIDERS = [
-  { id: "azure", name: "Aitel Transcriber 01", description: "High accuracy, enterprise-grade" },
-  { id: "sarvam", name: "Aitel Transcriber 02", description: "Optimized for Indian languages" },
+  { id: "deepgram", name: "Aitel Transcriber Pro", description: "Nova-3 - Highest accuracy", model: "nova-3" },
+  { id: "deepgram-phonecall", name: "Aitel Transcriber Phonecall", description: "Optimized for phone audio", model: "nova-2-phonecall" },
 ];
 
 // Regional + English languages
@@ -32,6 +32,7 @@ const LANGUAGES = [
 
 export interface TranscriberConfig {
   provider: string;
+  model: string;
   language: string;
 }
 
@@ -56,7 +57,10 @@ export function TranscriberSettings({ value, onChange }: TranscriberSettingsProp
         <Label>Provider</Label>
         <Select
           value={value.provider}
-          onValueChange={(provider) => onChange({ ...value, provider })}
+          onValueChange={(providerId) => {
+            const provider = TRANSCRIBER_PROVIDERS.find(p => p.id === providerId);
+            onChange({ ...value, provider: "deepgram", model: provider?.model || "nova-3" });
+          }}
         >
           <SelectTrigger className="border-2">
             <SelectValue placeholder="Select provider" />

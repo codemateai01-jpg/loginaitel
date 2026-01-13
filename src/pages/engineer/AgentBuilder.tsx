@@ -96,9 +96,10 @@ export default function AgentBuilder() {
     maxTokens: 150,
   });
 
-  // Transcriber Configuration - Default to Aitel Transcriber 01 (Azure)
+  // Transcriber Configuration - Default to Deepgram Nova-3
   const [transcriberConfig, setTranscriberConfig] = useState<TranscriberConfig>({
-    provider: "azure",
+    provider: "deepgram",
+    model: "nova-3",
     language: "en",
   });
 
