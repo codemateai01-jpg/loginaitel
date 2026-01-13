@@ -33,7 +33,7 @@ export default function LoginSelect() {
       <header className="p-6 border-b-2 border-border">
         <Link to="/" className="flex items-center gap-2 w-fit">
           <Mic className="h-8 w-8" />
-          <span className="font-bold text-xl">VoiceAI</span>
+          <span className="font-bold text-xl">Aitel</span>
         </Link>
       </header>
 
