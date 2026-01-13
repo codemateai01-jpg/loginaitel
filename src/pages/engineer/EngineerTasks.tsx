@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +129,29 @@ export default function EngineerTasks() {
     },
     enabled: !!user?.id,
   });
+
+  // Real-time subscription for tasks
+  useEffect(() => {
+    const channel = supabase
+      .channel('engineer-tasks-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["available-tasks"] });
+          queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Pick task mutation
   const pickTaskMutation = useMutation({

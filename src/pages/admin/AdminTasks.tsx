@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -102,6 +102,28 @@ export default function AdminTasks() {
       return data;
     },
   });
+
+  // Real-time subscription for tasks
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-tasks-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Fetch profiles for assigned engineers
   const { data: profiles } = useQuery({
