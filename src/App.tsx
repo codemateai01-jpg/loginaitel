@@ -22,6 +22,7 @@ import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
 import AgentEditor from "./pages/engineer/AgentEditor";
 import WebCallTest from "./pages/engineer/WebCallTest";
 import WebCallTestPage from "./pages/shared/WebCallTestPage";
+import MakeCallPage from "./pages/shared/MakeCallPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgents from "./pages/admin/AdminAgents";
 import AdminCalls from "./pages/admin/AdminCalls";
@@ -113,6 +114,14 @@ const App = () => (
               }
             />
             <Route
+              path="/admin/make-call"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <MakeCallPage role="admin" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/engineer"
               element={
                 <ProtectedRoute allowedRoles={["engineer"]}>
@@ -157,6 +166,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["engineer"]}>
                   <WebCallTest />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/engineer/make-call"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <MakeCallPage role="engineer" />
                 </ProtectedRoute>
               }
             />
@@ -207,6 +224,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <WebCallTestPage role="client" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/make-call"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <MakeCallPage role="client" />
                 </ProtectedRoute>
               }
             />
