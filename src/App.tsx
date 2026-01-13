@@ -29,6 +29,7 @@ import AgentConfigEditor from "./pages/engineer/AgentConfigEditor";
 import AgentEditor from "./pages/engineer/AgentEditor";
 import WebCallTest from "./pages/engineer/WebCallTest";
 import EngineerSettings from "./pages/engineer/EngineerSettings";
+import EngineerTimeTracker from "./pages/engineer/EngineerTimeTracker";
 import WebCallTestPage from "./pages/shared/WebCallTestPage";
 import MakeCallPage from "./pages/shared/MakeCallPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -38,6 +39,8 @@ import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPhoneNumbers from "./pages/admin/AdminPhoneNumbers";
 import AdminRealTimeMonitor from "./pages/admin/AdminRealTimeMonitor";
 import BatchCallHistory from "./pages/admin/BatchCallHistory";
+import AdminClients from "./pages/admin/AdminClients";
+import AdminEngineers from "./pages/admin/AdminEngineers";
 
 const queryClient = new QueryClient();
 
@@ -131,6 +134,22 @@ const App = () => (
               }
             />
             <Route
+              path="/admin/clients"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminClients />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/engineers"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminEngineers />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/web-call"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
@@ -215,6 +234,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["engineer"]}>
                   <EngineerSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/engineer/time"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <EngineerTimeTracker />
                 </ProtectedRoute>
               }
             />

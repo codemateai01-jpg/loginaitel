@@ -402,6 +402,48 @@ export type Database = {
           },
         ]
       }
+      time_entries: {
+        Row: {
+          break_end_time: string | null
+          break_start_time: string | null
+          check_in_time: string
+          check_out_time: string | null
+          created_at: string
+          engineer_id: string
+          id: string
+          notes: string | null
+          status: string
+          total_break_minutes: number | null
+          updated_at: string
+        }
+        Insert: {
+          break_end_time?: string | null
+          break_start_time?: string | null
+          check_in_time?: string
+          check_out_time?: string | null
+          created_at?: string
+          engineer_id: string
+          id?: string
+          notes?: string | null
+          status?: string
+          total_break_minutes?: number | null
+          updated_at?: string
+        }
+        Update: {
+          break_end_time?: string | null
+          break_start_time?: string | null
+          check_in_time?: string
+          check_out_time?: string | null
+          created_at?: string
+          engineer_id?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          total_break_minutes?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
