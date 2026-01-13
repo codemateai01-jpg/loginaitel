@@ -18,6 +18,7 @@ import {
   Clock,
   Upload,
   Layers,
+  Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +30,7 @@ interface DashboardLayoutProps {
 
 const adminNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
+  { icon: Radio, label: "Live Monitor", href: "/admin/monitor" },
   { icon: Users, label: "Prompt Engineers", href: "/admin/engineers" },
   { icon: Users, label: "Clients", href: "/admin/clients" },
   { icon: ClipboardList, label: "Tasks", href: "/admin/tasks" },
