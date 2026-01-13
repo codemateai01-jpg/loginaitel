@@ -85,7 +85,7 @@ serve(async (req) => {
             { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        response = await fetch(`${BOLNA_API_BASE}/agent/all`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/agent/all`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
         break;
@@ -98,7 +98,7 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        response = await fetch(`${BOLNA_API_BASE}/agent/${agentId}`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/agent/${agentId}`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
         break;
@@ -112,14 +112,13 @@ serve(async (req) => {
           );
         }
         
-        const agentConfig: BolnaAgentConfig = body;
-        response = await fetch(`${BOLNA_API_BASE}/agent`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/agent`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(agentConfig),
+          body: JSON.stringify(body),
         });
         break;
 
@@ -140,7 +139,7 @@ serve(async (req) => {
           );
         }
         
-        response = await fetch(`${BOLNA_API_BASE}/agent/${updateAgentId}`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/agent/${updateAgentId}`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
@@ -167,7 +166,7 @@ serve(async (req) => {
           );
         }
         
-        response = await fetch(`${BOLNA_API_BASE}/agent/${deleteAgentId}`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/agent/${deleteAgentId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
