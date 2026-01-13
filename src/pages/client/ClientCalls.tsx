@@ -65,6 +65,7 @@ interface Call {
   summary: string | null;
   sentiment: string | null;
   metadata: unknown;
+  external_call_id: string | null;
   lead?: {
     name: string | null;
     phone_number: string;

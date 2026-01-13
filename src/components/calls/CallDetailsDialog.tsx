@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   Phone,
   FileText,
@@ -22,9 +24,18 @@ import {
   XCircle,
   MessageSquare,
   TrendingUp,
+  ListOrdered,
+  DollarSign,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Download,
+  RefreshCw,
+  AlertCircle,
+  Voicemail,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Slider } from "@/components/ui/slider";
+import { getExecution, getExecutionLogs, CallExecution, ExecutionLogEntry } from "@/lib/bolna";
 
 interface Call {
   id: string;
@@ -41,6 +52,7 @@ interface Call {
   summary: string | null;
   sentiment: string | null;
   metadata: unknown;
+  external_call_id?: string | null;
   lead?: {
     name: string | null;
     phone_number: string;
@@ -65,6 +77,40 @@ export function CallDetailsDialog({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Fetch execution details from Bolna if we have external_call_id
+  const { data: execution, isLoading: executionLoading } = useQuery({
+    queryKey: ["execution", call?.external_call_id],
+    enabled: !!call?.external_call_id && open,
+    queryFn: async () => {
+      const response = await getExecution(call!.external_call_id!);
+      if (response.error) throw new Error(response.error);
+      return response.data;
+    },
+  });
+
+  // Fetch execution logs from Bolna
+  const { data: executionLogs, isLoading: logsLoading } = useQuery({
+    queryKey: ["execution-logs", call?.external_call_id],
+    enabled: !!call?.external_call_id && open,
+    queryFn: async () => {
+      const response = await getExecutionLogs(call!.external_call_id!);
+      if (response.error) throw new Error(response.error);
+      return response.data?.data || [];
+    },
+  });
+
+  // Reset audio state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+  }, [open]);
 
   if (!call) return null;
 
@@ -116,43 +162,80 @@ export function CallDetailsDialog({
     }
   };
 
-  // Parse transcript into messages if it's a conversation format
+  const getStatusBadge = (status: string) => {
+    const statusMap: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+      completed: { variant: "default", label: "Completed" },
+      "call-disconnected": { variant: "secondary", label: "Disconnected" },
+      "no-answer": { variant: "outline", label: "No Answer" },
+      busy: { variant: "outline", label: "Busy" },
+      failed: { variant: "destructive", label: "Failed" },
+      "in-progress": { variant: "secondary", label: "In Progress" },
+      canceled: { variant: "outline", label: "Canceled" },
+      "balance-low": { variant: "destructive", label: "Balance Low" },
+      queued: { variant: "outline", label: "Queued" },
+      ringing: { variant: "secondary", label: "Ringing" },
+      initiated: { variant: "secondary", label: "Initiated" },
+      stopped: { variant: "outline", label: "Stopped" },
+    };
+    const config = statusMap[status] || { variant: "outline", label: status };
+    return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  // Get recording URL from execution or call
+  const recordingUrl = execution?.telephony_data?.recording_url || call.recording_url;
+
+  // Parse transcript into messages
   const parseTranscript = (transcript: string | null) => {
     if (!transcript) return [];
     
-    // Try to parse as JSON first
     try {
       const parsed = JSON.parse(transcript);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
+      if (Array.isArray(parsed)) return parsed;
     } catch {
-      // Not JSON, try to parse as text with speaker labels
+      // Not JSON
     }
 
-    // Parse text format like "Agent: Hello\nUser: Hi"
     const lines = transcript.split("\n").filter((line) => line.trim());
     return lines.map((line) => {
-      const match = line.match(/^(Agent|User|Lead|Bot):\s*(.*)$/i);
+      const match = line.match(/^(Agent|User|Lead|Bot|Assistant|Human):\s*(.*)$/i);
       if (match) {
-        return {
-          role: match[1].toLowerCase(),
-          content: match[2],
-        };
+        return { role: match[1].toLowerCase(), content: match[2] };
       }
       return { role: "unknown", content: line };
     });
   };
 
-  const transcriptMessages = parseTranscript(call.transcript);
+  // Use execution transcript if available, otherwise fall back to call transcript
+  const transcriptSource = execution?.transcript || call.transcript;
+  const transcriptMessages = parseTranscript(transcriptSource);
+
+  const downloadRecording = () => {
+    if (recordingUrl) {
+      window.open(recordingUrl, "_blank");
+    }
+  };
+
+  const getComponentIcon = (component: string) => {
+    switch (component.toLowerCase()) {
+      case "llm":
+        return <Bot className="h-3 w-3" />;
+      case "synthesizer":
+        return <Volume2 className="h-3 w-3" />;
+      case "transcriber":
+        return <FileText className="h-3 w-3" />;
+      default:
+        return <MessageSquare className="h-3 w-3" />;
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-2 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="border-2 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Phone className="h-5 w-5" />
             Call Details
+            {execution && getStatusBadge(execution.status)}
           </DialogTitle>
         </DialogHeader>
 
@@ -163,6 +246,7 @@ export function CallDetailsDialog({
             <div>
               <p className="text-xs text-muted-foreground">Lead</p>
               <p className="font-medium text-sm">{call.lead?.name || "Unknown"}</p>
+              <p className="text-xs text-muted-foreground font-mono">{call.lead?.phone_number}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -177,7 +261,9 @@ export function CallDetailsDialog({
             <div>
               <p className="text-xs text-muted-foreground">Duration</p>
               <p className="font-medium text-sm font-mono">
-                {formatDuration(call.duration_seconds)}
+                {execution?.conversation_time 
+                  ? formatDuration(execution.conversation_time) 
+                  : formatDuration(call.duration_seconds)}
               </p>
             </div>
           </div>
@@ -192,25 +278,59 @@ export function CallDetailsDialog({
           </div>
         </div>
 
-        {/* Status & Sentiment */}
-        <div className="flex gap-4 items-center">
-          <div className="flex items-center gap-2">
-            {call.connected ? (
-              <CheckCircle className="h-4 w-4 text-chart-2" />
-            ) : (
-              <XCircle className="h-4 w-4 text-muted-foreground" />
+        {/* Execution Details */}
+        {execution && (
+          <div className="flex flex-wrap gap-4 items-center text-sm">
+            <div className="flex items-center gap-2">
+              {call.connected || execution.status === "completed" ? (
+                <CheckCircle className="h-4 w-4 text-chart-2" />
+              ) : (
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span>{call.connected || execution.status === "completed" ? "Connected" : "Not Connected"}</span>
+            </div>
+            
+            {execution.telephony_data?.call_type && (
+              <div className="flex items-center gap-2">
+                {execution.telephony_data.call_type === "outbound" ? (
+                  <PhoneOutgoing className="h-4 w-4 text-chart-1" />
+                ) : (
+                  <PhoneIncoming className="h-4 w-4 text-chart-2" />
+                )}
+                <span className="capitalize">{execution.telephony_data.call_type}</span>
+              </div>
             )}
-            <span className="text-sm">
-              {call.connected ? "Connected" : "Not Connected"}
-            </span>
+
+            {execution.answered_by_voice_mail && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Voicemail className="h-4 w-4" />
+                <span>Voicemail</span>
+              </div>
+            )}
+
+            {execution.total_cost !== undefined && (
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-chart-4" />
+                <span>${execution.total_cost.toFixed(4)}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <TrendingUp className={`h-4 w-4 ${getSentimentColor(call.sentiment)}`} />
+              <span className={`capitalize ${getSentimentColor(call.sentiment)}`}>
+                {call.sentiment || "Neutral"}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <TrendingUp className={`h-4 w-4 ${getSentimentColor(call.sentiment)}`} />
-            <span className={`text-sm capitalize ${getSentimentColor(call.sentiment)}`}>
-              {call.sentiment || "Neutral"} Sentiment
-            </span>
+        )}
+
+        {/* Error Message */}
+        {execution?.error_message && (
+          <div className="flex items-start gap-2 p-3 bg-destructive/10 border-2 border-destructive text-destructive text-sm">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{execution.error_message}</span>
           </div>
-        </div>
+        )}
 
         {/* Tabs */}
         <Tabs defaultValue="transcript" className="flex-1 flex flex-col min-h-0">
@@ -225,10 +345,19 @@ export function CallDetailsDialog({
             <TabsTrigger
               value="recording"
               className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              disabled={!call.recording_url}
+              disabled={!recordingUrl}
             >
               <Volume2 className="h-4 w-4" />
               Recording
+            </TabsTrigger>
+            <TabsTrigger
+              value="logs"
+              className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              disabled={!call.external_call_id}
+            >
+              <ListOrdered className="h-4 w-4" />
+              Logs
+              {logsLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
             </TabsTrigger>
             <TabsTrigger
               value="summary"
@@ -239,46 +368,44 @@ export function CallDetailsDialog({
             </TabsTrigger>
           </TabsList>
 
+          {/* Transcript Tab */}
           <TabsContent value="transcript" className="flex-1 min-h-0">
             <ScrollArea className="h-[300px] border-2 border-border p-4">
               {transcriptMessages.length > 0 ? (
                 <div className="space-y-4">
-                  {transcriptMessages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={`flex gap-3 ${
-                        message.role === "agent" || message.role === "bot"
-                          ? ""
-                          : "flex-row-reverse"
-                      }`}
-                    >
+                  {transcriptMessages.map((message, index) => {
+                    const isAgent = ["agent", "bot", "assistant"].includes(message.role);
+                    return (
                       <div
-                        className={`w-8 h-8 flex items-center justify-center border-2 shrink-0 ${
-                          message.role === "agent" || message.role === "bot"
-                            ? "bg-chart-1/10 border-chart-1"
-                            : "bg-chart-2/10 border-chart-2"
-                        }`}
+                        key={index}
+                        className={`flex gap-3 ${isAgent ? "" : "flex-row-reverse"}`}
                       >
-                        {message.role === "agent" || message.role === "bot" ? (
-                          <Bot className="h-4 w-4 text-chart-1" />
-                        ) : (
-                          <User className="h-4 w-4 text-chart-2" />
-                        )}
+                        <div
+                          className={`w-8 h-8 flex items-center justify-center border-2 shrink-0 ${
+                            isAgent
+                              ? "bg-chart-1/10 border-chart-1"
+                              : "bg-chart-2/10 border-chart-2"
+                          }`}
+                        >
+                          {isAgent ? (
+                            <Bot className="h-4 w-4 text-chart-1" />
+                          ) : (
+                            <User className="h-4 w-4 text-chart-2" />
+                          )}
+                        </div>
+                        <div
+                          className={`flex-1 p-3 border-2 border-border ${
+                            isAgent ? "bg-muted/50" : "bg-card"
+                          }`}
+                        >
+                          <p className="text-xs text-muted-foreground mb-1 capitalize">
+                            {isAgent ? "Agent" : "Lead"}
+                          </p>
+                          <p className="text-sm">{message.content}</p>
+                        </div>
                       </div>
-                      <div
-                        className={`flex-1 p-3 border-2 border-border ${
-                          message.role === "agent" || message.role === "bot"
-                            ? "bg-muted/50"
-                            : "bg-card"
-                        }`}
-                      >
-                        <p className="text-xs text-muted-foreground mb-1 capitalize">
-                          {message.role === "bot" ? "Agent" : message.role}
-                        </p>
-                        <p className="text-sm">{message.content}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
@@ -290,19 +417,19 @@ export function CallDetailsDialog({
             </ScrollArea>
           </TabsContent>
 
+          {/* Recording Tab */}
           <TabsContent value="recording" className="flex-1">
             <div className="border-2 border-border p-6 space-y-6">
-              {call.recording_url ? (
+              {recordingUrl ? (
                 <>
                   <audio
                     ref={audioRef}
-                    src={call.recording_url}
+                    src={recordingUrl}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
                     onEnded={() => setIsPlaying(false)}
                   />
                   
-                  {/* Player Controls */}
                   <div className="flex items-center justify-center gap-4">
                     <Button
                       size="lg"
@@ -315,9 +442,11 @@ export function CallDetailsDialog({
                         <Play className="h-6 w-6 ml-1" />
                       )}
                     </Button>
+                    <Button variant="outline" size="icon" onClick={downloadRecording}>
+                      <Download className="h-4 w-4" />
+                    </Button>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="space-y-2">
                     <Slider
                       value={[currentTime]}
@@ -342,40 +471,146 @@ export function CallDetailsDialog({
             </div>
           </TabsContent>
 
+          {/* Logs Tab */}
+          <TabsContent value="logs" className="flex-1 min-h-0">
+            <ScrollArea className="h-[300px] border-2 border-border">
+              {logsLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : executionLogs && executionLogs.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {executionLogs.map((log, index) => (
+                    <div key={index} className="p-3 hover:bg-muted/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant={log.type === "request" ? "outline" : "secondary"} className="text-xs">
+                          {log.type}
+                        </Badge>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          {getComponentIcon(log.component)}
+                          <span className="capitalize">{log.component}</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {log.provider}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {format(new Date(log.created_at), "HH:mm:ss.SSS")}
+                        </span>
+                      </div>
+                      <pre className="text-xs bg-muted/50 p-2 overflow-x-auto whitespace-pre-wrap break-all font-mono">
+                        {log.data.length > 500 ? `${log.data.slice(0, 500)}...` : log.data}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <ListOrdered className="h-8 w-8 mb-2" />
+                  <p>No execution logs available</p>
+                  <p className="text-xs">Logs will appear for calls with external IDs</p>
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+
+          {/* Summary Tab */}
           <TabsContent value="summary" className="flex-1">
             <ScrollArea className="h-[300px] border-2 border-border p-4">
-              {call.summary ? (
-                <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Call Summary */}
+                {call.summary ? (
                   <div>
                     <h4 className="font-medium mb-2">Call Summary</h4>
                     <p className="text-sm text-muted-foreground">{call.summary}</p>
                   </div>
-                  
-                  {call.sentiment && (
-                    <div>
-                      <h4 className="font-medium mb-2">Sentiment Analysis</h4>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-3 h-3 rounded-full ${
-                            call.sentiment === "positive"
-                              ? "bg-chart-2"
-                              : call.sentiment === "negative"
-                              ? "bg-destructive"
-                              : "bg-muted-foreground"
-                          }`}
-                        />
-                        <span className="text-sm capitalize">{call.sentiment}</span>
-                      </div>
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <MessageSquare className="h-8 w-8 mx-auto mb-2" />
+                    <p>No summary available</p>
+                  </div>
+                )}
+                
+                {/* Sentiment */}
+                {call.sentiment && (
+                  <div>
+                    <h4 className="font-medium mb-2">Sentiment Analysis</h4>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          call.sentiment === "positive"
+                            ? "bg-chart-2"
+                            : call.sentiment === "negative"
+                            ? "bg-destructive"
+                            : "bg-muted-foreground"
+                        }`}
+                      />
+                      <span className="text-sm capitalize">{call.sentiment}</span>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                  <MessageSquare className="h-8 w-8 mb-2" />
-                  <p>No summary available</p>
-                  <p className="text-xs">AI summary will appear here after processing</p>
-                </div>
-              )}
+                  </div>
+                )}
+
+                {/* Cost Breakdown */}
+                {execution?.cost_breakdown && Object.keys(execution.cost_breakdown).length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-2">Cost Breakdown</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(execution.cost_breakdown).map(([key, value]) => (
+                        <div key={key} className="flex justify-between p-2 bg-muted/50 border border-border">
+                          <span className="text-sm capitalize">{key}</span>
+                          <span className="text-sm font-mono">${(value || 0).toFixed(4)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between p-2 mt-2 bg-primary/10 border-2 border-primary">
+                      <span className="font-medium">Total</span>
+                      <span className="font-mono font-medium">${(execution.total_cost || 0).toFixed(4)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Telephony Details */}
+                {execution?.telephony_data && (
+                  <div>
+                    <h4 className="font-medium mb-2">Telephony Details</h4>
+                    <div className="space-y-1 text-sm">
+                      {execution.telephony_data.from_number && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">From</span>
+                          <span className="font-mono">{execution.telephony_data.from_number}</span>
+                        </div>
+                      )}
+                      {execution.telephony_data.to_number && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">To</span>
+                          <span className="font-mono">{execution.telephony_data.to_number}</span>
+                        </div>
+                      )}
+                      {execution.telephony_data.provider && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Provider</span>
+                          <span className="capitalize">{execution.telephony_data.provider}</span>
+                        </div>
+                      )}
+                      {execution.telephony_data.hangup_reason && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Hangup Reason</span>
+                          <span>{execution.telephony_data.hangup_reason}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Extracted Data */}
+                {execution?.extracted_data && Object.keys(execution.extracted_data).length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-2">Extracted Data</h4>
+                    <pre className="text-xs bg-muted/50 p-3 border border-border overflow-x-auto font-mono">
+                      {JSON.stringify(execution.extracted_data, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
             </ScrollArea>
           </TabsContent>
         </Tabs>
