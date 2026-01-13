@@ -14,6 +14,285 @@ export type Database = {
   }
   public: {
     Tables: {
+      agents: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          system_prompt: string | null
+          updated_at: string
+          voice_config: Json | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          system_prompt?: string | null
+          updated_at?: string
+          voice_config?: Json | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          system_prompt?: string | null
+          updated_at?: string
+          voice_config?: Json | null
+        }
+        Relationships: []
+      }
+      calls: {
+        Row: {
+          agent_id: string
+          client_id: string
+          connected: boolean | null
+          created_at: string
+          credit_deducted: boolean | null
+          duration_seconds: number | null
+          ended_at: string | null
+          external_call_id: string | null
+          id: string
+          lead_id: string
+          metadata: Json | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          agent_id: string
+          client_id: string
+          connected?: boolean | null
+          created_at?: string
+          credit_deducted?: boolean | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          external_call_id?: string | null
+          id?: string
+          lead_id: string
+          metadata?: Json | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string
+          connected?: boolean | null
+          created_at?: string
+          credit_deducted?: boolean | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          external_call_id?: string | null
+          id?: string
+          lead_id?: string
+          metadata?: Json | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calls_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_admin_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_credits: {
+        Row: {
+          balance: number
+          client_id: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          balance?: number
+          client_id: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          balance?: number
+          client_id?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      credit_transactions: {
+        Row: {
+          amount: number
+          call_id: string | null
+          client_id: string
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          transaction_type: string
+        }
+        Insert: {
+          amount: number
+          call_id?: string | null
+          client_id: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          transaction_type: string
+        }
+        Update: {
+          amount?: number
+          call_id?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_credits"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      engineer_points: {
+        Row: {
+          created_at: string
+          engineer_id: string
+          id: string
+          total_points: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          engineer_id: string
+          id?: string
+          total_points?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          engineer_id?: string
+          id?: string
+          total_points?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      leads: {
+        Row: {
+          client_id: string
+          created_at: string
+          email: string | null
+          id: string
+          metadata: Json | null
+          name: string | null
+          phone_number: string
+          status: string
+          updated_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string | null
+          phone_number: string
+          status?: string
+          updated_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string | null
+          phone_number?: string
+          status?: string
+          updated_at?: string
+          uploaded_by?: string
+        }
+        Relationships: []
+      }
+      point_transactions: {
+        Row: {
+          created_at: string
+          description: string | null
+          engineer_id: string
+          id: string
+          points: number
+          task_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          engineer_id: string
+          id?: string
+          points: number
+          task_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          engineer_id?: string
+          id?: string
+          points?: number
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "point_transactions_engineer_id_fkey"
+            columns: ["engineer_id"]
+            isOneToOne: false
+            referencedRelation: "engineer_points"
+            referencedColumns: ["engineer_id"]
+          },
+          {
+            foreignKeyName: "point_transactions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -47,6 +326,51 @@ export type Database = {
         }
         Relationships: []
       }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          deadline: string | null
+          description: string | null
+          id: string
+          points: number
+          rejection_reason: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          points?: number
+          rejection_reason?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          points?: number
+          rejection_reason?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -70,7 +394,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      leads_admin_view: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          metadata: Json | null
+          name: string | null
+          phone_number_masked: string | null
+          status: string | null
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          metadata?: Json | null
+          name?: string | null
+          phone_number_masked?: never
+          status?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          metadata?: Json | null
+          name?: string | null
+          phone_number_masked?: never
+          status?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_user_role: {
