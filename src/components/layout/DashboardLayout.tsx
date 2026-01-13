@@ -34,6 +34,7 @@ const adminNavItems = [
   { icon: ClipboardList, label: "Tasks", href: "/admin/tasks" },
   { icon: Bot, label: "Agents", href: "/admin/agents" },
   { icon: Phone, label: "Calls", href: "/admin/calls" },
+  { icon: Layers, label: "Batch Calls", href: "/admin/batches" },
   { icon: CreditCard, label: "Credits", href: "/admin/credits" },
   { icon: BarChart3, label: "Analytics", href: "/admin/analytics" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },

@@ -76,6 +76,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/batches"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <ClientBatches />
+                </ProtectedRoute>
+              }
+            />
             
             {/* Engineer Routes - Protected */}
             <Route
