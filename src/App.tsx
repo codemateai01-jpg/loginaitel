@@ -21,6 +21,7 @@ import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientLeads from "./pages/client/ClientLeads";
 import ClientCalls from "./pages/client/ClientCalls";
 import ClientBatches from "./pages/client/ClientBatches";
+import ClientPhoneNumbers from "./pages/client/ClientPhoneNumbers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -131,6 +132,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client", "admin"]}>
                   <ClientBatches />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/phone-numbers"
+              element={
+                <ProtectedRoute allowedRoles={["client", "admin"]}>
+                  <ClientPhoneNumbers />
                 </ProtectedRoute>
               }
             />

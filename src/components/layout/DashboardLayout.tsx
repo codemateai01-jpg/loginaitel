@@ -53,6 +53,7 @@ const clientNavItems = [
   { icon: Phone, label: "Call Analytics", href: "/client/calls" },
   { icon: Upload, label: "Leads", href: "/client/leads" },
   { icon: Layers, label: "Batch Calls", href: "/client/batches" },
+  { icon: Phone, label: "Phone Numbers", href: "/client/phone-numbers" },
   { icon: CreditCard, label: "Credits & Billing", href: "/client/billing" },
   { icon: Settings, label: "Settings", href: "/client/settings" },
 ];
