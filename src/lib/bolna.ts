@@ -460,13 +460,14 @@ export function buildAgentConfig(options: BuildAgentOptions): CreateAgentRequest
             },
             synthesizer: synthesizerConfig,
             transcriber: {
-              provider: options.transcriberProvider,
+              provider: "deepgram",
+              model: "nova-3",
               language: options.language,
               stream: true,
               sampling_rate: 16000,
               encoding: "linear16",
               endpointing: 250,
-            } as TranscriberConfig,
+            },
             input: {
               provider: options.telephonyProvider,
               format: "wav",
