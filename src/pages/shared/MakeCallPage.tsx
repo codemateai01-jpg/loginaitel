@@ -217,8 +217,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           table: 'calls',
         },
         async (payload) => {
-          console.log('Call update received:', payload);
-          
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const updatedCall = payload.new as {
               id: string;
@@ -297,34 +295,22 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     };
   }, [user, role, toast, refetchCalls]);
 
-  // Poll active calls to sync status from Bolna API
+  // Poll active calls to sync status from API
   useEffect(() => {
     if (activeCalls.length === 0) return;
 
     const pollInterval = setInterval(async () => {
-      console.log("Polling active calls for status updates...");
-      
       for (const call of activeCalls) {
         if (!call.external_call_id) continue;
         
         try {
-          const { data, error } = await syncCallStatus(call.external_call_id, call.id);
+          const { data } = await syncCallStatus(call.external_call_id, call.id);
           
-          if (error) {
-            console.error(`Failed to sync call ${call.id}:`, error);
-            continue;
-          }
-          
-          if (data) {
-            console.log(`Call ${call.id} synced:`, data);
-            
-            // If status changed, refetch to update UI
-            if (data.status !== call.status) {
-              refetchCalls();
-            }
+          if (data && data.status !== call.status) {
+            refetchCalls();
           }
         } catch (err) {
-          console.error(`Error syncing call ${call.id}:`, err);
+          // Silent fail for polling
         }
       }
     }, 5000); // Poll every 5 seconds

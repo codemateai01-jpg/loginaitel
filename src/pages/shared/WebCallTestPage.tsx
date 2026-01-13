@@ -151,16 +151,6 @@ export default function WebCallTestPage({ role }: WebCallTestPageProps) {
                   </SelectContent>
                 </Select>
 
-                {selectedAgent && (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Agent ID</span>
-                      <span className="font-mono text-xs">
-                        {selectedAgent.bolna_agent_id.slice(0, 12)}...
-                      </span>
-                    </div>
-                  </div>
-                )}
               </Card>
 
               {/* Test Settings */}

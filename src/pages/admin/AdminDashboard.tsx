@@ -1,11 +1,10 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, CreditCard, ClipboardList, BarChart3, Zap } from "lucide-react";
+import { Users, CreditCard, ClipboardList, BarChart3 } from "lucide-react";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { CreditManagement } from "@/components/admin/CreditManagement";
 import { TaskManagement } from "@/components/admin/TaskManagement";
 import { SystemAnalytics } from "@/components/admin/SystemAnalytics";
-import { BolnaApiTestPanel } from "@/components/admin/BolnaApiTestPanel";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function AdminDashboard() {
@@ -41,10 +40,6 @@ export default function AdminDashboard() {
               <ClipboardList className="h-4 w-4" />
               Tasks
             </TabsTrigger>
-            <TabsTrigger value="api-test" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Zap className="h-4 w-4" />
-              API Test
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="analytics">
@@ -61,10 +56,6 @@ export default function AdminDashboard() {
 
           <TabsContent value="tasks">
             <TaskManagement />
-          </TabsContent>
-
-          <TabsContent value="api-test">
-            <BolnaApiTestPanel />
           </TabsContent>
         </Tabs>
       </div>

@@ -317,8 +317,8 @@ export default function AgentEditor() {
         {/* Info Cards */}
         <div className="grid md:grid-cols-2 gap-4">
           <div className="border-2 border-border bg-card p-4">
-            <p className="text-sm text-muted-foreground">Agent ID</p>
-            <code className="text-sm font-mono">{agent.bolna_agent_id}</code>
+            <p className="text-sm text-muted-foreground">Agent Name</p>
+            <code className="text-sm font-mono">{agent.agent_name}</code>
           </div>
           <div className="border-2 border-border bg-card p-4">
             <p className="text-sm text-muted-foreground">Status</p>

@@ -181,10 +181,6 @@ export default function WebCallTest() {
                   <span className="text-muted-foreground">Agent Name</span>
                   <span className="font-mono">{agent.agent_name}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Agent ID</span>
-                  <span className="font-mono text-xs">{agent.bolna_agent_id.slice(0, 12)}...</span>
-                </div>
               </div>
             </Card>
 

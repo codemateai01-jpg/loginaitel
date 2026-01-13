@@ -96,7 +96,7 @@ export default function AgentConfigEditor() {
       );
 
       if (bolnaResponse.error) {
-        throw new Error(`Failed to sync with Bolna: ${bolnaResponse.error}`);
+        throw new Error(`Failed to sync agent: ${bolnaResponse.error}`);
       }
 
       // Then update in local database

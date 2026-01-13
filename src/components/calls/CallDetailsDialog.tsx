@@ -28,7 +28,6 @@ import {
   MessageSquare,
   TrendingUp,
   ListOrdered,
-  DollarSign,
   PhoneIncoming,
   PhoneOutgoing,
   Download,
@@ -607,12 +606,6 @@ export function CallDetailsDialog({
               </div>
             )}
 
-            {execution.total_cost !== undefined && (
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-yellow-600" />
-                <span>${(Number(execution.total_cost) || 0).toFixed(4)}</span>
-              </div>
-            )}
 
             <div className="flex items-center gap-2">
               <TrendingUp className={`h-4 w-4 ${getSentimentColor(call.sentiment)}`} />
@@ -983,9 +976,6 @@ export function CallDetailsDialog({
                           {getComponentIcon(log.component)}
                           <span className="capitalize">{log.component}</span>
                         </div>
-                        <Badge variant="outline" className="text-xs">
-                          {log.provider}
-                        </Badge>
                         <span className="text-xs text-muted-foreground ml-auto">
                           {format(new Date(log.created_at), "HH:mm:ss.SSS")}
                         </span>
@@ -1042,24 +1032,6 @@ export function CallDetailsDialog({
                   </div>
                 )}
 
-                {/* Cost Breakdown */}
-                {execution?.cost_breakdown && Object.keys(execution.cost_breakdown).length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-2">Cost Breakdown</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(execution.cost_breakdown).map(([key, value]) => (
-                        <div key={key} className="flex justify-between p-2 bg-muted/50 border border-border">
-                          <span className="text-sm capitalize">{key}</span>
-                          <span className="text-sm font-mono">${(Number(value) || 0).toFixed(4)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-between p-2 mt-2 bg-primary/10 border-2 border-primary">
-                      <span className="font-medium">Total</span>
-                      <span className="font-mono font-medium">${(Number(execution.total_cost) || 0).toFixed(4)}</span>
-                    </div>
-                  </div>
-                )}
 
                 {/* Telephony Details */}
                 {execution?.telephony_data && (
@@ -1076,12 +1048,6 @@ export function CallDetailsDialog({
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">To</span>
                           <span className="font-mono">{execution.telephony_data.to_number}</span>
-                        </div>
-                      )}
-                      {execution.telephony_data.provider && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Provider</span>
-                          <span className="capitalize">{execution.telephony_data.provider}</span>
                         </div>
                       )}
                       {execution.telephony_data.hangup_reason && (

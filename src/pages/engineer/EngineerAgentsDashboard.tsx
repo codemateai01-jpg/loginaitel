@@ -261,9 +261,6 @@ export default function EngineerAgentsDashboard() {
                             </div>
                             <div>
                               <CardTitle className="text-lg">{agent.agent_name}</CardTitle>
-                              <code className="text-xs text-muted-foreground">
-                                {agent.bolna_agent_id.slice(0, 8)}...
-                              </code>
                             </div>
                           </div>
                           <Badge variant={agent.status === "active" ? "default" : "secondary"}>
@@ -432,12 +429,6 @@ export default function EngineerAgentsDashboard() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Bolna Agent ID</label>
-                <p className="text-sm text-muted-foreground font-mono">
-                  {selectedAgent?.bolna_agent_id}
-                </p>
-              </div>
               <div>
                 <label className="text-sm font-medium">System Prompt</label>
                 <pre className="text-sm bg-muted p-3 rounded max-h-64 overflow-auto whitespace-pre-wrap mt-2">

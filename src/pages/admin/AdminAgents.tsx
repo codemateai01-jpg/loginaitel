@@ -124,7 +124,7 @@ export default function AdminAgents() {
       const { data: bolnaAgents, error } = await listBolnaAgents();
 
       if (error || !bolnaAgents) {
-        throw new Error(error || "Failed to fetch agents from Bolna");
+        throw new Error(error || "Failed to fetch agents");
       }
 
       let synced = 0;
@@ -373,14 +373,6 @@ export default function AdminAgents() {
                               <DialogTitle>{agent.agent_name}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4">
-                              <div>
-                                <label className="text-sm font-medium">
-                                  Bolna Agent ID
-                                </label>
-                                <p className="text-sm text-muted-foreground font-mono">
-                                  {agent.bolna_agent_id}
-                                </p>
-                              </div>
                               <div>
                                 <label className="text-sm font-medium">
                                   System Prompt

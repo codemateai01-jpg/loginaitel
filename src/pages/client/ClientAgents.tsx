@@ -206,9 +206,6 @@ export default function ClientAgents() {
                             </div>
                             <div>
                               <p className="font-medium">{agent.agent_name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">
-                                {agent.bolna_agent_id.slice(0, 8)}...
-                              </p>
                             </div>
                           </div>
                         </TableCell>

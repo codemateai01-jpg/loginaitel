@@ -59,7 +59,7 @@ export default function Landing() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <Mic className="h-8 w-8" />
-            <span className="font-bold text-xl">VoiceAI</span>
+            <span className="font-bold text-xl">Aitel</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link to="/login">
@@ -206,10 +206,10 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Mic className="h-6 w-6" />
-              <span className="font-bold">VoiceAI</span>
+              <span className="font-bold">Aitel</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 VoiceAI Platform. All rights reserved.
+              © 2024 Aitel Platform. All rights reserved.
             </p>
           </div>
         </div>

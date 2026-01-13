@@ -56,7 +56,7 @@ const engineerNavItems = [
   { icon: Mic, label: "Web Call Test", href: "/engineer/web-call" },
   { icon: Trophy, label: "Leaderboard", href: "/engineer/leaderboard" },
   { icon: Clock, label: "Time Tracker", href: "/engineer/time" },
-  { icon: Settings, label: "Settings & API Test", href: "/engineer/settings" },
+  { icon: Settings, label: "Settings", href: "/engineer/settings" },
 ];
 
 const clientNavItems = [
@@ -104,7 +104,7 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
       <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b-2 border-border px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Mic className="h-6 w-6" />
-          <span className="font-bold">VoiceAI</span>
+          <span className="font-bold">Aitel</span>
         </div>
         <Button
           variant="ghost"
@@ -128,7 +128,7 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             <Link to="/" className="flex items-center gap-2">
               <Mic className="h-8 w-8" />
               <div>
-                <span className="font-bold text-lg block">VoiceAI</span>
+                <span className="font-bold text-lg block">Aitel</span>
                 <span className="text-xs text-muted-foreground">{roleLabel}</span>
               </div>
             </Link>
