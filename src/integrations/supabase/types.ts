@@ -143,6 +143,7 @@ export type Database = {
           client_id: string
           created_at: string
           id: string
+          price_per_credit: number
           updated_at: string
         }
         Insert: {
@@ -150,6 +151,7 @@ export type Database = {
           client_id: string
           created_at?: string
           id?: string
+          price_per_credit?: number
           updated_at?: string
         }
         Update: {
@@ -157,6 +159,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           id?: string
+          price_per_credit?: number
           updated_at?: string
         }
         Relationships: []

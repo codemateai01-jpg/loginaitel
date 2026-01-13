@@ -37,6 +37,7 @@ interface ClientCredit {
   id: string;
   client_id: string;
   balance: number;
+  price_per_credit: number;
   created_at: string;
   updated_at: string;
   profile?: {
@@ -63,6 +64,7 @@ export function CreditManagement() {
   const [isAllocateDialogOpen, setIsAllocateDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [creditAmount, setCreditAmount] = useState("");
+  const [pricePerCredit, setPricePerCredit] = useState("3.00");
   const [creditDescription, setCreditDescription] = useState("");
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -149,10 +151,12 @@ export function CreditManagement() {
     mutationFn: async ({
       clientId,
       amount,
+      price,
       description,
     }: {
       clientId: string;
       amount: number;
+      price: number;
       description: string;
     }) => {
       // First, check if client has a credit record
@@ -163,18 +167,25 @@ export function CreditManagement() {
         .single();
 
       if (existing) {
-        // Update existing balance
+        // Update existing balance and price
         const { error: updateError } = await supabase
           .from("client_credits")
-          .update({ balance: existing.balance + amount })
+          .update({ 
+            balance: existing.balance + amount,
+            price_per_credit: price 
+          })
           .eq("client_id", clientId);
 
         if (updateError) throw updateError;
       } else {
-        // Create new credit record
+        // Create new credit record with price
         const { error: insertError } = await supabase
           .from("client_credits")
-          .insert({ client_id: clientId, balance: amount });
+          .insert({ 
+            client_id: clientId, 
+            balance: amount,
+            price_per_credit: price 
+          });
 
         if (insertError) throw insertError;
       }
@@ -186,7 +197,7 @@ export function CreditManagement() {
           client_id: clientId,
           amount: amount,
           transaction_type: "admin_allocation",
-          description: description || "Admin credit allocation",
+          description: description || `Admin credit allocation (₹${price}/credit)`,
           created_by: user?.id || clientId,
         });
 
@@ -278,10 +289,12 @@ export function CreditManagement() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const amount = parseInt(creditAmount);
-                if (selectedClient && amount > 0) {
+                const price = parseFloat(pricePerCredit);
+                if (selectedClient && amount > 0 && price > 0) {
                   allocateCreditsMutation.mutate({
                     clientId: selectedClient,
                     amount,
+                    price,
                     description: creditDescription,
                   });
                 }
@@ -303,18 +316,41 @@ export function CreditManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Credit Amount</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  required
-                  value={creditAmount}
-                  onChange={(e) => setCreditAmount(e.target.value)}
-                  placeholder="Enter amount"
-                  className="border-2"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Credit Amount</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    required
+                    value={creditAmount}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                    placeholder="Enter amount"
+                    className="border-2"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Price per Credit (₹)</Label>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    value={pricePerCredit}
+                    onChange={(e) => setPricePerCredit(e.target.value)}
+                    placeholder="3.00"
+                    className="border-2"
+                  />
+                </div>
               </div>
+              {creditAmount && pricePerCredit && (
+                <div className="bg-muted/50 p-3 rounded-lg border-2 border-border">
+                  <p className="text-sm text-muted-foreground">Total Value</p>
+                  <p className="text-xl font-bold">
+                    ₹{(parseFloat(creditAmount || "0") * parseFloat(pricePerCredit || "0")).toFixed(2)}
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Description (Optional)</Label>
                 <Textarea
@@ -337,6 +373,7 @@ export function CreditManagement() {
                   disabled={
                     !selectedClient ||
                     !creditAmount ||
+                    !pricePerCredit ||
                     allocateCreditsMutation.isPending
                   }
                 >
@@ -359,6 +396,7 @@ export function CreditManagement() {
               <TableHead className="font-bold">Client</TableHead>
               <TableHead className="font-bold">Email</TableHead>
               <TableHead className="font-bold text-right">Balance</TableHead>
+              <TableHead className="font-bold text-right">Price/Credit</TableHead>
               <TableHead className="font-bold">Last Updated</TableHead>
               <TableHead className="font-bold w-32"></TableHead>
             </TableRow>
@@ -366,13 +404,13 @@ export function CreditManagement() {
           <TableBody>
             {creditsLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : filteredCredits?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   <CreditCard className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                   <p className="text-muted-foreground">No credit records found</p>
                 </TableCell>
@@ -396,6 +434,9 @@ export function CreditManagement() {
                     >
                       {credit.balance.toLocaleString()}
                     </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    ₹{credit.price_per_credit?.toFixed(2) || "3.00"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {format(new Date(credit.updated_at), "MMM d, yyyy HH:mm")}

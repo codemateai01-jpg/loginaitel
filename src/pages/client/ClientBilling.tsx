@@ -37,18 +37,21 @@ interface Transaction {
 export default function ClientBilling() {
   const { user } = useAuth();
 
-  // Fetch credit balance
-  const { data: credits, isLoading: creditsLoading } = useQuery({
+  // Fetch credit balance and price
+  const { data: creditData, isLoading: creditsLoading } = useQuery({
     queryKey: ["client-credits-balance", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_credits")
-        .select("balance")
+        .select("balance, price_per_credit")
         .eq("client_id", user!.id)
         .maybeSingle();
       if (error) throw error;
-      return data?.balance || 0;
+      return { 
+        balance: data?.balance || 0, 
+        pricePerCredit: data?.price_per_credit || 3.00 
+      };
     },
   });
 
@@ -132,9 +135,9 @@ export default function ClientBilling() {
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
                 <>
-                  <div className="text-3xl font-bold">{credits?.toLocaleString()}</div>
+                  <div className="text-3xl font-bold">{creditData?.balance?.toLocaleString()}</div>
                   <p className="text-xs text-muted-foreground">
-                    ₹{((credits || 0) * 5).toLocaleString()} value
+                    ₹{((creditData?.balance || 0) * (creditData?.pricePerCredit || 3)).toLocaleString()} value
                   </p>
                 </>
               )}
@@ -193,9 +196,11 @@ export default function ClientBilling() {
                 <p className="text-2xl font-bold">1 Credit</p>
                 <p className="text-sm text-muted-foreground">= 1 Connected Call</p>
               </div>
-              <div className="p-4 border-2 border-border bg-muted/50">
-                <p className="text-2xl font-bold">₹5</p>
-                <p className="text-sm text-muted-foreground">Per Credit</p>
+              <div className="p-4 border-2 border-border bg-primary/10 border-primary/30">
+                <p className="text-2xl font-bold text-primary">
+                  ₹{creditData?.pricePerCredit?.toFixed(2) || "3.00"}
+                </p>
+                <p className="text-sm text-muted-foreground">Per Credit (Your Rate)</p>
               </div>
               <div className="p-4 border-2 border-border bg-muted/50">
                 <p className="text-2xl font-bold">45+ sec</p>
