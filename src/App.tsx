@@ -20,6 +20,7 @@ import EngineerTasks from "./pages/engineer/EngineerTasks";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientLeads from "./pages/client/ClientLeads";
 import ClientCalls from "./pages/client/ClientCalls";
+import ClientBatches from "./pages/client/ClientBatches";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -122,6 +123,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <ClientCalls />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/batches"
+              element={
+                <ProtectedRoute allowedRoles={["client", "admin"]}>
+                  <ClientBatches />
                 </ProtectedRoute>
               }
             />
