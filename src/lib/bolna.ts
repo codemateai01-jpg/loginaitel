@@ -532,6 +532,48 @@ export async function listVoices(): Promise<BolnaResponse<BolnaVoice[]>> {
 }
 
 // ==========================================
+// PHONE NUMBERS
+// ==========================================
+
+export interface AvailablePhoneNumber {
+  region?: string;
+  friendly_name?: string | null;
+  locality?: string | null;
+  phone_number: string;
+  postal_code?: string | null;
+  price: number;
+}
+
+export interface PhoneNumber {
+  id: string;
+  humanized_created_at?: string;
+  created_at: string;
+  humanized_updated_at?: string;
+  updated_at?: string;
+  renewal_at?: string;
+  phone_number: string;
+  agent_id?: string;
+  price?: string;
+  telephony_provider: "twilio" | "plivo" | "vonage";
+  rented?: boolean;
+}
+
+export interface SearchPhoneNumbersParams {
+  country: "US" | "IN";
+  pattern?: string;
+}
+
+export async function searchPhoneNumbers(params: SearchPhoneNumbersParams): Promise<BolnaResponse<AvailablePhoneNumber[]>> {
+  const queryParams: Record<string, string> = { country: params.country };
+  if (params.pattern) queryParams.pattern = params.pattern;
+  return callBolnaProxy<AvailablePhoneNumber[]>("search-phone-numbers", queryParams);
+}
+
+export async function listPhoneNumbers(): Promise<BolnaResponse<PhoneNumber[]>> {
+  return callBolnaProxy<PhoneNumber[]>("list-phone-numbers");
+}
+
+// ==========================================
 // HELPER: Build agent config for v2 API
 // ==========================================
 
