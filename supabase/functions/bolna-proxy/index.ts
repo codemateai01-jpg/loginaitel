@@ -212,8 +212,8 @@ serve(async (req) => {
           );
         }
 
-        // Make outbound call via Bolna
-        response = await fetch(`${BOLNA_API_BASE}/call/make`, {
+        // Make outbound call via Bolna - POST /call
+        response = await fetch(`${BOLNA_API_BASE}/call`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
@@ -222,19 +222,20 @@ serve(async (req) => {
           body: JSON.stringify({
             agent_id: body.agent_id,
             recipient_phone_number: lead.phone_number,
-            ...body.call_options,
+            from_phone_number: body.from_phone_number,
+            user_data: body.user_data,
           }),
         });
 
         if (response.ok) {
           const callResult = await response.json();
           
-          // Create call record in database
+          // Create call record in database - execution_id is the call identifier
           await supabase.from("calls").insert({
             lead_id: body.lead_id,
             agent_id: body.agent_id,
             client_id: body.client_id,
-            external_call_id: callResult.call_id || callResult.id,
+            external_call_id: callResult.execution_id,
             status: "initiated",
             started_at: new Date().toISOString(),
           });
@@ -242,11 +243,16 @@ serve(async (req) => {
           // Update lead status
           await supabase
             .from("leads")
-            .update({ status: "calling" })
+            .update({ status: "queued" })
             .eq("id", body.lead_id);
 
           return new Response(
-            JSON.stringify({ success: true, call_id: callResult.call_id || callResult.id }),
+            JSON.stringify({ 
+              success: true, 
+              execution_id: callResult.execution_id,
+              status: callResult.status,
+              message: callResult.message 
+            }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }

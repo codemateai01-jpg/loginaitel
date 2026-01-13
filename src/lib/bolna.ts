@@ -48,11 +48,11 @@ async function callBolnaProxy<T>(
 }
 
 // ==========================================
-// BOLNA V2 AGENT TYPES
+// BOLNA V2 API TYPES
 // ==========================================
 
 // LLM Configuration
-export interface SimpleLlmAgent {
+export interface SimpleLlmConfig {
   agent_flow_type?: "streaming";
   provider?: string;
   family?: string;
@@ -60,12 +60,15 @@ export interface SimpleLlmAgent {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
+  min_p?: number;
+  top_k?: number;
   presence_penalty?: number;
   frequency_penalty?: number;
   base_url?: string;
+  request_json?: boolean;
 }
 
-export interface VectorStore {
+export interface VectorStoreConfig {
   provider: "lancedb";
   provider_config: {
     vector_id?: string;
@@ -73,33 +76,37 @@ export interface VectorStore {
   };
 }
 
-export interface KnowledgebaseAgent extends SimpleLlmAgent {
-  vector_store?: VectorStore;
+export interface KnowledgebaseLlmConfig extends SimpleLlmConfig {
+  vector_store?: VectorStoreConfig;
+}
+
+export interface RouteConfig {
+  route_name: string;
+  utterances: string[];
+  response: string | string[];
+  score_threshold?: number;
+}
+
+export interface RoutesConfig {
+  embedding_model?: string;
+  routes?: RouteConfig[];
 }
 
 export interface LlmAgentConfig {
   agent_type?: "simple_llm_agent" | "knowledgebase_agent";
   agent_flow_type?: "streaming";
-  llm_config?: SimpleLlmAgent | KnowledgebaseAgent;
-  routes?: {
-    embedding_model?: string;
-    routes?: Array<{
-      route_name: string;
-      utterances: string[];
-      response: string | string[];
-      score_threshold?: number;
-    }>;
-  };
+  llm_config: SimpleLlmConfig | KnowledgebaseLlmConfig;
+  routes?: RoutesConfig;
 }
 
 // Synthesizer (TTS) Configuration
-export interface ElevenLabsConfig {
+export interface ElevenLabsSynthConfig {
   voice: string;
   voice_id: string;
   model: "eleven_turbo_v2_5" | "eleven_flash_v2_5";
 }
 
-export interface PollyConfig {
+export interface PollySynthConfig {
   voice: string;
   engine: string;
   language: string;
@@ -114,7 +121,7 @@ export interface DeepgramSynthConfig {
 
 export interface SynthesizerConfig {
   provider: "elevenlabs" | "polly" | "deepgram" | "styletts";
-  provider_config: ElevenLabsConfig | PollyConfig | DeepgramSynthConfig;
+  provider_config: ElevenLabsSynthConfig | PollySynthConfig | DeepgramSynthConfig;
   stream?: boolean;
   buffer_size?: number;
   audio_format?: "wav";
@@ -149,24 +156,6 @@ export interface InputOutputConfig {
   format: "wav";
 }
 
-// API Tools Configuration
-export interface TransferCallTool {
-  name: string;
-  key: "transfer_call";
-  description: string;
-  parameters?: Record<string, unknown>;
-}
-
-export interface ApiToolsConfig {
-  tools?: TransferCallTool[];
-  tools_params?: Record<string, {
-    method?: "POST" | "GET";
-    url?: string;
-    api_token?: string;
-    param?: string;
-  }>;
-}
-
 // Tools Configuration
 export interface ToolsConfig {
   llm_agent: LlmAgentConfig;
@@ -174,7 +163,7 @@ export interface ToolsConfig {
   transcriber: TranscriberConfig;
   input: InputOutputConfig;
   output: InputOutputConfig;
-  api_tools?: ApiToolsConfig | null;
+  api_tools?: Record<string, unknown> | null;
 }
 
 // Conversation Configuration
@@ -210,15 +199,42 @@ export interface TaskConfig {
   task_config?: ConversationConfig;
 }
 
-// Agent Prompts
+// Agent Prompts (v2 API structure)
 export interface AgentPrompts {
-  task_1?: {
+  task_1: {
     system_prompt: string;
   };
-  [key: string]: { system_prompt: string } | undefined;
+  [key: string]: { system_prompt: string };
 }
 
-// Full Bolna Agent (V2 API)
+// Agent Config (v2 API structure)
+export interface AgentConfig {
+  agent_name: string;
+  agent_welcome_message?: string;
+  webhook_url?: string;
+  agent_type?: string;
+  tasks: TaskConfig[];
+  ingest_source_config?: {
+    source_type: "api" | "csv" | "google_sheet";
+    source_url?: string;
+    source_auth_token?: string;
+    source_name?: string;
+  };
+}
+
+// Create Agent Request (v2 API - POST /v2/agent)
+export interface CreateAgentRequest {
+  agent_config: AgentConfig;
+  agent_prompts: AgentPrompts;
+}
+
+// Create Agent Response
+export interface CreateAgentResponse {
+  agent_id: string;
+  status: "created";
+}
+
+// Full Bolna Agent (GET /v2/agent/{id} response)
 export interface BolnaAgent {
   id: string;
   agent_name: string;
@@ -236,15 +252,6 @@ export interface BolnaAgent {
   };
 }
 
-// Create Agent Request
-export interface CreateAgentRequest {
-  agent_name: string;
-  agent_type?: string;
-  agent_welcome_message?: string;
-  tasks: TaskConfig[];
-  agent_prompts?: AgentPrompts;
-}
-
 // ==========================================
 // AGENT MANAGEMENT
 // ==========================================
@@ -257,8 +264,8 @@ export async function getBolnaAgent(agentId: string): Promise<BolnaResponse<Boln
   return callBolnaProxy<BolnaAgent>("get-agent", { agent_id: agentId });
 }
 
-export async function createBolnaAgent(config: CreateAgentRequest): Promise<BolnaResponse<{ agent_id: string }>> {
-  return callBolnaProxy<{ agent_id: string }>("create-agent", undefined, config);
+export async function createBolnaAgent(config: CreateAgentRequest): Promise<BolnaResponse<CreateAgentResponse>> {
+  return callBolnaProxy<CreateAgentResponse>("create-agent", undefined, config);
 }
 
 export async function updateBolnaAgent(
@@ -273,26 +280,26 @@ export async function deleteBolnaAgent(agentId: string): Promise<BolnaResponse<{
 }
 
 // ==========================================
-// CALL MANAGEMENT
+// CALL MANAGEMENT (POST /call)
 // ==========================================
 
-export interface MakeCallOptions {
+export interface MakeCallRequest {
   lead_id: string;
   agent_id: string;
   client_id: string;
-  call_options?: {
-    max_duration?: number;
-    webhook_url?: string;
-  };
+  from_phone_number?: string;
+  user_data?: Record<string, string>;
 }
 
-export interface CallResult {
+export interface MakeCallResponse {
   success: boolean;
-  call_id: string;
+  execution_id: string;
+  status: "queued";
+  message: string;
 }
 
-export async function makeCall(options: MakeCallOptions): Promise<BolnaResponse<CallResult>> {
-  return callBolnaProxy<CallResult>("make-call", undefined, options);
+export async function makeCall(options: MakeCallRequest): Promise<BolnaResponse<MakeCallResponse>> {
+  return callBolnaProxy<MakeCallResponse>("make-call", undefined, options);
 }
 
 export async function getCallStatus(callId: string): Promise<BolnaResponse<Record<string, unknown>>> {
@@ -343,78 +350,82 @@ export async function listVoices(): Promise<BolnaResponse<BolnaVoice[]>> {
 }
 
 // ==========================================
-// HELPER: Build default agent config
+// HELPER: Build agent config for v2 API
 // ==========================================
 
-export function buildDefaultAgentConfig(options: {
+export function buildAgentConfig(options: {
   name: string;
   systemPrompt: string;
   welcomeMessage?: string;
   voiceId?: string;
   voiceName?: string;
   language?: "en" | "hi" | "es" | "fr";
+  webhookUrl?: string;
 }): CreateAgentRequest {
   return {
-    agent_name: options.name,
-    agent_type: "other",
-    agent_welcome_message: options.welcomeMessage,
-    tasks: [
-      {
-        task_type: "conversation",
-        toolchain: {
-          execution: "parallel",
-          pipelines: [["transcriber", "llm", "synthesizer"]],
-        },
-        tools_config: {
-          llm_agent: {
-            agent_type: "simple_llm_agent",
-            agent_flow_type: "streaming",
-            llm_config: {
-              provider: "openai",
-              family: "openai",
-              model: "gpt-4.1-mini",
-              max_tokens: 150,
-              temperature: 0.1,
+    agent_config: {
+      agent_name: options.name,
+      agent_type: "other",
+      agent_welcome_message: options.welcomeMessage,
+      webhook_url: options.webhookUrl,
+      tasks: [
+        {
+          task_type: "conversation",
+          toolchain: {
+            execution: "parallel",
+            pipelines: [["transcriber", "llm", "synthesizer"]],
+          },
+          tools_config: {
+            llm_agent: {
+              agent_type: "simple_llm_agent",
+              agent_flow_type: "streaming",
+              llm_config: {
+                provider: "openai",
+                family: "openai",
+                model: "gpt-4.1-mini",
+                max_tokens: 150,
+                temperature: 0.1,
+              },
+            },
+            synthesizer: {
+              provider: "elevenlabs",
+              provider_config: {
+                voice: options.voiceName || "Nila",
+                voice_id: options.voiceId || "V9LCAAi4tTlqe9JadbCo",
+                model: "eleven_turbo_v2_5",
+              },
+              stream: true,
+              buffer_size: 250,
+              audio_format: "wav",
+            },
+            transcriber: {
+              provider: "deepgram",
+              model: "nova-3",
+              language: options.language || "en",
+              stream: true,
+              sampling_rate: 16000,
+              encoding: "linear16",
+              endpointing: 250,
+            },
+            input: {
+              provider: "plivo",
+              format: "wav",
+            },
+            output: {
+              provider: "plivo",
+              format: "wav",
             },
           },
-          synthesizer: {
-            provider: "elevenlabs",
-            provider_config: {
-              voice: options.voiceName || "Nila",
-              voice_id: options.voiceId || "V9LCAAi4tTlqe9JadbCo",
-              model: "eleven_turbo_v2_5",
-            },
-            stream: true,
-            buffer_size: 250,
-            audio_format: "wav",
-          },
-          transcriber: {
-            provider: "deepgram",
-            model: "nova-3",
-            language: options.language || "en",
-            stream: true,
-            sampling_rate: 16000,
-            encoding: "linear16",
-            endpointing: 250,
-          },
-          input: {
-            provider: "plivo",
-            format: "wav",
-          },
-          output: {
-            provider: "plivo",
-            format: "wav",
+          task_config: {
+            hangup_after_silence: 10,
+            call_terminate: 90,
+            voicemail: true,
+            number_of_words_for_interruption: 2,
+            backchanneling: true,
           },
         },
-        task_config: {
-          hangup_after_silence: 10,
-          call_terminate: 90,
-          voicemail: true,
-          number_of_words_for_interruption: 2,
-          backchanneling: true,
-        },
-      },
-    ],
+      ],
+    },
     agent_prompts: {
       task_1: {
         system_prompt: options.systemPrompt,
