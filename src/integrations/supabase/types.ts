@@ -66,8 +66,12 @@ export type Database = {
           id: string
           lead_id: string
           metadata: Json | null
+          recording_url: string | null
+          sentiment: string | null
           started_at: string | null
           status: string
+          summary: string | null
+          transcript: string | null
         }
         Insert: {
           agent_id: string
@@ -81,8 +85,12 @@ export type Database = {
           id?: string
           lead_id: string
           metadata?: Json | null
+          recording_url?: string | null
+          sentiment?: string | null
           started_at?: string | null
           status?: string
+          summary?: string | null
+          transcript?: string | null
         }
         Update: {
           agent_id?: string
@@ -96,8 +104,12 @@ export type Database = {
           id?: string
           lead_id?: string
           metadata?: Json | null
+          recording_url?: string | null
+          sentiment?: string | null
           started_at?: string | null
           status?: string
+          summary?: string | null
+          transcript?: string | null
         }
         Relationships: [
           {
