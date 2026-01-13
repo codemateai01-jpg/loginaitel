@@ -26,6 +26,7 @@ import {
   Eye,
   Trash2,
   Loader2,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -34,6 +35,7 @@ import { listBatches, deleteBatch, type Batch } from "@/lib/bolna";
 import { format } from "date-fns";
 import { CreateBatchDialog } from "@/components/batch/CreateBatchDialog";
 import { BatchDetailsDialog } from "@/components/batch/BatchDetailsDialog";
+import { ScheduleBatchDialog } from "@/components/batch/ScheduleBatchDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +53,8 @@ export default function ClientBatches() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [batchToSchedule, setBatchToSchedule] = useState<Batch | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [batchToDelete, setBatchToDelete] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string>("all");
@@ -101,6 +105,11 @@ export default function ClientBatches() {
   const handleViewDetails = (batch: Batch) => {
     setSelectedBatch(batch);
     setDetailsDialogOpen(true);
+  };
+
+  const handleScheduleClick = (batch: Batch) => {
+    setBatchToSchedule(batch);
+    setScheduleDialogOpen(true);
   };
 
   const handleDeleteClick = (batchId: string) => {
@@ -239,14 +248,26 @@ export default function ClientBatches() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleViewDetails(batch)}
+                          title="View Details"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {role === "admin" && batch.status !== "executed" && (
+                        {batch.status === "created" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleScheduleClick(batch)}
+                            title="Schedule Batch"
+                          >
+                            <Clock className="h-4 w-4 text-chart-1" />
+                          </Button>
+                        )}
+                        {(role === "admin" || role === "client") && batch.status !== "executed" && (
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDeleteClick(batch.batch_id)}
+                            title="Delete Batch"
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -283,6 +304,13 @@ export default function ClientBatches() {
         open={detailsDialogOpen}
         onOpenChange={setDetailsDialogOpen}
         onRefresh={() => refetch()}
+      />
+
+      <ScheduleBatchDialog
+        batch={batchToSchedule}
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        onSuccess={() => refetch()}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
