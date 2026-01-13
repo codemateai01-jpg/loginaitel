@@ -17,6 +17,7 @@ import AgentBuilder from "./pages/engineer/AgentBuilder";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientLeads from "./pages/client/ClientLeads";
+import ClientCalls from "./pages/client/ClientCalls";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <ClientLeads />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/calls"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientCalls />
                 </ProtectedRoute>
               }
             />
