@@ -299,8 +299,16 @@ export async function updateBolnaAgent(
   return callBolnaProxy<BolnaAgent>("update-agent", { agent_id: agentId }, config);
 }
 
-export async function deleteBolnaAgent(agentId: string): Promise<BolnaResponse<{ success: boolean }>> {
-  return callBolnaProxy<{ success: boolean }>("delete-agent", { agent_id: agentId });
+export async function deleteBolnaAgent(agentId: string): Promise<BolnaResponse<{ message: string; state: string }>> {
+  return callBolnaProxy<{ message: string; state: string }>("delete-agent", { agent_id: agentId });
+}
+
+export interface StopAgentResponse {
+  stopped_executions: string[];
+}
+
+export async function stopBolnaAgent(agentId: string): Promise<BolnaResponse<StopAgentResponse>> {
+  return callBolnaProxy<StopAgentResponse>("stop-agent", { agent_id: agentId });
 }
 
 // ==========================================
@@ -330,8 +338,14 @@ export async function getCallStatus(callId: string): Promise<BolnaResponse<Recor
   return callBolnaProxy<Record<string, unknown>>("get-call-status", { call_id: callId });
 }
 
-export async function endCall(callId: string): Promise<BolnaResponse<{ success: boolean }>> {
-  return callBolnaProxy<{ success: boolean }>("end-call", { call_id: callId });
+export interface StopCallResponse {
+  message: string;
+  status: "stopped";
+  execution_id: string;
+}
+
+export async function stopCall(executionId: string): Promise<BolnaResponse<StopCallResponse>> {
+  return callBolnaProxy<StopCallResponse>("stop-call", { execution_id: executionId });
 }
 
 // ==========================================
