@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.bolna-webhook]
 verify_jwt = false
+
+[functions.agent-chat]
+verify_jwt = true
+
+[functions.evaluate-call]
+verify_jwt = true
