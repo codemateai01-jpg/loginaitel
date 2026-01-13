@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Upload,
   Download,
   Search,
@@ -17,64 +25,47 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  MoreVertical,
+  UserPlus,
+  Loader2,
+  PhoneOff,
+  RefreshCw,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { CSVUploadDialog } from "@/components/leads/CSVUploadDialog";
+import { AddLeadDialog } from "@/components/leads/AddLeadDialog";
+import { TriggerCallDialog } from "@/components/leads/TriggerCallDialog";
+import { LeadActions } from "@/components/leads/LeadActions";
 
-const leads = [
-  {
-    id: 1,
-    name: "Rajesh Kumar",
-    phone: "+91 98765 43210",
-    agent: "Sales Assistant",
-    status: "interested",
-    lastCall: "2h ago",
-    calls: 2,
-  },
-  {
-    id: 2,
-    name: "Priya Sharma",
-    phone: "+91 87654 32109",
-    agent: "Lead Qualifier",
-    status: "callback",
-    lastCall: "4h ago",
-    calls: 1,
-  },
-  {
-    id: 3,
-    name: "Amit Patel",
-    phone: "+91 76543 21098",
-    agent: "Sales Assistant",
-    status: "not_interested",
-    lastCall: "1d ago",
-    calls: 3,
-  },
-  {
-    id: 4,
-    name: "Sneha Reddy",
-    phone: "+91 65432 10987",
-    agent: "Support Bot",
-    status: "no_answer",
-    lastCall: "2d ago",
-    calls: 5,
-  },
-  {
-    id: 5,
-    name: "Vikram Joshi",
-    phone: "+91 54321 09876",
-    agent: "Lead Qualifier",
-    status: "interested",
-    lastCall: "3h ago",
-    calls: 1,
-  },
-];
+interface Lead {
+  id: string;
+  name: string | null;
+  phone_number: string;
+  email: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  metadata: unknown;
+}
 
-const statusConfig = {
+interface Agent {
+  id: string;
+  name: string;
+}
+
+interface CallCount {
+  lead_id: string;
+  count: number;
+  last_call: string | null;
+}
+
+const statusConfig: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+  pending: {
+    label: "Pending",
+    icon: Clock,
+    className: "bg-muted border-border text-muted-foreground",
+  },
   interested: {
     label: "Interested",
     icon: CheckCircle,
@@ -92,12 +83,199 @@ const statusConfig = {
   },
   no_answer: {
     label: "No Answer",
-    icon: Phone,
+    icon: PhoneOff,
     className: "bg-muted border-border text-muted-foreground",
+  },
+  completed: {
+    label: "Completed",
+    icon: CheckCircle,
+    className: "bg-primary/10 border-primary text-primary",
   },
 };
 
 export default function ClientLeads() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [callCounts, setCallCounts] = useState<Map<string, CallCount>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Dialog states
+  const [csvDialogOpen, setCsvDialogOpen] = useState(false);
+  const [addLeadDialogOpen, setAddLeadDialogOpen] = useState(false);
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+
+  // Stats
+  const [stats, setStats] = useState({
+    total: 0,
+    interested: 0,
+    callbacks: 0,
+    completed: 0,
+  });
+
+  const fetchLeads = useCallback(async () => {
+    if (!user) return;
+
+    setIsLoading(true);
+    try {
+      // Fetch leads
+      let query = supabase
+        .from("leads")
+        .select("*")
+        .eq("client_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (statusFilter !== "all") {
+        query = query.eq("status", statusFilter);
+      }
+
+      if (searchQuery) {
+        query = query.or(`name.ilike.%${searchQuery}%,phone_number.ilike.%${searchQuery}%`);
+      }
+
+      const { data: leadsData, error: leadsError } = await query.limit(100);
+
+      if (leadsError) throw leadsError;
+
+      setLeads(leadsData || []);
+
+      // Fetch call counts for leads
+      if (leadsData && leadsData.length > 0) {
+        const leadIds = leadsData.map((l) => l.id);
+        const { data: callsData } = await supabase
+          .from("calls")
+          .select("lead_id, created_at")
+          .in("lead_id", leadIds)
+          .order("created_at", { ascending: false });
+
+        if (callsData) {
+          const counts = new Map<string, CallCount>();
+          callsData.forEach((call) => {
+            const existing = counts.get(call.lead_id);
+            if (existing) {
+              existing.count++;
+            } else {
+              counts.set(call.lead_id, {
+                lead_id: call.lead_id,
+                count: 1,
+                last_call: call.created_at,
+              });
+            }
+          });
+          setCallCounts(counts);
+        }
+      }
+
+      // Fetch stats
+      const { data: allLeads } = await supabase
+        .from("leads")
+        .select("status")
+        .eq("client_id", user.id);
+
+      if (allLeads) {
+        setStats({
+          total: allLeads.length,
+          interested: allLeads.filter((l) => l.status === "interested").length,
+          callbacks: allLeads.filter((l) => l.status === "callback").length,
+          completed: allLeads.filter((l) => l.status === "completed").length,
+        });
+      }
+    } catch (err) {
+      console.error("Fetch leads error:", err);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to fetch leads",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, statusFilter, searchQuery, toast]);
+
+  const fetchAgents = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("agents")
+        .select("id, name")
+        .eq("client_id", user.id)
+        .eq("status", "active");
+
+      if (error) throw error;
+      setAgents(data || []);
+    } catch (err) {
+      console.error("Fetch agents error:", err);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchLeads();
+    fetchAgents();
+  }, [fetchLeads, fetchAgents]);
+
+  const handleTriggerCall = (lead: Lead) => {
+    setSelectedLead(lead);
+    setCallDialogOpen(true);
+  };
+
+  const handleExport = () => {
+    if (leads.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "No Data",
+        description: "No leads to export",
+      });
+      return;
+    }
+
+    const headers = ["Name", "Phone", "Email", "Status", "Created At"];
+    const csvContent = [
+      headers.join(","),
+      ...leads.map((lead) =>
+        [
+          `"${lead.name || ""}"`,
+          `"${lead.phone_number}"`,
+          `"${lead.email || ""}"`,
+          `"${lead.status}"`,
+          `"${new Date(lead.created_at).toLocaleDateString()}"`,
+        ].join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads-export-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Complete",
+      description: `${leads.length} leads exported`,
+    });
+  };
+
+  const formatRelativeTime = (dateStr: string | null) => {
+    if (!dateStr) return "Never";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+
   return (
     <DashboardLayout role="client">
       <div className="space-y-8">
@@ -109,12 +287,16 @@ export default function ClientLeads() {
               Upload, track, and manage your campaign leads
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" className="shadow-xs">
+          <div className="flex gap-3 flex-wrap">
+            <Button variant="outline" className="shadow-xs" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
-            <Button className="shadow-sm">
+            <Button variant="outline" className="shadow-xs" onClick={() => setAddLeadDialogOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Lead
+            </Button>
+            <Button className="shadow-sm" onClick={() => setCsvDialogOpen(true)}>
               <Upload className="h-4 w-4 mr-2" />
               Upload CSV
             </Button>
@@ -124,19 +306,19 @@ export default function ClientLeads() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold">1,247</p>
+            <p className="text-2xl font-bold">{stats.total.toLocaleString()}</p>
             <p className="text-sm text-muted-foreground">Total Leads</p>
           </div>
           <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold text-chart-2">287</p>
+            <p className="text-2xl font-bold text-chart-2">{stats.interested}</p>
             <p className="text-sm text-muted-foreground">Interested</p>
           </div>
           <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold text-chart-4">124</p>
+            <p className="text-2xl font-bold text-chart-4">{stats.callbacks}</p>
             <p className="text-sm text-muted-foreground">Callbacks</p>
           </div>
           <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold">836</p>
+            <p className="text-2xl font-bold">{stats.completed}</p>
             <p className="text-sm text-muted-foreground">Completed</p>
           </div>
         </div>
@@ -148,92 +330,134 @@ export default function ClientLeads() {
             <Input
               placeholder="Search leads by name or phone..."
               className="pl-10 border-2"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button variant="outline" className="shadow-xs">
-            Filter by Status
-          </Button>
-          <Button variant="outline" className="shadow-xs">
-            Filter by Agent
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px] border-2">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="interested">Interested</SelectItem>
+              <SelectItem value="callback">Callback</SelectItem>
+              <SelectItem value="not_interested">Not Interested</SelectItem>
+              <SelectItem value="no_answer">No Answer</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={fetchLeads} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
         </div>
 
         {/* Table */}
         <div className="border-2 border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b-2 border-border hover:bg-transparent">
-                <TableHead className="font-bold">Name</TableHead>
-                <TableHead className="font-bold">Phone</TableHead>
-                <TableHead className="font-bold">Agent</TableHead>
-                <TableHead className="font-bold">Status</TableHead>
-                <TableHead className="font-bold">Calls</TableHead>
-                <TableHead className="font-bold">Last Call</TableHead>
-                <TableHead className="font-bold w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leads.map((lead) => {
-                const status = statusConfig[lead.status as keyof typeof statusConfig];
-                const StatusIcon = status.icon;
-                return (
-                  <TableRow key={lead.id} className="border-b-2 border-border">
-                    <TableCell className="font-medium">{lead.name}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {lead.phone}
-                    </TableCell>
-                    <TableCell>{lead.agent}</TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border-2 ${status.className}`}
-                      >
-                        <StatusIcon className="h-3 w-3" />
-                        {status.label}
-                      </span>
-                    </TableCell>
-                    <TableCell>{lead.calls}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {lead.lastCall}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View Call History</DropdownMenuItem>
-                          <DropdownMenuItem>View Transcript</DropdownMenuItem>
-                          <DropdownMenuItem>Update Status</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">
-                            Remove Lead
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          {isLoading ? (
+            <div className="flex items-center justify-center p-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : leads.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <Phone className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="font-bold text-lg mb-2">No leads yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Upload a CSV or add leads manually to get started.
+              </p>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setAddLeadDialogOpen(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Lead
+                </Button>
+                <Button onClick={() => setCsvDialogOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload CSV
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b-2 border-border hover:bg-transparent">
+                  <TableHead className="font-bold">Name</TableHead>
+                  <TableHead className="font-bold">Phone</TableHead>
+                  <TableHead className="font-bold">Status</TableHead>
+                  <TableHead className="font-bold">Calls</TableHead>
+                  <TableHead className="font-bold">Last Call</TableHead>
+                  <TableHead className="font-bold w-12"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leads.map((lead) => {
+                  const status = statusConfig[lead.status] || statusConfig.pending;
+                  const StatusIcon = status.icon;
+                  const callInfo = callCounts.get(lead.id);
+
+                  return (
+                    <TableRow key={lead.id} className="border-b-2 border-border">
+                      <TableCell className="font-medium">
+                        {lead.name || <span className="text-muted-foreground">Unknown</span>}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{lead.phone_number}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border-2 ${status.className}`}
+                        >
+                          <StatusIcon className="h-3 w-3" />
+                          {status.label}
+                        </span>
+                      </TableCell>
+                      <TableCell>{callInfo?.count || 0}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatRelativeTime(callInfo?.last_call || null)}
+                      </TableCell>
+                      <TableCell>
+                        <LeadActions
+                          leadId={lead.id}
+                          currentStatus={lead.status}
+                          onTriggerCall={() => handleTriggerCall(lead)}
+                          onRefresh={fetchLeads}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
 
-        {/* Pagination placeholder */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing 1-5 of 1,247 leads
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled>
-              Previous
-            </Button>
-            <Button variant="outline" size="sm">
-              Next
-            </Button>
+        {/* Pagination Info */}
+        {leads.length > 0 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {leads.length} of {stats.total} leads
+            </p>
           </div>
-        </div>
+        )}
       </div>
+
+      {/* Dialogs */}
+      <CSVUploadDialog
+        open={csvDialogOpen}
+        onOpenChange={setCsvDialogOpen}
+        onSuccess={fetchLeads}
+      />
+      <AddLeadDialog
+        open={addLeadDialogOpen}
+        onOpenChange={setAddLeadDialogOpen}
+        onSuccess={fetchLeads}
+      />
+      <TriggerCallDialog
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
+        lead={selectedLead}
+        agents={agents}
+        onSuccess={fetchLeads}
+      />
     </DashboardLayout>
   );
 }
