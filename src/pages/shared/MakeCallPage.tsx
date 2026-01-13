@@ -304,7 +304,19 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     }
 
     let leadId = selectedLeadId;
-    let clientId = role === "client" ? user.id : selectedAgent?.client_id || user.id;
+    // For engineers and admins, use the agent's client_id; for clients, use their own id
+    const agentClientId = selectedAgent?.client_id;
+    let clientId = role === "client" ? user.id : agentClientId;
+
+    // Engineers MUST use an agent that has a client_id assigned
+    if (role === "engineer" && !agentClientId) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Create Lead",
+        description: "This agent is not assigned to a client. Select an agent with a client assigned.",
+      });
+      return;
+    }
 
     if (callMode === "manual") {
       if (!manualPhone) {
@@ -312,6 +324,15 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           variant: "destructive",
           title: "Missing Phone Number",
           description: "Please enter a phone number",
+        });
+        return;
+      }
+
+      if (!clientId) {
+        toast({
+          variant: "destructive",
+          title: "Missing Client",
+          description: "Cannot determine client for this lead. Please select an agent assigned to a client.",
         });
         return;
       }
