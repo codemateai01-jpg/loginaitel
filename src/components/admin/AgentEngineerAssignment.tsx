@@ -37,7 +37,7 @@ export function AgentEngineerAssignment({ open, onOpenChange }: AgentEngineerAss
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [selectedEngineer, setSelectedEngineer] = useState<string>("");
+  const [selectedEngineer, setSelectedEngineer] = useState<string>("none");
 
   // Fetch agents with their assigned engineers
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
@@ -115,7 +115,7 @@ export function AgentEngineerAssignment({ open, onOpenChange }: AgentEngineerAss
       queryClient.invalidateQueries({ queryKey: ["agents-with-engineers"] });
       toast.success("Agent assignment updated");
       setSelectedAgent(null);
-      setSelectedEngineer("");
+      setSelectedEngineer("none");
     },
     onError: (error) => {
       toast.error(`Failed to assign: ${error.message}`);
@@ -130,14 +130,14 @@ export function AgentEngineerAssignment({ open, onOpenChange }: AgentEngineerAss
   const handleAssign = (agentId: string) => {
     setSelectedAgent(agentId);
     const agent = agents.find((a) => a.id === agentId);
-    setSelectedEngineer(agent?.engineer_id || "");
+    setSelectedEngineer(agent?.engineer_id || "none");
   };
 
   const confirmAssignment = () => {
     if (selectedAgent) {
       assignMutation.mutate({
         agentId: selectedAgent,
-        engineerId: selectedEngineer || null,
+        engineerId: selectedEngineer === "none" ? null : selectedEngineer,
       });
     }
   };
@@ -201,7 +201,7 @@ export function AgentEngineerAssignment({ open, onOpenChange }: AgentEngineerAss
                             <SelectValue placeholder="Select engineer" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Unassigned</SelectItem>
+                            <SelectItem value="none">Unassigned</SelectItem>
                             {engineers.map((eng) => (
                               <SelectItem key={eng.user_id} value={eng.user_id}>
                                 {eng.full_name || eng.email}

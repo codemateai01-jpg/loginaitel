@@ -176,12 +176,12 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
 
           <div className="space-y-2">
             <Label htmlFor="agent">Assign Agent</Label>
-            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <Select value={selectedAgentId || "none"} onValueChange={(v) => setSelectedAgentId(v === "none" ? "" : v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select an agent to assign" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No agent</SelectItem>
+                <SelectItem value="none">No agent</SelectItem>
                 {agents?.map((agent) => (
                   <SelectItem key={agent.id} value={agent.id}>
                     {agent.agent_name}
@@ -193,12 +193,12 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
 
           <div className="space-y-2">
             <Label htmlFor="engineer">Assign Engineer</Label>
-            <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
+            <Select value={selectedEngineerId || "none"} onValueChange={(v) => setSelectedEngineerId(v === "none" ? "" : v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select an engineer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unassigned</SelectItem>
+                <SelectItem value="none">Unassigned</SelectItem>
                 {engineers?.map((engineer) => (
                   <SelectItem key={engineer.user_id} value={engineer.user_id}>
                     {engineer.full_name || engineer.email}
