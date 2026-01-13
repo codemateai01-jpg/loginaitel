@@ -17,6 +17,7 @@ import {
   Trophy,
   Clock,
   Upload,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,6 +52,7 @@ const clientNavItems = [
   { icon: Bot, label: "My Agents", href: "/client/agents" },
   { icon: Phone, label: "Call Analytics", href: "/client/calls" },
   { icon: Upload, label: "Leads", href: "/client/leads" },
+  { icon: Layers, label: "Batch Calls", href: "/client/batches" },
   { icon: CreditCard, label: "Credits & Billing", href: "/client/billing" },
   { icon: Settings, label: "Settings", href: "/client/settings" },
 ];
