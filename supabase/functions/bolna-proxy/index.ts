@@ -183,6 +183,29 @@ serve(async (req) => {
         });
         break;
 
+      case "stop-agent":
+        // Stop all queued calls for an agent - admin or engineer only
+        if (userRole !== "admin" && userRole !== "engineer") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const stopAgentId = url.searchParams.get("agent_id");
+        if (!stopAgentId) {
+          return new Response(
+            JSON.stringify({ error: "agent_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        response = await fetch(`${BOLNA_API_BASE}/v2/agent/${stopAgentId}/stop`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+
       // ==========================================
       // CALL MANAGEMENT
       // ==========================================
@@ -283,19 +306,28 @@ serve(async (req) => {
         });
         break;
 
-      case "end-call":
-        const endCallId = url.searchParams.get("call_id");
-        if (!endCallId) {
+      case "stop-call":
+        // Stop a queued or scheduled call - POST /call/{execution_id}/stop
+        const stopCallId = url.searchParams.get("execution_id");
+        if (!stopCallId) {
           return new Response(
-            JSON.stringify({ error: "call_id is required" }),
+            JSON.stringify({ error: "execution_id is required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
         
-        response = await fetch(`${BOLNA_API_BASE}/call/${endCallId}/end`, {
+        response = await fetch(`${BOLNA_API_BASE}/call/${stopCallId}/stop`, {
           method: "POST",
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
+
+        if (response.ok) {
+          // Update call record status
+          await supabase
+            .from("calls")
+            .update({ status: "stopped" })
+            .eq("external_call_id", stopCallId);
+        }
         break;
 
       // ==========================================
