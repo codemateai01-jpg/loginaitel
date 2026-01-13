@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -12,11 +12,20 @@ import {
   Eye,
   Zap,
   Radio,
+  Users,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { CallDetailsDialog } from "@/components/calls/CallDetailsDialog";
 
 interface LiveCall {
@@ -84,6 +93,7 @@ const statusConfig: Record<
 export default function AdminRealTimeMonitor() {
   const queryClient = useQueryClient();
   const [selectedCall, setSelectedCall] = useState<LiveCall | null>(null);
+  const [clientFilter, setClientFilter] = useState<string>("all");
   const [recentEvents, setRecentEvents] = useState<
     Array<{ id: string; type: string; call: LiveCall; timestamp: Date }>
   >([]);
@@ -222,11 +232,28 @@ export default function AdminRealTimeMonitor() {
     return call.duration_seconds || 0;
   };
 
+  // Filter calls based on selected client
+  const filteredActiveCalls = useMemo(() => {
+    if (clientFilter === "all") return activeCalls;
+    return activeCalls?.filter((call) => call.client_id === clientFilter);
+  }, [activeCalls, clientFilter]);
+
+  const filteredEvents = useMemo(() => {
+    if (clientFilter === "all") return recentEvents;
+    return recentEvents.filter((event) => event.call.client_id === clientFilter);
+  }, [recentEvents, clientFilter]);
+
+  // Get selected client name for display
+  const selectedClientName = useMemo(() => {
+    if (clientFilter === "all") return null;
+    return getClientName(clientFilter);
+  }, [clientFilter, clients]);
+
   return (
     <DashboardLayout role="admin">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <div className="relative">
@@ -236,16 +263,45 @@ export default function AdminRealTimeMonitor() {
               <h1 className="text-3xl font-bold">Real-Time Monitor</h1>
             </div>
             <p className="text-muted-foreground">
-              Live call monitoring across all clients
+              Live call monitoring {selectedClientName ? `for ${selectedClientName}` : "across all clients"}
             </p>
           </div>
-          <Badge
-            variant="outline"
-            className="text-lg px-4 py-2 border-2 border-chart-2 text-chart-2"
-          >
-            <Zap className="h-4 w-4 mr-2" />
-            {activeCalls?.length || 0} Active Calls
-          </Badge>
+          <div className="flex items-center gap-3">
+            {/* Client Filter */}
+            <div className="flex items-center gap-2">
+              <Select value={clientFilter} onValueChange={setClientFilter}>
+                <SelectTrigger className="w-[200px] border-2">
+                  <Users className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by client" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clients</SelectItem>
+                  {clients?.map((client) => (
+                    <SelectItem key={client.user_id} value={client.user_id}>
+                      {client.full_name || client.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {clientFilter !== "all" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setClientFilter("all")}
+                  className="h-9 w-9"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            <Badge
+              variant="outline"
+              className="text-lg px-4 py-2 border-2 border-chart-2 text-chart-2"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              {filteredActiveCalls?.length || 0} Active Calls
+            </Badge>
+          </div>
         </div>
 
         {/* Today's Stats */}
@@ -315,7 +371,7 @@ export default function AdminRealTimeMonitor() {
                 <h2 className="font-bold">Active Calls</h2>
               </div>
               <span className="text-sm text-muted-foreground">
-                {activeCalls?.length || 0} calls
+                {filteredActiveCalls?.length || 0} calls
               </span>
             </div>
             <div className="max-h-[500px] overflow-y-auto">
@@ -323,17 +379,19 @@ export default function AdminRealTimeMonitor() {
                 <div className="p-8 text-center text-muted-foreground">
                   Loading active calls...
                 </div>
-              ) : activeCalls?.length === 0 ? (
+              ) : filteredActiveCalls?.length === 0 ? (
                 <div className="p-8 text-center">
                   <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <p className="text-muted-foreground">No active calls</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Calls will appear here in real-time
+                    {clientFilter !== "all" 
+                      ? "No active calls for this client" 
+                      : "Calls will appear here in real-time"}
                   </p>
                 </div>
               ) : (
                 <div className="divide-y-2 divide-border">
-                  {activeCalls?.map((call) => {
+                  {filteredActiveCalls?.map((call) => {
                     const status = statusConfig[call.status] || statusConfig.initiated;
                     const StatusIcon = status.icon;
                     const duration = getCallDuration(call);
@@ -402,21 +460,23 @@ export default function AdminRealTimeMonitor() {
                 <h2 className="font-bold">Live Event Feed</h2>
               </div>
               <span className="text-sm text-muted-foreground">
-                {recentEvents.length} events
+                {filteredEvents.length} events
               </span>
             </div>
             <div className="max-h-[500px] overflow-y-auto">
-              {recentEvents.length === 0 ? (
+              {filteredEvents.length === 0 ? (
                 <div className="p-8 text-center">
                   <Radio className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <p className="text-muted-foreground">Waiting for events...</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Call updates will appear here in real-time
+                    {clientFilter !== "all" 
+                      ? "No events for this client yet" 
+                      : "Call updates will appear here in real-time"}
                   </p>
                 </div>
               ) : (
                 <div className="divide-y-2 divide-border">
-                  {recentEvents.map((event) => {
+                  {filteredEvents.map((event) => {
                     const status =
                       statusConfig[event.call.status] || statusConfig.initiated;
                     const StatusIcon = status.icon;
