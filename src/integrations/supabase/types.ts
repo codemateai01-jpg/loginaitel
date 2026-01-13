@@ -205,6 +205,72 @@ export type Database = {
           },
         ]
       }
+      demo_calls: {
+        Row: {
+          agent_id: string
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          engineer_id: string
+          external_call_id: string | null
+          id: string
+          phone_number: string
+          recording_url: string | null
+          started_at: string | null
+          status: string
+          task_id: string
+          transcript: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          engineer_id: string
+          external_call_id?: string | null
+          id?: string
+          phone_number: string
+          recording_url?: string | null
+          started_at?: string | null
+          status?: string
+          task_id: string
+          transcript?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          engineer_id?: string
+          external_call_id?: string | null
+          id?: string
+          phone_number?: string
+          recording_url?: string | null
+          started_at?: string | null
+          status?: string
+          task_id?: string
+          transcript?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demo_calls_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "bolna_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demo_calls_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       engineer_points: {
         Row: {
           created_at: string
@@ -343,6 +409,54 @@ export type Database = {
         }
         Relationships: []
       }
+      prompt_edit_history: {
+        Row: {
+          agent_id: string
+          created_at: string
+          edit_phase: string
+          engineer_id: string
+          id: string
+          new_prompt: string
+          previous_prompt: string | null
+          task_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          edit_phase?: string
+          engineer_id: string
+          id?: string
+          new_prompt: string
+          previous_prompt?: string | null
+          task_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          edit_phase?: string
+          engineer_id?: string
+          id?: string
+          new_prompt?: string
+          previous_prompt?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_edit_history_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "bolna_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_edit_history_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           assigned_to: string | null
@@ -351,11 +465,21 @@ export type Database = {
           created_at: string
           created_by: string
           deadline: string | null
+          demo_completed_at: string | null
+          demo_edit_count: number | null
+          demo_started_at: string | null
           description: string | null
+          final_score: number | null
           id: string
           picked_at: string | null
           points: number
+          prompt_approved_at: string | null
+          prompt_edit_count: number | null
+          prompt_started_at: string | null
+          prompt_submitted_at: string | null
           rejection_reason: string | null
+          score_breakdown: Json | null
+          selected_demo_call_id: string | null
           status: string
           title: string
           updated_at: string
@@ -367,11 +491,21 @@ export type Database = {
           created_at?: string
           created_by: string
           deadline?: string | null
+          demo_completed_at?: string | null
+          demo_edit_count?: number | null
+          demo_started_at?: string | null
           description?: string | null
+          final_score?: number | null
           id?: string
           picked_at?: string | null
           points?: number
+          prompt_approved_at?: string | null
+          prompt_edit_count?: number | null
+          prompt_started_at?: string | null
+          prompt_submitted_at?: string | null
           rejection_reason?: string | null
+          score_breakdown?: Json | null
+          selected_demo_call_id?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -383,11 +517,21 @@ export type Database = {
           created_at?: string
           created_by?: string
           deadline?: string | null
+          demo_completed_at?: string | null
+          demo_edit_count?: number | null
+          demo_started_at?: string | null
           description?: string | null
+          final_score?: number | null
           id?: string
           picked_at?: string | null
           points?: number
+          prompt_approved_at?: string | null
+          prompt_edit_count?: number | null
+          prompt_started_at?: string | null
+          prompt_submitted_at?: string | null
           rejection_reason?: string | null
+          score_breakdown?: Json | null
+          selected_demo_call_id?: string | null
           status?: string
           title?: string
           updated_at?: string
@@ -508,6 +652,7 @@ export type Database = {
       }
     }
     Functions: {
+      calculate_task_score: { Args: { p_task_id: string }; Returns: Json }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]

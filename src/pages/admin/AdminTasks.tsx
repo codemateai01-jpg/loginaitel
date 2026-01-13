@@ -22,6 +22,9 @@ import {
   MoreVertical,
   Bot,
   XCircle,
+  FileText,
+  Phone,
+  Trophy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -30,40 +33,36 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CreateTaskDialog } from "@/components/admin/CreateTaskDialog";
-import { TaskReviewDialog } from "@/components/admin/TaskReviewDialog";
+import { PromptReviewDialog } from "@/components/admin/PromptReviewDialog";
+import { DemoReviewDialog } from "@/components/admin/DemoReviewDialog";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   completed: {
     label: "Completed",
     icon: CheckCircle,
     className: "bg-chart-2/10 border-chart-2 text-chart-2",
   },
-  approved: {
-    label: "Approved",
-    icon: CheckCircle,
+  demo_submitted: {
+    label: "Demo Review",
+    icon: Phone,
+    className: "bg-chart-4/10 border-chart-4 text-chart-4",
+  },
+  prompt_approved: {
+    label: "Demo Phase",
+    icon: Phone,
     className: "bg-chart-2/10 border-chart-2 text-chart-2",
   },
-  submitted: {
-    label: "Pending Review",
-    icon: AlertCircle,
-    className: "bg-chart-4/10 border-chart-4 text-chart-4",
-  },
-  pending_review: {
-    label: "Pending Review",
-    icon: AlertCircle,
-    className: "bg-chart-4/10 border-chart-4 text-chart-4",
+  prompt_submitted: {
+    label: "Prompt Review",
+    icon: FileText,
+    className: "bg-chart-3/10 border-chart-3 text-chart-3",
   },
   in_progress: {
     label: "In Progress",
     icon: Clock,
     className: "bg-chart-1/10 border-chart-1 text-chart-1",
-  },
-  assigned: {
-    label: "Assigned",
-    icon: ClipboardList,
-    className: "bg-chart-3/10 border-chart-3 text-chart-3",
   },
   pending: {
     label: "Pending",
@@ -82,7 +81,8 @@ export default function AdminTasks() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [promptReviewOpen, setPromptReviewOpen] = useState(false);
+  const [demoReviewOpen, setDemoReviewOpen] = useState(false);
   const [reviewingTask, setReviewingTask] = useState<any>(null);
 
   const { data: tasks, isLoading } = useQuery({
@@ -94,7 +94,9 @@ export default function AdminTasks() {
           *,
           bolna_agents (
             id,
-            agent_name
+            agent_name,
+            current_system_prompt,
+            original_system_prompt
           )
         `)
         .order("created_at", { ascending: false });
@@ -106,13 +108,13 @@ export default function AdminTasks() {
   // Real-time subscription for tasks
   useEffect(() => {
     const channel = supabase
-      .channel('admin-tasks-realtime')
+      .channel("admin-tasks-realtime")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'tasks',
+          event: "*",
+          schema: "public",
+          table: "tasks",
         },
         () => {
           queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
@@ -165,9 +167,9 @@ export default function AdminTasks() {
 
   const stats = {
     total: tasks?.length || 0,
-    pendingReview: tasks?.filter((t) => t.status === "submitted" || t.status === "pending_review").length || 0,
-    inProgress: tasks?.filter((t) => t.status === "in_progress").length || 0,
-    completed: tasks?.filter((t) => t.status === "completed" || t.status === "approved").length || 0,
+    promptReview: tasks?.filter((t) => t.status === "prompt_submitted").length || 0,
+    demoReview: tasks?.filter((t) => t.status === "demo_submitted").length || 0,
+    completed: tasks?.filter((t) => t.status === "completed").length || 0,
   };
 
   const handleEdit = (task: any) => {
@@ -180,9 +182,14 @@ export default function AdminTasks() {
     setDialogOpen(true);
   };
 
-  const handleReview = (task: any) => {
+  const handlePromptReview = (task: any) => {
     setReviewingTask(task);
-    setReviewDialogOpen(true);
+    setPromptReviewOpen(true);
+  };
+
+  const handleDemoReview = (task: any) => {
+    setReviewingTask(task);
+    setDemoReviewOpen(true);
   };
 
   return (
@@ -193,7 +200,7 @@ export default function AdminTasks() {
           <div>
             <h1 className="text-3xl font-bold mb-2">Task Management</h1>
             <p className="text-muted-foreground">
-              Create, assign, and track engineer tasks
+              Create, assign, and review engineer tasks
             </p>
           </div>
           <Button className="shadow-sm" onClick={handleCreate}>
@@ -209,12 +216,12 @@ export default function AdminTasks() {
             <p className="text-sm text-muted-foreground">Total Tasks</p>
           </div>
           <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold text-chart-4">{stats.pendingReview}</p>
-            <p className="text-sm text-muted-foreground">Pending Review</p>
+            <p className="text-2xl font-bold text-chart-3">{stats.promptReview}</p>
+            <p className="text-sm text-muted-foreground">Prompt Review</p>
           </div>
           <div className="border-2 border-border bg-card p-4 text-center">
-            <p className="text-2xl font-bold text-chart-1">{stats.inProgress}</p>
-            <p className="text-sm text-muted-foreground">In Progress</p>
+            <p className="text-2xl font-bold text-chart-4">{stats.demoReview}</p>
+            <p className="text-sm text-muted-foreground">Demo Review</p>
           </div>
           <div className="border-2 border-border bg-card p-4 text-center">
             <p className="text-2xl font-bold text-chart-2">{stats.completed}</p>
@@ -244,7 +251,7 @@ export default function AdminTasks() {
                 <TableHead className="font-bold">Agent</TableHead>
                 <TableHead className="font-bold">Engineer</TableHead>
                 <TableHead className="font-bold">Status</TableHead>
-                <TableHead className="font-bold">Deadline</TableHead>
+                <TableHead className="font-bold">Score</TableHead>
                 <TableHead className="font-bold text-right">Points</TableHead>
                 <TableHead className="font-bold w-12"></TableHead>
               </TableRow>
@@ -264,9 +271,11 @@ export default function AdminTasks() {
                 </TableRow>
               ) : (
                 filteredTasks?.map((task) => {
-                  const status = statusConfig[task.status as keyof typeof statusConfig] || statusConfig.pending;
+                  const status = statusConfig[task.status] || statusConfig.pending;
                   const StatusIcon = status.icon;
-                  const isPendingReview = task.status === "submitted" || task.status === "pending_review";
+                  const isPromptReview = task.status === "prompt_submitted";
+                  const isDemoReview = task.status === "demo_submitted";
+
                   return (
                     <TableRow key={task.id} className="border-b-2 border-border">
                       <TableCell className="font-medium">{task.title}</TableCell>
@@ -289,10 +298,15 @@ export default function AdminTasks() {
                           {status.label}
                         </span>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {task.deadline
-                          ? formatDistanceToNow(new Date(task.deadline), { addSuffix: true })
-                          : "No deadline"}
+                      <TableCell>
+                        {task.final_score !== null ? (
+                          <span className="flex items-center gap-1 font-mono">
+                            <Trophy className="h-3 w-3 text-chart-4" />
+                            {task.final_score}/100
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-mono">
                         {task.points}
@@ -305,9 +319,14 @@ export default function AdminTasks() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {isPendingReview && (
-                              <DropdownMenuItem onClick={() => handleReview(task)}>
-                                Review Submission
+                            {isPromptReview && (
+                              <DropdownMenuItem onClick={() => handlePromptReview(task)}>
+                                Review Prompt
+                              </DropdownMenuItem>
+                            )}
+                            {isDemoReview && (
+                              <DropdownMenuItem onClick={() => handleDemoReview(task)}>
+                                Review Demo
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => handleEdit(task)}>
@@ -337,9 +356,16 @@ export default function AdminTasks() {
         task={editingTask}
       />
 
-      <TaskReviewDialog
-        open={reviewDialogOpen}
-        onOpenChange={setReviewDialogOpen}
+      <PromptReviewDialog
+        open={promptReviewOpen}
+        onOpenChange={setPromptReviewOpen}
+        task={reviewingTask}
+        engineerName={getEngineerName(reviewingTask?.assigned_to)}
+      />
+
+      <DemoReviewDialog
+        open={demoReviewOpen}
+        onOpenChange={setDemoReviewOpen}
         task={reviewingTask}
         engineerName={getEngineerName(reviewingTask?.assigned_to)}
       />
