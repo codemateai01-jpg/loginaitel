@@ -36,9 +36,11 @@ import {
   Download,
   Eye,
   Loader2,
+  Wrench,
 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
+import { AgentEngineerAssignment } from "@/components/admin/AgentEngineerAssignment";
 
 interface BolnaAgentFromAPI {
   id: string;
@@ -78,6 +80,7 @@ export default function AdminAgents() {
   const [selectedAgent, setSelectedAgent] = useState<SyncedAgent | null>(null);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [engineerAssignOpen, setEngineerAssignOpen] = useState(false);
 
   // Fetch synced agents from our database
   const { data: syncedAgents, isLoading: loadingAgents } = useQuery({
@@ -245,19 +248,25 @@ export default function AdminAgents() {
               </p>
             </div>
           </div>
-          <Button onClick={handleSyncAgents} disabled={isSyncing}>
-            {isSyncing ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Sync from Bolna
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEngineerAssignOpen(true)}>
+              <Wrench className="h-4 w-4 mr-2" />
+              Assign to Engineers
+            </Button>
+            <Button onClick={handleSyncAgents} disabled={isSyncing}>
+              {isSyncing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Sync from Bolna
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -468,6 +477,12 @@ export default function AdminAgents() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Engineer Assignment Dialog */}
+        <AgentEngineerAssignment
+          open={engineerAssignOpen}
+          onOpenChange={setEngineerAssignOpen}
+        />
       </div>
     </DashboardLayout>
   );
