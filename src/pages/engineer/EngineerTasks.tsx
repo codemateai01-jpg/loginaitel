@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TaskTimer } from "@/components/tasks/TaskTimer";
 import {
   ClipboardList,
   Clock,
@@ -46,6 +47,7 @@ interface Task {
   created_at: string;
   rejection_reason: string | null;
   completed_at: string | null;
+  picked_at: string | null;
 }
 
 const getStatusColor = (status: string) => {
@@ -136,6 +138,7 @@ export default function EngineerTasks() {
         .update({
           assigned_to: user?.id,
           status: "in_progress",
+          picked_at: new Date().toISOString(),
         })
         .eq("id", taskId)
         .eq("status", "pending");
@@ -454,45 +457,50 @@ export default function EngineerTasks() {
                 {activeTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="border-2 border-chart-4 bg-card p-4"
+                    className="border-2 border-chart-4 bg-card overflow-hidden"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg">{task.title}</h3>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {task.description}
-                              </p>
+                    {/* 10-minute countdown timer */}
+                    <TaskTimer pickedAt={task.picked_at} />
+                    
+                    <div className="p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1">
+                              <h3 className="font-bold text-lg">{task.title}</h3>
+                              {task.description && (
+                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                  {task.description}
+                                </p>
+                              )}
+                            </div>
+                            <Badge className={getStatusColor(task.status)}>
+                              {getStatusLabel(task.status)}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Trophy className="h-4 w-4 text-chart-4" />
+                              {task.points} points
+                            </span>
+                            {task.deadline && (
+                              <span className="flex items-center gap-1">
+                                <Timer className="h-4 w-4" />
+                                {getTimeRemaining(task.deadline)}
+                              </span>
                             )}
                           </div>
-                          <Badge className={getStatusColor(task.status)}>
-                            {getStatusLabel(task.status)}
-                          </Badge>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Trophy className="h-4 w-4 text-chart-4" />
-                            {task.points} points
-                          </span>
-                          {task.deadline && (
-                            <span className="flex items-center gap-1">
-                              <Timer className="h-4 w-4" />
-                              {getTimeRemaining(task.deadline)}
-                            </span>
-                          )}
+                        <div className="flex gap-2 shrink-0">
+                          <Button variant="outline" onClick={() => handleBuildAgent(task)}>
+                            <Bot className="h-4 w-4 mr-2" />
+                            Build Agent
+                          </Button>
+                          <Button onClick={() => handleSubmitTask(task)}>
+                            <Send className="h-4 w-4 mr-2" />
+                            Submit
+                          </Button>
                         </div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <Button variant="outline" onClick={() => handleBuildAgent(task)}>
-                          <Bot className="h-4 w-4 mr-2" />
-                          Build Agent
-                        </Button>
-                        <Button onClick={() => handleSubmitTask(task)}>
-                          <Send className="h-4 w-4 mr-2" />
-                          Submit
-                        </Button>
                       </div>
                     </div>
                   </div>

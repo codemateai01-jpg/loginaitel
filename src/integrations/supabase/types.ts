@@ -358,6 +358,7 @@ export type Database = {
           deadline: string | null
           description: string | null
           id: string
+          picked_at: string | null
           points: number
           rejection_reason: string | null
           status: string
@@ -372,6 +373,7 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          picked_at?: string | null
           points?: number
           rejection_reason?: string | null
           status?: string
@@ -386,6 +388,7 @@ export type Database = {
           deadline?: string | null
           description?: string | null
           id?: string
+          picked_at?: string | null
           points?: number
           rejection_reason?: string | null
           status?: string
