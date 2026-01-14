@@ -460,21 +460,34 @@ export function UserManagement() {
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewUser(user)}>
+                      <DropdownMenuContent align="end" className="z-50">
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewUser(user);
+                          }}
+                        >
                           <Eye className="h-4 w-4 mr-2" />
                           View Profile
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditUser(user);
+                          }}
+                        >
                           <Edit className="h-4 w-4 mr-2" />
                           Edit User
                         </DropdownMenuItem>
                         <DropdownMenuItem 
-                          onClick={() => handleDeactivateUser(user)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeactivateUser(user);
+                          }}
                           className="text-destructive"
                         >
                           <UserX className="h-4 w-4 mr-2" />
