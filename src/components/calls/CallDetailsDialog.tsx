@@ -48,7 +48,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { Slider } from "@/components/ui/slider";
-import { getExecution, getExecutionLogs, CallExecution, ExecutionLogEntry } from "@/lib/aitel";
+import { getExecution, getExecutionLogs, downloadRecording, CallExecution, ExecutionLogEntry } from "@/lib/aitel";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -503,9 +503,22 @@ export function CallDetailsDialog({
   const transcriptSource = execution?.transcript || call.transcript;
   const transcriptMessages = parseTranscript(transcriptSource);
 
-  const downloadRecording = () => {
+  const handleDownloadRecording = async () => {
     if (recordingUrl) {
-      window.open(recordingUrl, "_blank");
+      try {
+        const callId = call.external_call_id || call.id;
+        await downloadRecording(recordingUrl, `call-${callId}.mp3`);
+        toast({
+          title: "Download started",
+          description: "Your recording is being downloaded.",
+        });
+      } catch (error) {
+        toast({
+          title: "Download failed",
+          description: "Failed to download recording. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -741,7 +754,7 @@ export function CallDetailsDialog({
                         <Play className="h-6 w-6 ml-1" />
                       )}
                     </Button>
-                    <Button variant="outline" size="icon" onClick={downloadRecording}>
+                    <Button variant="outline" size="icon" onClick={handleDownloadRecording}>
                       <Download className="h-4 w-4" />
                     </Button>
                   </div>

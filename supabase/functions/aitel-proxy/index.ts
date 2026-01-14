@@ -848,6 +848,39 @@ serve(async (req) => {
         break;
       }
 
+      case "download-recording": {
+        // Proxy recording download to hide Bolna URL from clients
+        const recordingUrl = url.searchParams.get("url");
+        if (!recordingUrl) {
+          return new Response(
+            JSON.stringify({ error: "Recording URL is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Fetch the recording from the external URL
+        const recordingResponse = await fetch(recordingUrl);
+        if (!recordingResponse.ok) {
+          return new Response(
+            JSON.stringify({ error: "Failed to fetch recording" }),
+            { status: recordingResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get the audio content
+        const audioBlob = await recordingResponse.arrayBuffer();
+        
+        // Return the audio with proper headers for download
+        return new Response(audioBlob, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "audio/mpeg",
+            "Content-Disposition": `attachment; filename="call-recording.mp3"`,
+          },
+        });
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),

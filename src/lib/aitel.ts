@@ -482,6 +482,54 @@ export async function getExecutionLogs(executionId: string): Promise<AitelRespon
   return callAitelProxy<ExecutionLogsResponse>("get-execution-logs", { execution_id: executionId });
 }
 
+// Download recording through proxy to hide external URLs
+export async function downloadRecording(recordingUrl: string, filename?: string): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("Not authenticated");
+    }
+
+    const url = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy`);
+    url.searchParams.set("action", "download-recording");
+    url.searchParams.set("url", recordingUrl);
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to download recording");
+    }
+
+    // Create blob and trigger download
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename || "call-recording.mp3";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error("Failed to download recording:", error);
+    throw error;
+  }
+}
+
+// Get proxied recording URL for audio playback
+export function getProxiedRecordingUrl(recordingUrl: string, accessToken: string): string {
+  const url = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy`);
+  url.searchParams.set("action", "download-recording");
+  url.searchParams.set("url", recordingUrl);
+  // Note: For audio elements, we'll need to handle auth differently
+  return url.toString();
+}
+
 export async function listAgentExecutions(params: ListExecutionsParams): Promise<AitelResponse<ListExecutionsResponse>> {
   const queryParams: Record<string, string> = { agent_id: params.agent_id };
   

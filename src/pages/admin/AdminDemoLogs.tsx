@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { downloadRecording } from "@/lib/aitel";
 import { useQuery } from "@tanstack/react-query";
 import {
   Phone,
@@ -462,10 +463,15 @@ export default function AdminDemoLogs() {
               {selectedCall.recording_url && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Recording</label>
-                  <audio controls className="w-full">
-                    <source src={selectedCall.recording_url} type="audio/mpeg" />
-                    Your browser does not support the audio element.
-                  </audio>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => downloadRecording(selectedCall.recording_url!, `demo-call-${selectedCall.id}.mp3`)}
+                    className="w-full"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Download Recording
+                  </Button>
                 </div>
               )}
 
