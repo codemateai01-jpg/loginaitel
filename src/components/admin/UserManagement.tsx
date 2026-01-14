@@ -33,7 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Plus, MoreVertical, Users, UserPlus } from "lucide-react";
+import { Search, Plus, MoreVertical, Users, UserPlus, Eye, Edit, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -53,11 +53,20 @@ export function UserManagement() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeactivateDialogOpen, setIsDeactivateDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({
     email: "",
     full_name: "",
     phone: "",
     password: "",
+    role: "client" as AppRole,
+  });
+  const [editUser, setEditUser] = useState({
+    full_name: "",
+    phone: "",
     role: "client" as AppRole,
   });
   const queryClient = useQueryClient();
@@ -137,6 +146,73 @@ export function UserManagement() {
     },
   });
 
+  // Update user mutation
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, data }: { userId: string; data: typeof editUser }) => {
+      // Update profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          full_name: data.full_name || null,
+          phone: data.phone || null,
+        })
+        .eq("user_id", userId);
+
+      if (profileError) throw profileError;
+
+      // Update role
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .update({ role: data.role })
+        .eq("user_id", userId);
+
+      if (roleError) throw roleError;
+
+      return { success: true };
+    },
+    onSuccess: () => {
+      toast.success("User updated successfully");
+      setIsEditDialogOpen(false);
+      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (error) => {
+      toast.error(`Failed to update user: ${error.message}`);
+    },
+  });
+
+  // Deactivate user mutation
+  const deactivateUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      // Delete user role (soft deactivate - they can't login with any role)
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (roleError) throw roleError;
+
+      // Delete profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (profileError) throw profileError;
+
+      return { success: true };
+    },
+    onSuccess: () => {
+      toast.success("User deactivated successfully");
+      setIsDeactivateDialogOpen(false);
+      setSelectedUser(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (error) => {
+      toast.error(`Failed to deactivate user: ${error.message}`);
+    },
+  });
+
   // Filter users
   const filteredUsers = users?.filter((user) => {
     const matchesSearch =
@@ -165,6 +241,26 @@ export function UserManagement() {
       default:
         return "bg-muted border-border text-muted-foreground";
     }
+  };
+
+  const handleViewUser = (user: User) => {
+    setSelectedUser(user);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setEditUser({
+      full_name: user.full_name || "",
+      phone: user.phone || "",
+      role: user.role,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeactivateUser = (user: User) => {
+    setSelectedUser(user);
+    setIsDeactivateDialogOpen(true);
   };
 
   return (
@@ -369,10 +465,19 @@ export function UserManagement() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>View Profile</DropdownMenuItem>
-                        <DropdownMenuItem>Edit User</DropdownMenuItem>
-                        <DropdownMenuItem>Change Role</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
+                        <DropdownMenuItem onClick={() => handleViewUser(user)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Profile
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit User
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleDeactivateUser(user)}
+                          className="text-destructive"
+                        >
+                          <UserX className="h-4 w-4 mr-2" />
                           Deactivate
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -384,6 +489,188 @@ export function UserManagement() {
           </TableBody>
         </Table>
       </div>
+
+      {/* View User Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="border-2">
+          <DialogHeader>
+            <DialogTitle>User Profile</DialogTitle>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Full Name</Label>
+                  <p className="font-medium">{selectedUser.full_name || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Email</Label>
+                  <p className="font-medium">{selectedUser.email}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Phone</Label>
+                  <p className="font-medium">{selectedUser.phone || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Role</Label>
+                  <p>
+                    <span
+                      className={`inline-flex px-2 py-1 text-xs font-medium border-2 capitalize ${getRoleBadgeClass(
+                        selectedUser.role
+                      )}`}
+                    >
+                      {selectedUser.role}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Joined</Label>
+                  <p className="font-medium">
+                    {format(new Date(selectedUser.created_at), "MMMM d, yyyy")}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">User ID</Label>
+                  <p className="font-mono text-xs">{selectedUser.user_id}</p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="border-2">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update user information and role
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateUserMutation.mutate({
+                  userId: selectedUser.user_id,
+                  data: editUser,
+                });
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  value={selectedUser.email}
+                  disabled
+                  className="border-2 bg-muted"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input
+                  value={editUser.full_name}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, full_name: e.target.value })
+                  }
+                  className="border-2"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input
+                  value={editUser.phone}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, phone: e.target.value })
+                  }
+                  className="border-2"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select
+                  value={editUser.role}
+                  onValueChange={(value: AppRole) =>
+                    setEditUser({ ...editUser, role: value })
+                  }
+                >
+                  <SelectTrigger className="border-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateUserMutation.isPending}>
+                  {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate User Dialog */}
+      <Dialog open={isDeactivateDialogOpen} onOpenChange={setIsDeactivateDialogOpen}>
+        <DialogContent className="border-2">
+          <DialogHeader>
+            <DialogTitle>Deactivate User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to deactivate this user? This action will remove their access to the platform.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="border-2 border-destructive/20 bg-destructive/5 p-4 rounded">
+                <p className="font-medium">{selectedUser.full_name || selectedUser.email}</p>
+                <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                <p className="text-sm mt-2">
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs font-medium border-2 capitalize ${getRoleBadgeClass(
+                      selectedUser.role
+                    )}`}
+                  >
+                    {selectedUser.role}
+                  </span>
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDeactivateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => deactivateUserMutation.mutate(selectedUser.user_id)}
+                  disabled={deactivateUserMutation.isPending}
+                >
+                  {deactivateUserMutation.isPending ? "Deactivating..." : "Deactivate User"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
