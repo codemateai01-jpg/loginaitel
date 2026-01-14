@@ -149,8 +149,10 @@ export default function ClientLeads({ role = "client" }: LeadsPageProps) {
       // Filter based on role
       if (effectiveRole === "client") {
         query = query.eq("client_id", user.id);
+      } else if (effectiveRole === "admin" || effectiveRole === "engineer") {
+        // Admin and engineers only see leads they created (for testing)
+        query = query.eq("uploaded_by", user.id);
       }
-      // For admin and engineer, RLS handles access - no additional filter needed
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
@@ -197,6 +199,9 @@ export default function ClientLeads({ role = "client" }: LeadsPageProps) {
       let statsQuery = supabase.from("leads").select("status");
       if (effectiveRole === "client") {
         statsQuery = statsQuery.eq("client_id", user.id);
+      } else if (effectiveRole === "admin" || effectiveRole === "engineer") {
+        // Admin and engineers only count their own test leads
+        statsQuery = statsQuery.eq("uploaded_by", user.id);
       }
       const { data: allLeads } = await statsQuery;
 

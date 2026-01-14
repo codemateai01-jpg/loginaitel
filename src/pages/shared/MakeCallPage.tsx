@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,13 +19,12 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Loader2, User, Clock, CheckCircle, XCircle, AlertCircle, ShieldAlert } from "lucide-react";
+import { Phone, Loader2, User, Clock, CheckCircle, XCircle, AlertCircle, ShieldAlert, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { makeCall, syncCallStatus } from "@/lib/aitel";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CallProgressTracker } from "@/components/calls/CallProgressTracker";
+import { makeCall } from "@/lib/aitel";
+import { useQuery } from "@tanstack/react-query";
 
 interface MakeCallPageProps {
   role: "admin" | "engineer" | "client";
@@ -52,7 +51,6 @@ interface RecentCall {
   created_at: string;
   agent_id: string;
   duration_seconds?: number;
-  external_call_id?: string;
   lead: {
     name: string | null;
     phone_number: string;
@@ -62,31 +60,18 @@ interface RecentCall {
   } | null;
 }
 
-interface ActiveCall {
-  id: string;
-  status: string;
-  created_at: string;
-  lead_name?: string;
-  phone_number?: string;
-  agent_name?: string;
-  external_call_id?: string;
-  duration_seconds?: number;
-}
-
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
-  initiated: { label: "Initiated", icon: <Phone className="h-4 w-4" />, className: "bg-blue-500/20 text-blue-600" },
+  initiated: { label: "Initiated", icon: <Phone className="h-4 w-4" />, className: "bg-primary/20 text-primary" },
   queued: { label: "Queued", icon: <Clock className="h-4 w-4" />, className: "bg-muted text-muted-foreground" },
-  ringing: { label: "Ringing", icon: <Phone className="h-4 w-4 animate-pulse" />, className: "bg-yellow-500/20 text-yellow-600" },
-  "in-progress": { label: "In Progress", icon: <Phone className="h-4 w-4" />, className: "bg-green-500/20 text-green-600" },
-  completed: { label: "Completed", icon: <CheckCircle className="h-4 w-4" />, className: "bg-green-500/20 text-green-600" },
+  ringing: { label: "Ringing", icon: <Phone className="h-4 w-4" />, className: "bg-chart-4/20 text-chart-4" },
+  "in-progress": { label: "In Progress", icon: <Phone className="h-4 w-4" />, className: "bg-chart-2/20 text-chart-2" },
+  completed: { label: "Completed", icon: <CheckCircle className="h-4 w-4" />, className: "bg-chart-2/20 text-chart-2" },
   failed: { label: "Failed", icon: <XCircle className="h-4 w-4" />, className: "bg-destructive/20 text-destructive" },
-  "no-answer": { label: "No Answer", icon: <AlertCircle className="h-4 w-4" />, className: "bg-yellow-500/20 text-yellow-600" },
-  busy: { label: "Busy", icon: <AlertCircle className="h-4 w-4" />, className: "bg-yellow-500/20 text-yellow-600" },
+  "no-answer": { label: "No Answer", icon: <AlertCircle className="h-4 w-4" />, className: "bg-chart-4/20 text-chart-4" },
+  busy: { label: "Busy", icon: <AlertCircle className="h-4 w-4" />, className: "bg-chart-4/20 text-chart-4" },
   canceled: { label: "Canceled", icon: <XCircle className="h-4 w-4" />, className: "bg-muted text-muted-foreground" },
   "call-disconnected": { label: "Disconnected", icon: <XCircle className="h-4 w-4" />, className: "bg-destructive/20 text-destructive" },
 };
-
-const ACTIVE_STATUSES = ["initiated", "queued", "ringing", "in-progress"];
 
 // Statuses that allow call testing (prompt approved or later)
 const CALL_ALLOWED_STATUSES = [
@@ -99,14 +84,12 @@ const CALL_ALLOWED_STATUSES = [
 export default function MakeCallPage({ role }: MakeCallPageProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [selectedLeadId, setSelectedLeadId] = useState<string>("");
   const [manualPhone, setManualPhone] = useState("");
   const [manualName, setManualName] = useState("");
   const [isCalling, setIsCalling] = useState(false);
   const [callMode, setCallMode] = useState<"lead" | "manual">("lead");
-  const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
   const [hasApprovedPrompts, setHasApprovedPrompts] = useState<boolean | null>(null);
 
   // Fetch agents
@@ -183,7 +166,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
   }, [role, approvedPromptsCheck]);
 
   // Fetch recent calls with agent info
-  const { data: recentCalls = [], refetch: refetchCalls } = useQuery({
+  const { data: recentCalls = [], refetch: refetchCalls, isLoading: loadingCalls } = useQuery({
     queryKey: ["recent-calls", user?.id, role],
     queryFn: async () => {
       let query = supabase
@@ -194,7 +177,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           created_at,
           agent_id,
           duration_seconds,
-          external_call_id,
           lead:leads(name, phone_number)
         `)
         .order("created_at", { ascending: false })
@@ -222,148 +204,6 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     },
     enabled: !!user,
   });
-
-  // Update active calls from recent calls
-  useEffect(() => {
-    const active = recentCalls
-      .filter(call => ACTIVE_STATUSES.includes(call.status))
-      .map(call => ({
-        id: call.id,
-        status: call.status,
-        created_at: call.created_at,
-        lead_name: call.lead?.name || undefined,
-        phone_number: call.lead?.phone_number,
-        agent_name: call.agent?.agent_name,
-        external_call_id: call.external_call_id || undefined,
-        duration_seconds: call.duration_seconds,
-      }));
-    setActiveCalls(active);
-  }, [recentCalls]);
-
-  // Real-time subscription for call updates
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel('call-status-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'calls',
-        },
-        async (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updatedCall = payload.new as {
-              id: string;
-              status: string;
-              created_at: string;
-              lead_id: string;
-              agent_id: string;
-              external_call_id?: string;
-              duration_seconds?: number;
-              client_id: string;
-            };
-
-            // Filter by client_id for clients
-            if (role === "client" && updatedCall.client_id !== user.id) {
-              return;
-            }
-
-            // Fetch lead and agent info for the updated call
-            const [leadResult, agentResult] = await Promise.all([
-              supabase.from("leads").select("name, phone_number").eq("id", updatedCall.lead_id).single(),
-              supabase.from("aitel_agents").select("agent_name").eq("id", updatedCall.agent_id).single()
-            ]);
-
-            const newActiveCall: ActiveCall = {
-              id: updatedCall.id,
-              status: updatedCall.status,
-              created_at: updatedCall.created_at,
-              lead_name: leadResult.data?.name || undefined,
-              phone_number: leadResult.data?.phone_number,
-              agent_name: agentResult.data?.agent_name,
-              external_call_id: updatedCall.external_call_id,
-              duration_seconds: updatedCall.duration_seconds,
-            };
-
-            // Update active calls state
-            setActiveCalls(prev => {
-              const existing = prev.findIndex(c => c.id === updatedCall.id);
-              
-              if (ACTIVE_STATUSES.includes(updatedCall.status)) {
-                if (existing >= 0) {
-                  const updated = [...prev];
-                  updated[existing] = newActiveCall;
-                  return updated;
-                }
-                return [newActiveCall, ...prev];
-              } else {
-                // Remove from active if status is terminal
-                if (existing >= 0) {
-                  return prev.filter(c => c.id !== updatedCall.id);
-                }
-                return prev;
-              }
-            });
-
-            // Show toast for status changes
-            const statusInfo = statusConfig[updatedCall.status];
-            if (statusInfo && payload.eventType === 'UPDATE') {
-              const oldStatus = (payload.old as { status?: string })?.status;
-              if (oldStatus !== updatedCall.status) {
-                toast({
-                  title: `Call ${statusInfo.label}`,
-                  description: `${leadResult.data?.name || leadResult.data?.phone_number || 'Call'} is now ${statusInfo.label.toLowerCase()}`,
-                });
-              }
-            }
-
-            // Refetch recent calls to update the list
-            refetchCalls();
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, role, toast, refetchCalls]);
-
-  // Poll active calls to sync status from API - runs more frequently
-  useEffect(() => {
-    if (activeCalls.length === 0) return;
-
-    const pollInterval = setInterval(async () => {
-      let shouldRefetch = false;
-      
-      for (const call of activeCalls) {
-        if (!call.external_call_id) continue;
-        
-        try {
-          const { data } = await syncCallStatus(call.external_call_id, call.id);
-          console.log("Sync result for call", call.id, ":", data);
-          
-          if (data) {
-            // Always refetch if status changed or call is terminal
-            if (data.status !== call.status || data.is_terminal) {
-              shouldRefetch = true;
-            }
-          }
-        } catch (err) {
-          console.error("Poll error for call", call.id, ":", err);
-        }
-      }
-      
-      if (shouldRefetch) {
-        refetchCalls();
-      }
-    }, 3000); // Poll every 3 seconds for faster updates
-
-    return () => clearInterval(pollInterval);
-  }, [activeCalls, refetchCalls]);
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
@@ -481,17 +321,9 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     }
   };
 
-  const handleCallEnded = useCallback((callId: string) => {
-    setActiveCalls(prev => prev.filter(c => c.id !== callId));
-    refetchCalls();
-  }, [refetchCalls]);
-
   const formatPhoneDisplay = (phone: string) => {
     return phone;
   };
-
-  // Filter completed calls for the history section
-  const completedCalls = recentCalls.filter(c => !ACTIVE_STATUSES.includes(c.status));
 
   return (
     <DashboardLayout role={role}>
@@ -504,28 +336,14 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
               Make Call
             </h1>
             <p className="text-muted-foreground">
-              Initiate phone calls to leads using AI agents
+              Initiate phone calls to leads using AI agents. Check call status in Call History.
             </p>
           </div>
-          {activeCalls.length > 0 && (
-            <Badge variant="default" className="gap-2 animate-pulse">
-              <div className="w-2 h-2 bg-white rounded-full" />
-              {activeCalls.length} Active Call{activeCalls.length > 1 ? 's' : ''}
-            </Badge>
-          )}
+          <Button variant="outline" onClick={() => refetchCalls()} disabled={loadingCalls}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loadingCalls ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
-
-        {/* Active Calls Progress Tracker */}
-        {activeCalls.length > 0 && (
-          <Card>
-            <CardContent className="pt-6">
-              <CallProgressTracker 
-                activeCalls={activeCalls} 
-                onCallEnded={handleCallEnded}
-              />
-            </CardContent>
-          </Card>
-        )}
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Call Configuration */}
@@ -681,19 +499,23 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           {/* Call History */}
           <Card>
             <CardHeader>
-              <CardTitle>Call History</CardTitle>
+              <CardTitle>Recent Calls</CardTitle>
               <CardDescription>
-                Recent completed calls
+                Your recent calls - check Call History for full details
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {completedCalls.length === 0 ? (
+              {loadingCalls ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : recentCalls.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  No completed calls yet
+                  No calls yet
                 </p>
               ) : (
                 <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {completedCalls.map((call) => {
+                  {recentCalls.map((call) => {
                     const status = statusConfig[call.status] || statusConfig.completed;
                     return (
                       <div
