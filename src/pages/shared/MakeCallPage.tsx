@@ -34,7 +34,7 @@ interface MakeCallPageProps {
 interface Agent {
   id: string;
   agent_name: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   client_id: string | null;
   engineer_id?: string | null;
 }
@@ -105,8 +105,8 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     queryKey: ["agents-for-call", user?.id, role],
     queryFn: async () => {
       let query = supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id, client_id")
+        .from("aitel_agents")
+        .select("id, agent_name, external_agent_id, client_id")
         .eq("status", "active");
 
       if (role === "client" && user) {
@@ -172,7 +172,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
       
       const agentIds = [...new Set((data || []).map(c => c.agent_id))];
       const { data: agentsData } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .select("id, agent_name")
         .in("id", agentIds);
       
@@ -237,7 +237,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
             // Fetch lead and agent info for the updated call
             const [leadResult, agentResult] = await Promise.all([
               supabase.from("leads").select("name, phone_number").eq("id", updatedCall.lead_id).single(),
-              supabase.from("bolna_agents").select("agent_name").eq("id", updatedCall.agent_id).single()
+              supabase.from("aitel_agents").select("agent_name").eq("id", updatedCall.agent_id).single()
             ]);
 
             const newActiveCall: ActiveCall = {

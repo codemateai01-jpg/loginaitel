@@ -100,12 +100,12 @@ export default function EngineerAgentsDashboard() {
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
-        .from("aitel_agents" as any)
+        .from("aitel_agents")
         .select("id, agent_name, external_agent_id, status, current_system_prompt, client_id")
         .eq("engineer_id", user.id)
         .order("agent_name");
       if (error) throw error;
-      return data as Agent[];
+      return (data || []) as unknown as Agent[];
     },
     enabled: !!user?.id,
   });

@@ -105,11 +105,11 @@ export default function CreateBatchCampaign() {
 
   // Fetch agents
   const { data: agents } = useQuery({
-    queryKey: ["bolna-agents-for-batch-campaign"],
+    queryKey: ["aitel-agents-for-batch-campaign"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id")
+        .from("aitel_agents")
+        .select("id, agent_name, external_agent_id")
         .eq("status", "active");
       if (error) throw error;
       return data;
@@ -220,7 +220,7 @@ export default function CreateBatchCampaign() {
     }
 
     const agent = agents?.find((a) => a.id === selectedAgent);
-    if (!agent?.bolna_agent_id) {
+    if (!agent?.external_agent_id) {
       toast.error("Invalid agent selected");
       return;
     }
@@ -243,7 +243,7 @@ export default function CreateBatchCampaign() {
     setIsSubmitting(true);
     try {
       const result = await createBatch({
-        agent_id: agent.bolna_agent_id,
+        agent_id: agent.external_agent_id,
         csv_content: finalCsvContent,
         from_phone_number: selectedPhoneNumber || undefined,
       });

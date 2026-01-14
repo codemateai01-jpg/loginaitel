@@ -36,9 +36,9 @@ interface Task {
   demo_edit_count: number | null;
 }
 
-interface BolnaAgentRecord {
+interface AitelAgentRecord {
   id: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   agent_name: string;
   original_system_prompt: string | null;
   current_system_prompt: string | null;
@@ -78,17 +78,17 @@ export default function AgentEditor() {
 
   // Fetch agent details
   const { data: agent, isLoading: loadingAgent } = useQuery({
-    queryKey: ["bolna-agent", task?.bolna_agent_id],
+    queryKey: ["aitel-agent", task?.bolna_agent_id],
     queryFn: async () => {
       if (!task?.bolna_agent_id) return null;
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .select("*")
         .eq("id", task.bolna_agent_id)
         .maybeSingle();
 
       if (error) throw error;
-      return data as BolnaAgentRecord | null;
+      return data as AitelAgentRecord | null;
     },
     enabled: !!task?.bolna_agent_id,
   });
@@ -146,8 +146,8 @@ export default function AgentEditor() {
           .eq("id", task.id);
       }
 
-      // Update in Bolna
-      const { error: bolnaError } = await updateBolnaAgent(agent.bolna_agent_id, {
+      // Update in Aitel
+      const { error: bolnaError } = await updateBolnaAgent(agent.external_agent_id, {
         agent_prompts: {
           task_1: {
             system_prompt: systemPrompt,
@@ -161,13 +161,13 @@ export default function AgentEditor() {
 
       // Update in our database
       const { error: dbError } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .update({ current_system_prompt: systemPrompt })
         .eq("id", agent.id);
 
       if (dbError) throw dbError;
 
-      queryClient.invalidateQueries({ queryKey: ["bolna-agent", task.bolna_agent_id] });
+      queryClient.invalidateQueries({ queryKey: ["aitel-agent", task.bolna_agent_id] });
       queryClient.invalidateQueries({ queryKey: ["task-with-agent", taskId] });
 
       toast({
@@ -467,7 +467,7 @@ export default function AgentEditor() {
             onOpenChange={setDemoDialogOpen}
             taskId={task.id}
             agentId={agent.id}
-            bolnaAgentId={agent.bolna_agent_id}
+            bolnaAgentId={agent.external_agent_id}
             agentName={agent.agent_name}
           />
         )}
