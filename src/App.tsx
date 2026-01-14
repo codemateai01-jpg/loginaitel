@@ -43,6 +43,7 @@ import AdminClients from "./pages/admin/AdminClients";
 import AdminEngineers from "./pages/admin/AdminEngineers";
 import AdminDemoLogs from "./pages/admin/AdminDemoLogs";
 import AdminCredits from "./pages/admin/AdminCredits";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
 
@@ -180,6 +181,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <MakeCallPage role="admin" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/settings"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminSettings />
                 </ProtectedRoute>
               }
             />
