@@ -78,7 +78,7 @@ export function WebhookConfigDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Add this URL to your agent's webhook configuration in Aitel/Bolna dashboard
+              Add this URL to your agent's webhook configuration in your backend dashboard
             </p>
           </div>
 
@@ -97,7 +97,7 @@ export function WebhookConfigDialog({
             <h4 className="font-medium text-sm">Setup Instructions</h4>
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
               <li>Copy the webhook URL above</li>
-              <li>Go to your Aitel/Bolna dashboard</li>
+              <li>Go to your backend dashboard</li>
               <li>Open the agent settings for this agent</li>
               <li>Paste the webhook URL in the "Webhook URL" field</li>
               <li>Save the agent configuration</li>
