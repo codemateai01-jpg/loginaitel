@@ -54,11 +54,22 @@ export function SystemAnalytics() {
         .from("calls")
         .select("*", { count: "exact", head: true });
 
-      // Get connected calls
-      const { count: connectedCount } = await supabase
+      // Get connected calls - count completed calls with duration > 0 as "connected"
+      // This is more reliable than the connected boolean flag
+      const { count: connectedByStatus } = await supabase
+        .from("calls")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "completed")
+        .gt("duration_seconds", 0);
+
+      // Also count calls explicitly marked as connected
+      const { count: connectedByFlag } = await supabase
         .from("calls")
         .select("*", { count: "exact", head: true })
         .eq("connected", true);
+
+      // Use the higher of the two counts (in case data is inconsistent)
+      const connectedCount = Math.max(connectedByStatus || 0, connectedByFlag || 0);
 
       // Get total credits
       const { data: credits } = await supabase
@@ -78,10 +89,10 @@ export function SystemAnalytics() {
         engineers: engineerCount || 0,
         agents: agentCount || 0,
         totalCalls: callCount || 0,
-        connectedCalls: connectedCount || 0,
+        connectedCalls: connectedCount,
         totalCredits,
         completedTasks: completedTasks || 0,
-        connectionRate: callCount ? Math.round(((connectedCount || 0) / callCount) * 100) : 0,
+        connectionRate: callCount ? Math.round((connectedCount / callCount) * 100) : 0,
       };
     },
   });
