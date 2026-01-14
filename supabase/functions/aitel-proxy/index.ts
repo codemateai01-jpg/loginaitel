@@ -39,7 +39,7 @@ serve(async (req) => {
 
     // Get auth token and validate user
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -49,19 +49,23 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace("Bearer ", "");
     
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
+    // Use getClaims for more reliable JWT validation
+    const { data: claimsData, error: authError } = await supabase.auth.getClaims(token);
+    if (authError || !claimsData?.claims) {
+      console.error("Auth error:", authError);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    const userId = claimsData.claims.sub as string;
 
     // Get user role
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     const userRole = roleData?.role || "client";
@@ -253,7 +257,7 @@ serve(async (req) => {
         }
 
         // Verify user can access this lead
-        if (userRole === "client" && lead.client_id !== user.id) {
+        if (userRole === "client" && lead.client_id !== userId) {
           return new Response(
             JSON.stringify({ error: "Forbidden" }),
             { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
