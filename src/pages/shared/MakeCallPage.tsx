@@ -295,25 +295,35 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     };
   }, [user, role, toast, refetchCalls]);
 
-  // Poll active calls to sync status from API
+  // Poll active calls to sync status from API - runs more frequently
   useEffect(() => {
     if (activeCalls.length === 0) return;
 
     const pollInterval = setInterval(async () => {
+      let shouldRefetch = false;
+      
       for (const call of activeCalls) {
         if (!call.external_call_id) continue;
         
         try {
           const { data } = await syncCallStatus(call.external_call_id, call.id);
+          console.log("Sync result for call", call.id, ":", data);
           
-          if (data && data.status !== call.status) {
-            refetchCalls();
+          if (data) {
+            // Always refetch if status changed or call is terminal
+            if (data.status !== call.status || data.is_terminal) {
+              shouldRefetch = true;
+            }
           }
         } catch (err) {
-          // Silent fail for polling
+          console.error("Poll error for call", call.id, ":", err);
         }
       }
-    }, 5000); // Poll every 5 seconds
+      
+      if (shouldRefetch) {
+        refetchCalls();
+      }
+    }, 3000); // Poll every 3 seconds for faster updates
 
     return () => clearInterval(pollInterval);
   }, [activeCalls, refetchCalls]);

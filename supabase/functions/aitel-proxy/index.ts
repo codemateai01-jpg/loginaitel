@@ -450,8 +450,12 @@ serve(async (req) => {
           durationSeconds = Math.round(conversationTime);
         }
         
-        // Determine if connected (45+ seconds)
-        const isConnected = durationSeconds >= 45;
+        // Terminal statuses - these indicate the call has ended
+        const terminalBolnaStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
+        const isTerminal = terminalBolnaStatuses.includes(bolnaStatus);
+        
+        // Determine if connected (45+ seconds) - only for terminal calls
+        const isConnected = isTerminal && durationSeconds >= 45;
         
         // Map Bolna statuses to our DB constraint-valid statuses
         const statusMap: Record<string, string> = {
@@ -473,14 +477,13 @@ serve(async (req) => {
         
         const finalStatus = statusMap[bolnaStatus] || "initiated";
         
-        // Build update object
+        // Build update object - always update status
         const updateData: Record<string, unknown> = {
           status: finalStatus,
         };
         
-        // Terminal statuses for updating duration/connected/ended_at
-        const terminalBolnaStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
-        if (terminalBolnaStatuses.includes(bolnaStatus)) {
+        // For terminal statuses, update all completion data
+        if (isTerminal) {
           updateData.duration_seconds = durationSeconds;
           updateData.connected = isConnected;
           updateData.ended_at = new Date().toISOString();
@@ -493,6 +496,8 @@ serve(async (req) => {
             updateData.transcript = executionData.transcript;
           }
         }
+
+        console.log("Updating call with data:", JSON.stringify(updateData));
 
         // Update call in database
         const { error: updateError } = await supabase
@@ -509,7 +514,7 @@ serve(async (req) => {
         }
 
         // Update lead status for terminal statuses
-        if (terminalBolnaStatuses.includes(bolnaStatus)) {
+        if (isTerminal) {
           const { data: callData } = await supabase
             .from("calls")
             .select("lead_id")
@@ -530,7 +535,8 @@ serve(async (req) => {
             status: finalStatus,
             duration_seconds: durationSeconds,
             connected: isConnected,
-            bolna_status: bolnaStatus
+            aitel_status: bolnaStatus,
+            is_terminal: isTerminal
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );

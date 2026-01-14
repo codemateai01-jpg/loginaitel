@@ -468,6 +468,7 @@ export interface SyncCallStatusResponse {
   duration_seconds: number;
   connected: boolean;
   aitel_status: string;
+  is_terminal: boolean;
 }
 
 export async function syncCallStatus(executionId: string, callId: string): Promise<AitelResponse<SyncCallStatusResponse>> {
