@@ -19,10 +19,11 @@ interface AddLeadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  clientId?: string; // Optional - if not provided, uses user.id
 }
 
-export function AddLeadDialog({ open, onOpenChange, onSuccess }: AddLeadDialogProps) {
-  const { user } = useAuth();
+export function AddLeadDialog({ open, onOpenChange, onSuccess, clientId }: AddLeadDialogProps) {
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -30,6 +31,9 @@ export function AddLeadDialog({ open, onOpenChange, onSuccess }: AddLeadDialogPr
     phone: "",
     email: "",
   });
+
+  // For admin/engineer, we need a client to be specified
+  const effectiveClientId = clientId || (role === "client" ? user?.id : undefined);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,11 +56,14 @@ export function AddLeadDialog({ open, onOpenChange, onSuccess }: AddLeadDialogPr
         ? formData.phone
         : `+91${formData.phone.replace(/\D/g, "")}`;
 
+      // Use effectiveClientId - for clients it's their ID, for admin/engineer it must be provided
+      const targetClientId = effectiveClientId || user.id;
+
       const { error } = await supabase.from("leads").insert([{
         name: formData.name || null,
         phone_number: phone,
         email: formData.email || null,
-        client_id: user.id,
+        client_id: targetClientId,
         uploaded_by: user.id,
         status: "pending",
       }]);

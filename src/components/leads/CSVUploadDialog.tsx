@@ -19,6 +19,7 @@ interface CSVUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  clientId?: string; // Optional - if not provided, uses user.id
 }
 
 interface ParsedLead {
@@ -28,13 +29,16 @@ interface ParsedLead {
   metadata?: Record<string, string>;
 }
 
-export function CSVUploadDialog({ open, onOpenChange, onSuccess }: CSVUploadDialogProps) {
-  const { user } = useAuth();
+export function CSVUploadDialog({ open, onOpenChange, onSuccess, clientId }: CSVUploadDialogProps) {
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<ParsedLead[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // For admin/engineer, we need a client to be specified
+  const effectiveClientId = clientId || (role === "client" ? user?.id : undefined);
 
   const parseCSV = useCallback((content: string): ParsedLead[] => {
     const lines = content.trim().split("\n");
@@ -130,11 +134,12 @@ export function CSVUploadDialog({ open, onOpenChange, onSuccess }: CSVUploadDial
       // Insert leads in batches
       const batchSize = 100;
       let inserted = 0;
+      const targetClientId = effectiveClientId || user.id;
 
       for (let i = 0; i < leads.length; i += batchSize) {
         const batch = leads.slice(i, i + batchSize).map((lead) => ({
           ...lead,
-          client_id: user.id,
+          client_id: targetClientId,
           uploaded_by: user.id,
           status: "pending",
         }));
