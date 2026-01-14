@@ -1044,12 +1044,6 @@ export function CallDetailsDialog({
                           <span className="font-mono">{execution.telephony_data.from_number}</span>
                         </div>
                       )}
-                      {execution.telephony_data.to_number && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">To</span>
-                          <span className="font-mono">{execution.telephony_data.to_number}</span>
-                        </div>
-                      )}
                       {execution.telephony_data.hangup_reason && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Hangup Reason</span>
