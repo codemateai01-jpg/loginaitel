@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -25,6 +27,8 @@ import {
   FileText,
   Phone,
   Trophy,
+  Eye,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,7 +40,7 @@ import { CreateTaskDialog } from "@/components/admin/CreateTaskDialog";
 import { PromptReviewDialog } from "@/components/admin/PromptReviewDialog";
 import { DemoReviewDialog } from "@/components/admin/DemoReviewDialog";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 
 const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   completed: {
@@ -52,7 +56,7 @@ const statusConfig: Record<string, { label: string; icon: any; className: string
   prompt_approved: {
     label: "Demo Phase",
     icon: Phone,
-    className: "bg-chart-2/10 border-chart-2 text-chart-2",
+    className: "bg-chart-5/10 border-chart-5 text-chart-5",
   },
   prompt_submitted: {
     label: "Prompt Review",
@@ -165,11 +169,21 @@ export default function AdminTasks() {
       task.description?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Group tasks by status for tabs
+  const promptReviewTasks = filteredTasks?.filter((t) => t.status === "prompt_submitted") || [];
+  const demoReviewTasks = filteredTasks?.filter((t) => t.status === "demo_submitted") || [];
+  const activeTasks = filteredTasks?.filter((t) => 
+    ["in_progress", "prompt_approved"].includes(t.status)
+  ) || [];
+  const pendingTasks = filteredTasks?.filter((t) => t.status === "pending") || [];
+  const completedTasks = filteredTasks?.filter((t) => t.status === "completed") || [];
+  const rejectedTasks = filteredTasks?.filter((t) => t.status === "rejected") || [];
+
   const stats = {
     total: tasks?.length || 0,
-    promptReview: tasks?.filter((t) => t.status === "prompt_submitted").length || 0,
-    demoReview: tasks?.filter((t) => t.status === "demo_submitted").length || 0,
-    completed: tasks?.filter((t) => t.status === "completed").length || 0,
+    promptReview: promptReviewTasks.length,
+    demoReview: demoReviewTasks.length,
+    completed: completedTasks.length,
   };
 
   const handleEdit = (task: any) => {
@@ -191,6 +205,122 @@ export default function AdminTasks() {
     setReviewingTask(task);
     setDemoReviewOpen(true);
   };
+
+  const renderTaskRow = (task: any) => {
+    const status = statusConfig[task.status] || statusConfig.pending;
+    const StatusIcon = status.icon;
+    const isPromptReview = task.status === "prompt_submitted";
+    const isDemoReview = task.status === "demo_submitted";
+
+    return (
+      <TableRow key={task.id} className="border-b-2 border-border">
+        <TableCell>
+          <div className="space-y-1">
+            <p className="font-medium">{task.title}</p>
+            {task.description && (
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                {task.description}
+              </p>
+            )}
+          </div>
+        </TableCell>
+        <TableCell>
+          {task.bolna_agents ? (
+            <span className="inline-flex items-center gap-1 text-sm">
+              <Bot className="h-3 w-3" />
+              {task.bolna_agents.agent_name}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">No agent</span>
+          )}
+        </TableCell>
+        <TableCell>{getEngineerName(task.assigned_to)}</TableCell>
+        <TableCell>
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border-2 ${status.className}`}
+          >
+            <StatusIcon className="h-3 w-3" />
+            {status.label}
+          </span>
+        </TableCell>
+        <TableCell>
+          {task.final_score !== null ? (
+            <span className="flex items-center gap-1 font-mono">
+              <Trophy className="h-3 w-3 text-chart-4" />
+              {task.final_score}/100
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </TableCell>
+        <TableCell className="text-right font-mono">{task.points}</TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1">
+            {isPromptReview && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-chart-3 text-chart-3 hover:bg-chart-3 hover:text-background"
+                onClick={() => handlePromptReview(task)}
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                Review
+              </Button>
+            )}
+            {isDemoReview && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-chart-4 text-chart-4 hover:bg-chart-4 hover:text-background"
+                onClick={() => handleDemoReview(task)}
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                Review
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {isPromptReview && (
+                  <DropdownMenuItem onClick={() => handlePromptReview(task)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Review Prompt
+                  </DropdownMenuItem>
+                )}
+                {isDemoReview && (
+                  <DropdownMenuItem onClick={() => handleDemoReview(task)}>
+                    <Phone className="h-4 w-4 mr-2" />
+                    Review Demo
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => handleEdit(task)}>
+                  Edit Task
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => deleteMutation.mutate(task.id)}
+                >
+                  Delete Task
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  };
+
+  const renderEmptyState = (message: string) => (
+    <TableRow>
+      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+        {message}
+      </TableCell>
+    </TableRow>
+  );
 
   return (
     <DashboardLayout role="admin">
@@ -215,19 +345,69 @@ export default function AdminTasks() {
             <p className="text-2xl font-bold">{stats.total}</p>
             <p className="text-sm text-muted-foreground">Total Tasks</p>
           </div>
-          <div className="border-2 border-border bg-card p-4 text-center">
+          <div className="border-2 border-chart-3 bg-chart-3/5 p-4 text-center">
             <p className="text-2xl font-bold text-chart-3">{stats.promptReview}</p>
             <p className="text-sm text-muted-foreground">Prompt Review</p>
           </div>
-          <div className="border-2 border-border bg-card p-4 text-center">
+          <div className="border-2 border-chart-4 bg-chart-4/5 p-4 text-center">
             <p className="text-2xl font-bold text-chart-4">{stats.demoReview}</p>
             <p className="text-sm text-muted-foreground">Demo Review</p>
           </div>
-          <div className="border-2 border-border bg-card p-4 text-center">
+          <div className="border-2 border-chart-2 bg-chart-2/5 p-4 text-center">
             <p className="text-2xl font-bold text-chart-2">{stats.completed}</p>
             <p className="text-sm text-muted-foreground">Completed</p>
           </div>
         </div>
+
+        {/* Urgent Review Alerts */}
+        {(promptReviewTasks.length > 0 || demoReviewTasks.length > 0) && (
+          <div className="space-y-3">
+            {promptReviewTasks.length > 0 && (
+              <div className="border-2 border-chart-3 bg-chart-3/10 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-chart-3" />
+                  <div>
+                    <p className="font-bold text-chart-3">
+                      {promptReviewTasks.length} Prompt{promptReviewTasks.length > 1 ? 's' : ''} Awaiting Review
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Engineers are waiting for prompt approval to proceed
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-chart-3 text-chart-3 hover:bg-chart-3 hover:text-background"
+                  onClick={() => promptReviewTasks[0] && handlePromptReview(promptReviewTasks[0])}
+                >
+                  Review Now
+                </Button>
+              </div>
+            )}
+            {demoReviewTasks.length > 0 && (
+              <div className="border-2 border-chart-4 bg-chart-4/10 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Phone className="h-5 w-5 text-chart-4" />
+                  <div>
+                    <p className="font-bold text-chart-4">
+                      {demoReviewTasks.length} Demo{demoReviewTasks.length > 1 ? 's' : ''} Awaiting Review
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Engineers are waiting for final approval to complete tasks
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-chart-4 text-chart-4 hover:bg-chart-4 hover:text-background"
+                  onClick={() => demoReviewTasks[0] && handleDemoReview(demoReviewTasks[0])}
+                >
+                  Review Now
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Search */}
         <div className="flex flex-col sm:flex-row gap-4">
@@ -242,112 +422,237 @@ export default function AdminTasks() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="border-2 border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b-2 border-border hover:bg-transparent">
-                <TableHead className="font-bold">Task</TableHead>
-                <TableHead className="font-bold">Agent</TableHead>
-                <TableHead className="font-bold">Engineer</TableHead>
-                <TableHead className="font-bold">Status</TableHead>
-                <TableHead className="font-bold">Score</TableHead>
-                <TableHead className="font-bold text-right">Points</TableHead>
-                <TableHead className="font-bold w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    Loading tasks...
-                  </TableCell>
-                </TableRow>
-              ) : filteredTasks?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No tasks found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredTasks?.map((task) => {
-                  const status = statusConfig[task.status] || statusConfig.pending;
-                  const StatusIcon = status.icon;
-                  const isPromptReview = task.status === "prompt_submitted";
-                  const isDemoReview = task.status === "demo_submitted";
+        {/* Tabs for different task statuses */}
+        <Tabs defaultValue="needs-review" className="space-y-4">
+          <TabsList className="grid grid-cols-6 w-full max-w-4xl">
+            <TabsTrigger value="needs-review" className="flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              <span className="hidden sm:inline">Needs Review</span>
+              {(promptReviewTasks.length + demoReviewTasks.length) > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs">
+                  {promptReviewTasks.length + demoReviewTasks.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="active" className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span className="hidden sm:inline">Active</span>
+              {activeTasks.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs">{activeTasks.length}</Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="flex items-center gap-1">
+              <ClipboardList className="h-3 w-3" />
+              <span className="hidden sm:inline">Pending</span>
+              {pendingTasks.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs">{pendingTasks.length}</Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="flex items-center gap-1">
+              <XCircle className="h-3 w-3" />
+              <span className="hidden sm:inline">Rejected</span>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              <span className="hidden sm:inline">Completed</span>
+            </TabsTrigger>
+            <TabsTrigger value="all" className="flex items-center gap-1">
+              All
+            </TabsTrigger>
+          </TabsList>
 
-                  return (
-                    <TableRow key={task.id} className="border-b-2 border-border">
-                      <TableCell className="font-medium">{task.title}</TableCell>
-                      <TableCell>
-                        {task.bolna_agents ? (
-                          <span className="inline-flex items-center gap-1 text-sm">
-                            <Bot className="h-3 w-3" />
-                            {task.bolna_agents.agent_name}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">No agent</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{getEngineerName(task.assigned_to)}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border-2 ${status.className}`}
-                        >
-                          <StatusIcon className="h-3 w-3" />
-                          {status.label}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {task.final_score !== null ? (
-                          <span className="flex items-center gap-1 font-mono">
-                            <Trophy className="h-3 w-3 text-chart-4" />
-                            {task.final_score}/100
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {task.points}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {isPromptReview && (
-                              <DropdownMenuItem onClick={() => handlePromptReview(task)}>
-                                Review Prompt
-                              </DropdownMenuItem>
-                            )}
-                            {isDemoReview && (
-                              <DropdownMenuItem onClick={() => handleDemoReview(task)}>
-                                Review Demo
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => handleEdit(task)}>
-                              Edit Task
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => deleteMutation.mutate(task.id)}
-                            >
-                              Delete Task
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+          {/* Needs Review Tab */}
+          <TabsContent value="needs-review">
+            <div className="border-2 border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Task</TableHead>
+                    <TableHead className="font-bold">Agent</TableHead>
+                    <TableHead className="font-bold">Engineer</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold">Score</TableHead>
+                    <TableHead className="font-bold text-right">Points</TableHead>
+                    <TableHead className="font-bold w-32">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                  ) : [...promptReviewTasks, ...demoReviewTasks].length === 0 ? (
+                    renderEmptyState("No tasks need review")
+                  ) : (
+                    [...promptReviewTasks, ...demoReviewTasks].map(renderTaskRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Active Tab */}
+          <TabsContent value="active">
+            <div className="border-2 border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Task</TableHead>
+                    <TableHead className="font-bold">Agent</TableHead>
+                    <TableHead className="font-bold">Engineer</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold">Score</TableHead>
+                    <TableHead className="font-bold text-right">Points</TableHead>
+                    <TableHead className="font-bold w-32">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : activeTasks.length === 0 ? (
+                    renderEmptyState("No active tasks")
+                  ) : (
+                    activeTasks.map(renderTaskRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Pending Tab */}
+          <TabsContent value="pending">
+            <div className="border-2 border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Task</TableHead>
+                    <TableHead className="font-bold">Agent</TableHead>
+                    <TableHead className="font-bold">Engineer</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold">Score</TableHead>
+                    <TableHead className="font-bold text-right">Points</TableHead>
+                    <TableHead className="font-bold w-32">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : pendingTasks.length === 0 ? (
+                    renderEmptyState("No pending tasks")
+                  ) : (
+                    pendingTasks.map(renderTaskRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Rejected Tab */}
+          <TabsContent value="rejected">
+            <div className="border-2 border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Task</TableHead>
+                    <TableHead className="font-bold">Agent</TableHead>
+                    <TableHead className="font-bold">Engineer</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold">Score</TableHead>
+                    <TableHead className="font-bold text-right">Points</TableHead>
+                    <TableHead className="font-bold w-32">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : rejectedTasks.length === 0 ? (
+                    renderEmptyState("No rejected tasks")
+                  ) : (
+                    rejectedTasks.map(renderTaskRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* Completed Tab */}
+          <TabsContent value="completed">
+            <div className="border-2 border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Task</TableHead>
+                    <TableHead className="font-bold">Agent</TableHead>
+                    <TableHead className="font-bold">Engineer</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold">Score</TableHead>
+                    <TableHead className="font-bold text-right">Points</TableHead>
+                    <TableHead className="font-bold w-32">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : completedTasks.length === 0 ? (
+                    renderEmptyState("No completed tasks")
+                  ) : (
+                    completedTasks.map(renderTaskRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          {/* All Tab */}
+          <TabsContent value="all">
+            <div className="border-2 border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Task</TableHead>
+                    <TableHead className="font-bold">Agent</TableHead>
+                    <TableHead className="font-bold">Engineer</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold">Score</TableHead>
+                    <TableHead className="font-bold text-right">Points</TableHead>
+                    <TableHead className="font-bold w-32">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredTasks?.length === 0 ? (
+                    renderEmptyState("No tasks found")
+                  ) : (
+                    filteredTasks?.map(renderTaskRow)
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <CreateTaskDialog
