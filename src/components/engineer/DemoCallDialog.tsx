@@ -61,9 +61,9 @@ export function DemoCallDialog({
 
       if (insertError) throw insertError;
 
-      // Make the actual call via Bolna
+      // Make the actual call via Aitel
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bolna-proxy?action=make-call`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy?action=make-call`,
         {
           method: "POST",
           headers: {

@@ -60,7 +60,7 @@ export function BolnaApiTestPanel() {
     const startTime = Date.now();
     
     const queryParams = new URLSearchParams({ action, ...params });
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bolna-proxy?${queryParams}`;
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy?${queryParams}`;
     
     const { data: { session } } = await supabase.auth.getSession();
     
