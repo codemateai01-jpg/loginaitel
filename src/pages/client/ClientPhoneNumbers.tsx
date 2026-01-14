@@ -46,11 +46,11 @@ export default function ClientPhoneNumbers() {
 
   // Fetch agents for mapping
   const { data: agents } = useQuery({
-    queryKey: ["bolna-agents"],
+    queryKey: ["aitel-agents"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("bolna_agent_id, agent_name");
+        .from("aitel_agents")
+        .select("external_agent_id, agent_name");
       if (error) throw error;
       return data || [];
     },
@@ -58,7 +58,7 @@ export default function ClientPhoneNumbers() {
 
   const getAgentName = (agentId?: string) => {
     if (!agentId || !agents) return "Unassigned";
-    const agent = agents.find((a) => a.bolna_agent_id === agentId);
+    const agent = agents.find((a) => a.external_agent_id === agentId);
     return agent?.agent_name || "Unknown Agent";
   };
 

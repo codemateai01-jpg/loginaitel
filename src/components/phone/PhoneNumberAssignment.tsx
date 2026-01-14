@@ -67,7 +67,7 @@ export function PhoneNumberAssignment({
     queryKey: ["agents-for-phone-assignment", filterByClientId],
     queryFn: async () => {
       let query = supabase
-        .from("aitel_agents" as any)
+        .from("aitel_agents")
         .select("id, external_agent_id, agent_name, client_id")
         .eq("status", "active");
 
@@ -77,7 +77,7 @@ export function PhoneNumberAssignment({
 
       const { data, error } = await query.order("agent_name");
       if (error) throw error;
-      return (data || []) as Agent[];
+      return (data || []) as unknown as Agent[];
     },
   });
 

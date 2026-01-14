@@ -49,7 +49,7 @@ interface DemoCall {
   tasks?: {
     title: string;
   };
-  bolna_agents?: {
+  aitel_agents?: {
     agent_name: string;
   };
 }
@@ -74,7 +74,7 @@ export default function DemoCallsPage() {
         .select(`
           *,
           tasks (title),
-          bolna_agents (agent_name)
+          aitel_agents (agent_name)
         `)
         .eq("engineer_id", user.id)
         .order("created_at", { ascending: false });
@@ -163,7 +163,7 @@ export default function DemoCallsPage() {
     const matchesSearch =
       call.phone_number.includes(search) ||
       call.tasks?.title?.toLowerCase().includes(search.toLowerCase()) ||
-      call.bolna_agents?.agent_name?.toLowerCase().includes(search.toLowerCase());
+      call.aitel_agents?.agent_name?.toLowerCase().includes(search.toLowerCase());
     const matchesTask = filterTaskId === "all" || call.task_id === filterTaskId;
     return matchesSearch && matchesTask;
   });
@@ -280,7 +280,7 @@ export default function DemoCallsPage() {
                     <TableCell>
                       <span className="flex items-center gap-1">
                         <Bot className="h-3 w-3" />
-                        {call.bolna_agents?.agent_name || "Unknown"}
+                        {call.aitel_agents?.agent_name || "Unknown"}
                       </span>
                     </TableCell>
                     <TableCell>{getStatusBadge(call.status)}</TableCell>

@@ -24,9 +24,9 @@ import {
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-interface BolnaAgentRecord {
+interface AitelAgentRecord {
   id: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   agent_name: string;
   original_system_prompt: string | null;
   current_system_prompt: string | null;
@@ -46,17 +46,17 @@ export default function WebCallTest() {
 
   // Fetch agent
   const { data: agent, isLoading } = useQuery({
-    queryKey: ["bolna-agent-test", agentId],
+    queryKey: ["aitel-agent-test", agentId],
     queryFn: async () => {
       if (!agentId) return null;
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .select("*")
         .eq("id", agentId)
         .maybeSingle();
 
       if (error) throw error;
-      return data as BolnaAgentRecord | null;
+      return data as AitelAgentRecord | null;
     },
     enabled: !!agentId,
   });

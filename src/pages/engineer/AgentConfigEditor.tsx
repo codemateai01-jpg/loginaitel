@@ -30,7 +30,7 @@ import {
 interface Agent {
   id: string;
   agent_name: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   status: string;
   current_system_prompt: string | null;
   original_system_prompt: string | null;
@@ -56,8 +56,8 @@ export default function AgentConfigEditor() {
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id, status, current_system_prompt, original_system_prompt, agent_config, client_id")
+        .from("aitel_agents")
+        .select("id, agent_name, external_agent_id, status, current_system_prompt, original_system_prompt, agent_config, client_id")
         .eq("engineer_id", user.id)
         .order("agent_name");
       if (error) throw error;
@@ -89,9 +89,9 @@ export default function AgentConfigEditor() {
     mutationFn: async () => {
       if (!selectedAgentId || !selectedAgent) throw new Error("No agent selected");
 
-      // First, update in Bolna API (two-way sync)
+      // First, update in Aitel API (two-way sync)
       const bolnaResponse = await updateBolnaAgentPrompt(
-        selectedAgent.bolna_agent_id,
+        selectedAgent.external_agent_id,
         systemPrompt
       );
 
@@ -101,7 +101,7 @@ export default function AgentConfigEditor() {
 
       // Then update in local database
       const { error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .update({
           current_system_prompt: systemPrompt,
           updated_at: new Date().toISOString(),

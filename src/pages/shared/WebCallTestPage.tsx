@@ -27,9 +27,9 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-interface BolnaAgentRecord {
+interface AitelAgentRecord {
   id: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   agent_name: string;
   original_system_prompt: string | null;
   current_system_prompt: string | null;
@@ -52,7 +52,7 @@ export default function WebCallTestPage({ role }: WebCallTestPageProps) {
   const { data: agents, isLoading } = useQuery({
     queryKey: ["agents-for-testing", role, user?.id],
     queryFn: async () => {
-      let query = supabase.from("bolna_agents").select("*");
+      let query = supabase.from("aitel_agents").select("*");
 
       // For clients, only show their assigned agents
       if (role === "client" && user?.id) {
@@ -62,7 +62,7 @@ export default function WebCallTestPage({ role }: WebCallTestPageProps) {
       const { data, error } = await query.order("agent_name");
 
       if (error) throw error;
-      return data as BolnaAgentRecord[];
+      return data as AitelAgentRecord[];
     },
     enabled: !!user,
   });
