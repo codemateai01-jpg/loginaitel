@@ -9,8 +9,8 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Bolna webhook payload follows the Agent Execution response structure
-interface BolnaWebhookPayload {
+// Aitel/Bolna webhook payload follows the Agent Execution response structure
+interface AitelWebhookPayload {
   id: number | string;
   agent_id: string;
   batch_id?: string;
@@ -47,11 +47,11 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const payload: BolnaWebhookPayload = await req.json();
+    const payload: AitelWebhookPayload = await req.json();
 
-    console.log("Bolna webhook received:", JSON.stringify(payload, null, 2));
+    console.log("Aitel webhook received:", JSON.stringify(payload, null, 2));
 
-    // Extract execution ID - Bolna uses numeric IDs
+    // Extract execution ID
     const executionId = String(payload.id);
     const status = payload.status?.toLowerCase().replace(/-/g, "_");
     
@@ -85,7 +85,6 @@ serve(async (req) => {
       }
       
       console.log("Call not found for execution ID:", executionId);
-      // Still return success since webhook was received properly
       return new Response(
         JSON.stringify({ success: true, message: "Call not found, webhook acknowledged" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -107,7 +106,7 @@ serve(async (req) => {
 async function processCallUpdate(
   supabase: any,
   call: any,
-  payload: BolnaWebhookPayload,
+  payload: AitelWebhookPayload,
   status: string
 ) {
   console.log(`Processing call ${call.id} with status: ${status}`);
@@ -117,7 +116,7 @@ async function processCallUpdate(
   const recordingUrl = payload.telephony_data?.recording_url || null;
   const transcript = payload.transcript || null;
 
-  // Map Bolna statuses to our internal statuses
+  // Map statuses to our internal statuses
   let mappedStatus = call.status;
   let isCompleted = false;
   
@@ -173,7 +172,7 @@ async function processCallUpdate(
     status: mappedStatus,
     metadata: {
       ...((call.metadata as Record<string, unknown>) || {}),
-      bolna_status: payload.status,
+      aitel_status: payload.status,
       error_message: payload.error_message,
       answered_by_voicemail: payload.answered_by_voice_mail,
       usage_breakdown: payload.usage_breakdown,
