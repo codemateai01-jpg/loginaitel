@@ -185,6 +185,14 @@ const App = () => (
               }
             />
             <Route
+              path="/admin/leads"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <ClientLeads role="admin" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/settings"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
@@ -273,10 +281,26 @@ const App = () => (
               }
             />
             <Route
+              path="/engineer/leads"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <ClientLeads role="engineer" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/engineer/make-call"
               element={
                 <ProtectedRoute allowedRoles={["engineer"]}>
                   <MakeCallPage role="engineer" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/engineer/web-call"
+              element={
+                <ProtectedRoute allowedRoles={["engineer"]}>
+                  <WebCallTestPage role="engineer" />
                 </ProtectedRoute>
               }
             />

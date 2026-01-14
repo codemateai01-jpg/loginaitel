@@ -38,6 +38,10 @@ import { AddLeadDialog } from "@/components/leads/AddLeadDialog";
 import { TriggerCallDialog } from "@/components/leads/TriggerCallDialog";
 import { LeadActions } from "@/components/leads/LeadActions";
 
+interface LeadsPageProps {
+  role?: "admin" | "engineer" | "client";
+}
+
 interface Lead {
   id: string;
   name: string | null;
@@ -47,6 +51,7 @@ interface Lead {
   created_at: string;
   updated_at: string;
   metadata: unknown;
+  client_id: string;
 }
 
 interface Agent {
@@ -93,8 +98,9 @@ const statusConfig: Record<string, { label: string; icon: React.ElementType; cla
   },
 };
 
-export default function ClientLeads() {
-  const { user } = useAuth();
+export default function ClientLeads({ role = "client" }: LeadsPageProps) {
+  const { user, role: userRole } = useAuth();
+  const effectiveRole = role || userRole || "client";
   const { toast } = useToast();
 
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -123,12 +129,17 @@ export default function ClientLeads() {
 
     setIsLoading(true);
     try {
-      // Fetch leads
+      // Fetch leads - query differs based on role
       let query = supabase
         .from("leads")
         .select("*")
-        .eq("client_id", user.id)
         .order("created_at", { ascending: false });
+
+      // Filter based on role
+      if (effectiveRole === "client") {
+        query = query.eq("client_id", user.id);
+      }
+      // For admin and engineer, RLS handles access - no additional filter needed
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
@@ -171,11 +182,12 @@ export default function ClientLeads() {
         }
       }
 
-      // Fetch stats
-      const { data: allLeads } = await supabase
-        .from("leads")
-        .select("status")
-        .eq("client_id", user.id);
+      // Fetch stats - based on role
+      let statsQuery = supabase.from("leads").select("status");
+      if (effectiveRole === "client") {
+        statsQuery = statsQuery.eq("client_id", user.id);
+      }
+      const { data: allLeads } = await statsQuery;
 
       if (allLeads) {
         setStats({
@@ -195,24 +207,33 @@ export default function ClientLeads() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, statusFilter, searchQuery, toast]);
+  }, [user, effectiveRole, statusFilter, searchQuery, toast]);
 
   const fetchAgents = useCallback(async () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("aitel_agents")
-        .select("id, agent_name")
-        .eq("client_id", user.id)
+        .select("id, agent_name, client_id")
         .eq("status", "active");
+
+      // Filter based on role
+      if (effectiveRole === "client") {
+        query = query.eq("client_id", user.id);
+      } else if (effectiveRole === "engineer") {
+        query = query.eq("engineer_id", user.id);
+      }
+      // Admin can see all agents
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setAgents(data?.map(a => ({ id: a.id, name: a.agent_name })) || []);
     } catch (err) {
       console.error("Fetch agents error:", err);
     }
-  }, [user]);
+  }, [user, effectiveRole]);
 
   useEffect(() => {
     fetchLeads();
@@ -277,7 +298,7 @@ export default function ClientLeads() {
   };
 
   return (
-    <DashboardLayout role="client">
+    <DashboardLayout role={effectiveRole}>
       <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
