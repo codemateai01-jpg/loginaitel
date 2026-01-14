@@ -37,10 +37,12 @@ import {
   Eye,
   Loader2,
   Wrench,
+  Webhook,
 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { AgentEngineerAssignment } from "@/components/admin/AgentEngineerAssignment";
+import { WebhookConfigDialog } from "@/components/admin/WebhookConfigDialog";
 
 interface BolnaAgentFromAPI {
   id: string;
@@ -81,6 +83,7 @@ export default function AdminAgents() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [engineerAssignOpen, setEngineerAssignOpen] = useState(false);
+  const [webhookAgent, setWebhookAgent] = useState<SyncedAgent | null>(null);
 
   // Fetch synced agents from our database
   const { data: syncedAgents, isLoading: loadingAgents } = useQuery({
@@ -362,9 +365,17 @@ export default function AdminAgents() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setWebhookAgent(agent)}
+                          title="Webhook Config"
+                        >
+                          <Webhook className="h-4 w-4" />
+                        </Button>
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" title="View Prompt">
                               <Eye className="h-4 w-4" />
                             </Button>
                           </DialogTrigger>
@@ -475,6 +486,16 @@ export default function AdminAgents() {
           open={engineerAssignOpen}
           onOpenChange={setEngineerAssignOpen}
         />
+
+        {/* Webhook Config Dialog */}
+        {webhookAgent && (
+          <WebhookConfigDialog
+            open={!!webhookAgent}
+            onOpenChange={(open) => !open && setWebhookAgent(null)}
+            agentId={webhookAgent.external_agent_id}
+            agentName={webhookAgent.agent_name}
+          />
+        )}
       </div>
     </DashboardLayout>
   );
