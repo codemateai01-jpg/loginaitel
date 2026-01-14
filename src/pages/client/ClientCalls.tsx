@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { useRealtimeCalls } from "@/hooks/useRealtimeCalls";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -112,9 +113,18 @@ export default function ClientCalls() {
   const [selectedCall, setSelectedCall] = useState<Call | null>(null);
   const [dateRange, setDateRange] = useState("7");
 
+  // Query key for calls - memoized to keep stable reference
+  const callsQueryKey = useMemo(
+    () => ["client-calls", user?.id, dateRange],
+    [user?.id, dateRange]
+  );
+
+  // Subscribe to realtime updates
+  useRealtimeCalls({ queryKey: callsQueryKey, clientId: user?.id });
+
   // Fetch calls
   const { data: calls, isLoading } = useQuery({
-    queryKey: ["client-calls", user?.id, dateRange],
+    queryKey: callsQueryKey,
     enabled: !!user?.id,
     queryFn: async () => {
       const startDate = subDays(new Date(), parseInt(dateRange)).toISOString();
