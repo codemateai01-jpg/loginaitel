@@ -103,8 +103,8 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
       {/* Mobile header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b-2 border-border px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Mic className="h-6 w-6" />
-          <span className="font-bold">Aitel</span>
+          <img src="/logo.jpg" alt="Aitel" className="h-6 w-6 rounded" />
+          <span className="font-bold">Telecalling Console</span>
         </div>
         <Button
           variant="ghost"
@@ -126,9 +126,9 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
           {/* Logo */}
           <div className="p-6 border-b-2 border-border">
             <Link to="/" className="flex items-center gap-2">
-              <Mic className="h-8 w-8" />
+              <img src="/logo.jpg" alt="Aitel" className="h-8 w-8 rounded" />
               <div>
-                <span className="font-bold text-lg block">Aitel</span>
+                <span className="font-bold text-lg block">Telecalling Console</span>
                 <span className="text-xs text-muted-foreground">{roleLabel}</span>
               </div>
             </Link>

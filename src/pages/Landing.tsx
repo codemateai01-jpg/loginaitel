@@ -58,8 +58,8 @@ export default function Landing() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b-2 border-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <Mic className="h-8 w-8" />
-            <span className="font-bold text-xl">Aitel</span>
+            <img src="/logo.jpg" alt="Aitel" className="h-8 w-8 rounded" />
+            <span className="font-bold text-xl">Telecalling Console</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link to="/login">
