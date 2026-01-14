@@ -14,15 +14,15 @@ export type Database = {
   }
   public: {
     Tables: {
-      bolna_agents: {
+      aitel_agents: {
         Row: {
           agent_config: Json | null
           agent_name: string
-          bolna_agent_id: string
           client_id: string | null
           created_at: string
           current_system_prompt: string | null
           engineer_id: string | null
+          external_agent_id: string
           id: string
           original_system_prompt: string | null
           status: string
@@ -32,11 +32,11 @@ export type Database = {
         Insert: {
           agent_config?: Json | null
           agent_name: string
-          bolna_agent_id: string
           client_id?: string | null
           created_at?: string
           current_system_prompt?: string | null
           engineer_id?: string | null
+          external_agent_id: string
           id?: string
           original_system_prompt?: string | null
           status?: string
@@ -46,11 +46,11 @@ export type Database = {
         Update: {
           agent_config?: Json | null
           agent_name?: string
-          bolna_agent_id?: string
           client_id?: string | null
           created_at?: string
           current_system_prompt?: string | null
           engineer_id?: string | null
+          external_agent_id?: string
           id?: string
           original_system_prompt?: string | null
           status?: string
@@ -259,7 +259,7 @@ export type Database = {
             foreignKeyName: "demo_calls_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
-            referencedRelation: "bolna_agents"
+            referencedRelation: "aitel_agents"
             referencedColumns: ["id"]
           },
           {
@@ -445,7 +445,7 @@ export type Database = {
             foreignKeyName: "prompt_edit_history_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
-            referencedRelation: "bolna_agents"
+            referencedRelation: "aitel_agents"
             referencedColumns: ["id"]
           },
           {
@@ -541,7 +541,7 @@ export type Database = {
             foreignKeyName: "tasks_bolna_agent_id_fkey"
             columns: ["bolna_agent_id"]
             isOneToOne: false
-            referencedRelation: "bolna_agents"
+            referencedRelation: "aitel_agents"
             referencedColumns: ["id"]
           },
         ]

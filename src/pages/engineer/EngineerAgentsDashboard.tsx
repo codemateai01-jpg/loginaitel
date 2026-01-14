@@ -32,7 +32,7 @@ import {
 interface Agent {
   id: string;
   agent_name: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   status: string;
   current_system_prompt: string | null;
   client_id: string | null;
@@ -100,8 +100,8 @@ export default function EngineerAgentsDashboard() {
     queryFn: async () => {
       if (!user?.id) return [];
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id, status, current_system_prompt, client_id")
+        .from("aitel_agents" as any)
+        .select("id, agent_name, external_agent_id, status, current_system_prompt, client_id")
         .eq("engineer_id", user.id)
         .order("agent_name");
       if (error) throw error;

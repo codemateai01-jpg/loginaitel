@@ -65,11 +65,11 @@ export default function ClientBatches() {
     queryKey: ["bolna-agents-for-batch-list"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id")
+        .from("aitel_agents" as any)
+        .select("id, agent_name, external_agent_id")
         .eq("status", "active");
       if (error) throw error;
-      return data;
+      return data as any[];
     },
   });
 
@@ -81,8 +81,8 @@ export default function ClientBatches() {
         // Fetch batches for all agents
         const allBatches: Batch[] = [];
         for (const agent of agents || []) {
-          if (agent.bolna_agent_id) {
-            const result = await listBatches(agent.bolna_agent_id);
+          if (agent.external_agent_id) {
+            const result = await listBatches(agent.external_agent_id);
             if (result.data) {
               allBatches.push(...result.data);
             }
@@ -92,9 +92,9 @@ export default function ClientBatches() {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
       } else {
-        const agent = agents.find(a => a.id === selectedAgent);
-        if (!agent?.bolna_agent_id) return [];
-        const result = await listBatches(agent.bolna_agent_id);
+        const agent = agents.find((a: any) => a.id === selectedAgent);
+        if (!agent?.external_agent_id) return [];
+        const result = await listBatches(agent.external_agent_id);
         if (result.error) throw new Error(result.error);
         return result.data || [];
       }

@@ -41,11 +41,11 @@ export function CreateBatchDialog({ open, onOpenChange, onSuccess }: CreateBatch
     queryKey: ["bolna-agents-for-batch"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id")
+        .from("aitel_agents" as any)
+        .select("id, agent_name, external_agent_id")
         .eq("status", "active");
       if (error) throw error;
-      return data;
+      return data as any[];
     },
   });
 
@@ -92,8 +92,8 @@ export function CreateBatchDialog({ open, onOpenChange, onSuccess }: CreateBatch
       return;
     }
 
-    const agent = agents?.find((a) => a.id === selectedAgent);
-    if (!agent?.bolna_agent_id) {
+    const agent = agents?.find((a: any) => a.id === selectedAgent);
+    if (!agent?.external_agent_id) {
       toast.error("Invalid agent selected");
       return;
     }
@@ -101,7 +101,7 @@ export function CreateBatchDialog({ open, onOpenChange, onSuccess }: CreateBatch
     setIsSubmitting(true);
     try {
       const result = await createBatch({
-        agent_id: agent.bolna_agent_id,
+        agent_id: agent.external_agent_id,
         csv_content: csvContent,
         from_phone_number: selectedPhoneNumber || undefined,
       });

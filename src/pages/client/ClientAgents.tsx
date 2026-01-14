@@ -20,7 +20,7 @@ import { Link } from "react-router-dom";
 interface Agent {
   id: string;
   agent_name: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -40,7 +40,7 @@ export default function ClientAgents() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("*")
         .eq("client_id", user!.id)
         .order("created_at", { ascending: false });
@@ -48,9 +48,9 @@ export default function ClientAgents() {
       if (error) throw error;
 
       // Fetch engineer profiles for assigned agents
-      const engineerIds = data
-        .filter((a) => a.engineer_id)
-        .map((a) => a.engineer_id);
+      const engineerIds = (data as any[])
+        .filter((a: any) => a.engineer_id)
+        .map((a: any) => a.engineer_id);
 
       let engineerMap: Record<string, { full_name: string | null; email: string }> = {};
       
@@ -68,7 +68,7 @@ export default function ClientAgents() {
         }
       }
 
-      return data.map((agent) => ({
+      return (data as any[]).map((agent: any) => ({
         ...agent,
         engineer: agent.engineer_id ? engineerMap[agent.engineer_id] : undefined,
       })) as Agent[];

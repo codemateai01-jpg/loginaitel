@@ -224,14 +224,14 @@ serve(async (req) => {
           );
         }
 
-        // Get the Bolna agent ID from our database (body.agent_id is our internal UUID)
+        // Get the external agent ID from our database (body.agent_id is our internal UUID)
         const { data: agentRecord } = await supabase
-          .from("bolna_agents")
-          .select("bolna_agent_id")
+          .from("aitel_agents")
+          .select("external_agent_id")
           .eq("id", body.agent_id)
           .maybeSingle();
 
-        if (!agentRecord?.bolna_agent_id) {
+        if (!agentRecord?.external_agent_id) {
           return new Response(
             JSON.stringify({ error: "Agent not found in database" }),
             { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -268,7 +268,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            agent_id: agentRecord.bolna_agent_id,
+            agent_id: agentRecord.external_agent_id,
             recipient_phone_number: lead.phone_number,
             from_phone_number: body.from_phone_number,
             user_data: body.user_data,

@@ -96,14 +96,14 @@ export function CallAnalytics() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data: agents } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name")
         .eq("client_id", user!.id);
 
       if (!agents?.length) return [];
 
       const performance = await Promise.all(
-        agents.map(async (agent) => {
+        (agents as any[]).map(async (agent: any) => {
           const { count: total } = await supabase
             .from("calls")
             .select("*", { count: "exact", head: true })

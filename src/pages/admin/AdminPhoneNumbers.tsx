@@ -51,10 +51,10 @@ export default function AdminPhoneNumbers() {
     queryKey: ["bolna-agents"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("bolna_agent_id, agent_name, client_id");
+        .from("aitel_agents" as any)
+        .select("external_agent_id, agent_name, client_id");
       if (error) throw error;
-      return data || [];
+      return (data || []) as any[];
     },
   });
 
@@ -72,13 +72,13 @@ export default function AdminPhoneNumbers() {
 
   const getAgentName = (agentId?: string) => {
     if (!agentId || !agents) return "Unassigned";
-    const agent = agents.find((a) => a.bolna_agent_id === agentId);
+    const agent = agents.find((a: any) => a.external_agent_id === agentId);
     return agent?.agent_name || "Unknown Agent";
   };
 
   const getClientName = (agentId?: string) => {
     if (!agentId || !agents || !profiles) return "—";
-    const agent = agents.find((a) => a.bolna_agent_id === agentId);
+    const agent = agents.find((a: any) => a.external_agent_id === agentId);
     if (!agent?.client_id) return "Unassigned";
     const profile = profiles.find((p) => p.user_id === agent.client_id);
     return profile?.full_name || profile?.email || "Unknown Client";
@@ -104,7 +104,7 @@ export default function AdminPhoneNumbers() {
   const uniqueClients = new Set(
     phoneNumbers
       ?.map((p) => {
-        const agent = agents?.find((a) => a.bolna_agent_id === p.agent_id);
+        const agent = agents?.find((a: any) => a.external_agent_id === p.agent_id);
         return agent?.client_id;
       })
       .filter(Boolean)

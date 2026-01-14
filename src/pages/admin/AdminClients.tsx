@@ -98,7 +98,7 @@ export default function AdminClients() {
 
       // Get agent counts
       const { data: agents, error: agentsError } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("client_id")
         .in("client_id", clientIds);
 
@@ -115,7 +115,7 @@ export default function AdminClients() {
       // Combine data
       const clientsData: Client[] = (profiles || []).map((profile) => {
         const credit = credits?.find((c) => c.client_id === profile.user_id);
-        const agentCount = agents?.filter((a) => a.client_id === profile.user_id).length || 0;
+        const agentCount = (agents as any[] || []).filter((a: any) => a.client_id === profile.user_id).length || 0;
         const callCount = calls?.filter((c) => c.client_id === profile.user_id).length || 0;
 
         return {

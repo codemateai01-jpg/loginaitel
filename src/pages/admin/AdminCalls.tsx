@@ -142,11 +142,11 @@ export default function AdminCalls() {
     queryKey: ["admin-agents-filter"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name, client_id");
 
       if (error) throw error;
-      return data || [];
+      return (data || []) as any[];
     },
   });
 

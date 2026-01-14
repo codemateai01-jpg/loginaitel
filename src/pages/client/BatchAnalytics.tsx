@@ -251,11 +251,11 @@ export default function BatchAnalytics() {
     queryKey: ["bolna-agents-analytics"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
-        .select("id, agent_name, bolna_agent_id")
+        .from("aitel_agents" as any)
+        .select("id, agent_name, external_agent_id")
         .eq("status", "active");
       if (error) throw error;
-      return data;
+      return data as any[];
     },
   });
 
@@ -266,15 +266,15 @@ export default function BatchAnalytics() {
       const allBatches: (Batch & { agentId: string; agentName: string })[] = [];
       const agentsToFetch = selectedAgent === "all" 
         ? agents 
-        : agents?.filter(a => a.id === selectedAgent);
+        : agents?.filter((a: any) => a.id === selectedAgent);
       
       for (const agent of agentsToFetch || []) {
-        if (agent.bolna_agent_id) {
-          const result = await listBatches(agent.bolna_agent_id);
+        if (agent.external_agent_id) {
+          const result = await listBatches(agent.external_agent_id);
           if (result.data) {
             allBatches.push(...result.data.map(b => ({ 
               ...b, 
-              agentId: agent.bolna_agent_id, 
+              agentId: agent.external_agent_id, 
               agentName: agent.agent_name 
             })));
           }

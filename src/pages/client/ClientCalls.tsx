@@ -141,12 +141,12 @@ export default function ClientCalls() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name")
         .eq("client_id", user!.id);
 
       if (error) throw error;
-      return data?.map(a => ({ id: a.id, name: a.agent_name })) || [];
+      return (data as any[])?.map((a: any) => ({ id: a.id, name: a.agent_name })) || [];
     },
   });
 

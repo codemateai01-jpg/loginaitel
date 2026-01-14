@@ -133,12 +133,12 @@ export default function AdminDemoLogs() {
     queryKey: ["admin-agents-filter"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name")
         .order("agent_name", { ascending: true });
 
       if (error) throw error;
-      return data as Agent[];
+      return (data || []) as Agent[];
     },
   });
 

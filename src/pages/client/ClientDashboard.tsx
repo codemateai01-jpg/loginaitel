@@ -43,12 +43,12 @@ export default function ClientDashboard() {
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name, status")
         .eq("client_id", user!.id)
         .eq("status", "active");
       if (error) throw error;
-      return data || [];
+      return (data || []) as any[];
     },
   });
 

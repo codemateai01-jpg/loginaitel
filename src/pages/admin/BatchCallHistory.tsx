@@ -114,10 +114,10 @@ export default function BatchCallHistory() {
     queryKey: ["agents-for-history"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name");
       if (error) throw error;
-      return data;
+      return (data || []) as any[];
     },
   });
 
@@ -147,7 +147,7 @@ export default function BatchCallHistory() {
       // Map agent names
       return data.map((call) => ({
         ...call,
-        bolna_agents: agents?.find((a) => a.id === call.agent_id) || null,
+        aitel_agents: agents?.find((a: any) => a.id === call.agent_id) || null,
       })) as Call[];
     },
     enabled: !!agents,

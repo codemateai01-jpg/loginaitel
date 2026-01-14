@@ -33,7 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface Agent {
   id: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   agent_name: string;
   client_id: string | null;
 }
@@ -67,8 +67,8 @@ export function PhoneNumberAssignment({
     queryKey: ["agents-for-phone-assignment", filterByClientId],
     queryFn: async () => {
       let query = supabase
-        .from("bolna_agents")
-        .select("id, bolna_agent_id, agent_name, client_id")
+        .from("aitel_agents" as any)
+        .select("id, external_agent_id, agent_name, client_id")
         .eq("status", "active");
 
       if (filterByClientId) {
@@ -77,7 +77,7 @@ export function PhoneNumberAssignment({
 
       const { data, error } = await query.order("agent_name");
       if (error) throw error;
-      return data as Agent[];
+      return (data || []) as Agent[];
     },
   });
 
@@ -118,13 +118,13 @@ export function PhoneNumberAssignment({
 
   const getAgentName = (agentId?: string) => {
     if (!agentId || !agents) return null;
-    const agent = agents.find((a) => a.bolna_agent_id === agentId);
+    const agent = agents.find((a) => a.external_agent_id === agentId);
     return agent?.agent_name || null;
   };
 
   const getClientName = (agentId?: string) => {
     if (!agentId || !agents || !profiles) return null;
-    const agent = agents.find((a) => a.bolna_agent_id === agentId);
+    const agent = agents.find((a) => a.external_agent_id === agentId);
     if (!agent?.client_id) return null;
     const profile = profiles.find((p) => p.user_id === agent.client_id);
     return profile?.full_name || profile?.email || null;
@@ -133,7 +133,7 @@ export function PhoneNumberAssignment({
   const handleAssignClick = (phone: PhoneNumber) => {
     setSelectedPhone(phone);
     // Pre-select current agent if assigned
-    const currentAgent = agents?.find((a) => a.bolna_agent_id === phone.agent_id);
+    const currentAgent = agents?.find((a) => a.external_agent_id === phone.agent_id);
     setSelectedAgentId(currentAgent?.id || "");
     setAssignDialogOpen(true);
   };
@@ -144,7 +144,7 @@ export function PhoneNumberAssignment({
     const agent = agents?.find((a) => a.id === selectedAgentId);
     assignMutation.mutate({
       phoneId: selectedPhone.id,
-      agentId: agent?.bolna_agent_id || null,
+      agentId: agent?.external_agent_id || null,
     });
   };
 

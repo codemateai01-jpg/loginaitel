@@ -56,7 +56,7 @@ interface BolnaAgentFromAPI {
 
 interface SyncedAgent {
   id: string;
-  bolna_agent_id: string;
+  external_agent_id: string;
   agent_name: string;
   client_id: string | null;
   original_system_prompt: string | null;
@@ -87,7 +87,7 @@ export default function AdminAgents() {
     queryKey: ["synced-agents"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .select("*")
         .order("synced_at", { ascending: false });
 
@@ -139,27 +139,27 @@ export default function AdminAgents() {
 
         // Check if already exists
         const { data: existing } = await supabase
-          .from("bolna_agents")
+          .from("aitel_agents")
           .select("id")
-          .eq("bolna_agent_id", agent.id)
+          .eq("external_agent_id", agent.id)
           .maybeSingle();
 
         if (existing) {
           // Update existing
           await supabase
-            .from("bolna_agents")
+            .from("aitel_agents")
             .update({
               agent_name: agent.agent_name,
               agent_config: JSON.parse(JSON.stringify(agentConfig)),
               original_system_prompt: systemPrompt,
               synced_at: new Date().toISOString(),
             })
-            .eq("bolna_agent_id", agent.id);
+            .eq("external_agent_id", agent.id);
           updated++;
         } else {
           // Insert new
-          await supabase.from("bolna_agents").insert([{
-            bolna_agent_id: agent.id,
+          await supabase.from("aitel_agents").insert([{
+            external_agent_id: agent.id,
             agent_name: agent.agent_name,
             original_system_prompt: systemPrompt,
             current_system_prompt: systemPrompt,
@@ -197,7 +197,7 @@ export default function AdminAgents() {
       clientId: string | null;
     }) => {
       const { error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents")
         .update({ client_id: clientId })
         .eq("id", agentId);
 
@@ -223,7 +223,7 @@ export default function AdminAgents() {
   const filteredAgents = syncedAgents?.filter(
     (agent) =>
       agent.agent_name.toLowerCase().includes(search.toLowerCase()) ||
-      agent.bolna_agent_id.toLowerCase().includes(search.toLowerCase())
+      agent.external_agent_id.toLowerCase().includes(search.toLowerCase())
   );
 
   const getClientName = (clientId: string | null) => {
@@ -339,7 +339,7 @@ export default function AdminAgents() {
                     </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-2 py-1">
-                        {agent.bolna_agent_id.slice(0, 8)}...
+                        {agent.external_agent_id.slice(0, 8)}...
                       </code>
                     </TableCell>
                     <TableCell>

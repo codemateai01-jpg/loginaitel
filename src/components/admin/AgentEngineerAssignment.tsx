@@ -44,11 +44,11 @@ export function AgentEngineerAssignment({ open, onOpenChange }: AgentEngineerAss
     queryKey: ["agents-with-engineers"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .select("id, agent_name, status, engineer_id, client_id")
         .order("agent_name");
       if (error) throw error;
-      return data;
+      return data as any[];
     },
     enabled: open,
   });
@@ -106,7 +106,7 @@ export function AgentEngineerAssignment({ open, onOpenChange }: AgentEngineerAss
   const assignMutation = useMutation({
     mutationFn: async ({ agentId, engineerId }: { agentId: string; engineerId: string | null }) => {
       const { error } = await supabase
-        .from("bolna_agents")
+        .from("aitel_agents" as any)
         .update({ engineer_id: engineerId })
         .eq("id", agentId);
       if (error) throw error;
