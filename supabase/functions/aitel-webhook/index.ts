@@ -164,8 +164,8 @@ async function processCallUpdate(
       mappedStatus = status;
   }
 
-  // Determine if call was connected (answered and had conversation)
-  const isConnected = durationSeconds >= 45 && (status === "completed" || status === "call_disconnected");
+  // Determine if call was connected (answered and had any conversation)
+  const isConnected = durationSeconds > 0 && (status === "completed" || status === "call_disconnected");
 
   // Build update object
   const updateData: Record<string, unknown> = {
