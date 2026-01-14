@@ -9,15 +9,35 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// Bolna webhook payload follows the Agent Execution response structure
 interface BolnaWebhookPayload {
-  event: string;
-  call_id: string;
+  id: number | string;
   agent_id: string;
-  duration?: number;
-  status?: string;
-  recording_url?: string;
+  batch_id?: string;
+  conversation_time?: number;
+  total_cost?: number;
+  status: string;
+  error_message?: string | null;
+  answered_by_voice_mail?: boolean;
   transcript?: string;
-  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  usage_breakdown?: {
+    synthesizer_characters?: number;
+    transcriber_duration?: number;
+    llm_tokens?: number;
+  };
+  telephony_data?: {
+    duration?: number;
+    to_number?: string;
+    from_number?: string;
+    recording_url?: string;
+    provider_call_id?: string;
+    call_type?: string;
+    provider?: string;
+  };
+  extracted_data?: Record<string, unknown>;
+  context_details?: Record<string, unknown>;
 }
 
 serve(async (req) => {
@@ -29,99 +49,50 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const payload: BolnaWebhookPayload = await req.json();
 
-    console.log("Bolna webhook received:", payload);
+    console.log("Bolna webhook received:", JSON.stringify(payload, null, 2));
 
-    // Find the call by external_call_id
+    // Extract execution ID - Bolna uses numeric IDs
+    const executionId = String(payload.id);
+    const status = payload.status?.toLowerCase().replace(/-/g, "_");
+    
+    // Try to find the call by external_call_id (execution ID)
     const { data: call, error: callError } = await supabase
       .from("calls")
       .select("*")
-      .eq("external_call_id", payload.call_id)
+      .eq("external_call_id", executionId)
       .maybeSingle();
 
-    if (callError || !call) {
-      console.error("Call not found for external_call_id:", payload.call_id);
+    if (callError) {
+      console.error("Error finding call:", callError);
       return new Response(
-        JSON.stringify({ success: false, error: "Call not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Database error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Handle different webhook events
-    switch (payload.event) {
-      case "call.ringing":
-        await supabase
+    if (!call) {
+      // If no call found, try finding by provider_call_id from telephony_data
+      if (payload.telephony_data?.provider_call_id) {
+        const { data: callByProvider } = await supabase
           .from("calls")
-          .update({ status: "ringing" })
-          .eq("id", call.id);
-        break;
-
-      case "call.answered":
-      case "call.connected":
-        await supabase
-          .from("calls")
-          .update({ status: "in_progress" })
-          .eq("id", call.id);
+          .select("*")
+          .eq("external_call_id", payload.telephony_data.provider_call_id)
+          .maybeSingle();
         
-        // Update lead status
-        await supabase
-          .from("leads")
-          .update({ status: "connected" })
-          .eq("id", call.lead_id);
-        break;
-
-      case "call.ended":
-      case "call.completed":
-        const durationSeconds = payload.duration || 0;
-        const isConnected = durationSeconds >= 45;
-
-        // Update call record - the trigger will handle credit deduction
-        await supabase
-          .from("calls")
-          .update({
-            status: "completed",
-            duration_seconds: durationSeconds,
-            connected: isConnected,
-            ended_at: new Date().toISOString(),
-            metadata: {
-              ...call.metadata,
-              recording_url: payload.recording_url,
-              transcript: payload.transcript,
-            },
-          })
-          .eq("id", call.id);
-
-        // Update lead status
-        await supabase
-          .from("leads")
-          .update({ status: isConnected ? "connected" : "completed" })
-          .eq("id", call.lead_id);
-        break;
-
-      case "call.failed":
-      case "call.no_answer":
-        await supabase
-          .from("calls")
-          .update({
-            status: payload.event === "call.no_answer" ? "no_answer" : "failed",
-            ended_at: new Date().toISOString(),
-          })
-          .eq("id", call.id);
-
-        // Update lead status
-        await supabase
-          .from("leads")
-          .update({ status: "failed" })
-          .eq("id", call.lead_id);
-        break;
-
-      default:
-        console.log("Unhandled webhook event:", payload.event);
+        if (callByProvider) {
+          return await processCallUpdate(supabase, callByProvider, payload, status);
+        }
+      }
+      
+      console.log("Call not found for execution ID:", executionId);
+      // Still return success since webhook was received properly
+      return new Response(
+        JSON.stringify({ success: true, message: "Call not found, webhook acknowledged" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return await processCallUpdate(supabase, call, payload, status);
 
   } catch (error: unknown) {
     console.error("Webhook processing error:", error);
@@ -132,3 +103,149 @@ serve(async (req) => {
     );
   }
 });
+
+async function processCallUpdate(
+  supabase: any,
+  call: any,
+  payload: BolnaWebhookPayload,
+  status: string
+) {
+  console.log(`Processing call ${call.id} with status: ${status}`);
+
+  // Get duration from telephony_data or conversation_time
+  const durationSeconds = payload.telephony_data?.duration || payload.conversation_time || 0;
+  const recordingUrl = payload.telephony_data?.recording_url || null;
+  const transcript = payload.transcript || null;
+
+  // Map Bolna statuses to our internal statuses
+  let mappedStatus = call.status;
+  let isCompleted = false;
+  
+  switch (status) {
+    case "queued":
+      mappedStatus = "queued";
+      break;
+    case "initiated":
+      mappedStatus = "initiated";
+      break;
+    case "ringing":
+      mappedStatus = "ringing";
+      break;
+    case "in_progress":
+      mappedStatus = "in_progress";
+      break;
+    case "call_disconnected":
+      mappedStatus = "disconnected";
+      break;
+    case "completed":
+      mappedStatus = "completed";
+      isCompleted = true;
+      break;
+    case "busy":
+      mappedStatus = "busy";
+      isCompleted = true;
+      break;
+    case "no_answer":
+      mappedStatus = "no_answer";
+      isCompleted = true;
+      break;
+    case "canceled":
+    case "stopped":
+      mappedStatus = "canceled";
+      isCompleted = true;
+      break;
+    case "failed":
+    case "error":
+    case "balance_low":
+      mappedStatus = "failed";
+      isCompleted = true;
+      break;
+    default:
+      console.log("Unknown status:", status);
+      mappedStatus = status;
+  }
+
+  // Determine if call was connected (answered and had conversation)
+  const isConnected = durationSeconds >= 45 && (status === "completed" || status === "call_disconnected");
+
+  // Build update object
+  const updateData: Record<string, unknown> = {
+    status: mappedStatus,
+    metadata: {
+      ...((call.metadata as Record<string, unknown>) || {}),
+      bolna_status: payload.status,
+      error_message: payload.error_message,
+      answered_by_voicemail: payload.answered_by_voice_mail,
+      usage_breakdown: payload.usage_breakdown,
+      telephony_provider: payload.telephony_data?.provider,
+      extracted_data: payload.extracted_data,
+      last_webhook_at: new Date().toISOString(),
+    },
+  };
+
+  // Add completion data if call is finished
+  if (isCompleted) {
+    updateData.duration_seconds = durationSeconds;
+    updateData.connected = isConnected;
+    updateData.ended_at = new Date().toISOString();
+    
+    if (recordingUrl) {
+      updateData.recording_url = recordingUrl;
+    }
+    
+    if (transcript) {
+      updateData.transcript = transcript;
+    }
+  }
+
+  // Update in_progress status with started_at
+  if (status === "in_progress" && !call.started_at) {
+    updateData.started_at = new Date().toISOString();
+  }
+
+  // Update the call record
+  const { error: updateError } = await supabase
+    .from("calls")
+    .update(updateData)
+    .eq("id", call.id);
+
+  if (updateError) {
+    console.error("Failed to update call:", updateError);
+    return new Response(
+      JSON.stringify({ success: false, error: "Failed to update call" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Update lead status based on call outcome
+  if (call.lead_id && isCompleted) {
+    let leadStatus = "completed";
+    if (isConnected) {
+      leadStatus = "connected";
+    } else if (status === "no_answer") {
+      leadStatus = "no_answer";
+    } else if (status === "busy") {
+      leadStatus = "busy";
+    } else if (status === "failed" || status === "error") {
+      leadStatus = "failed";
+    }
+
+    await supabase
+      .from("leads")
+      .update({ status: leadStatus })
+      .eq("id", call.lead_id);
+  }
+
+  console.log(`Call ${call.id} updated successfully with status: ${mappedStatus}`);
+
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      call_id: call.id,
+      status: mappedStatus,
+      connected: isConnected,
+      duration: durationSeconds
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
