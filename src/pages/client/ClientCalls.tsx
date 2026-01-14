@@ -122,26 +122,38 @@ export default function ClientCalls() {
   // Subscribe to realtime updates
   useRealtimeCalls({ queryKey: callsQueryKey, clientId: user?.id });
 
-  // Fetch calls
+  // Fetch calls - only show batch calls OR calls where lead was uploaded by the client
   const { data: calls, isLoading } = useQuery({
     queryKey: callsQueryKey,
     enabled: !!user?.id,
     queryFn: async () => {
       const startDate = subDays(new Date(), parseInt(dateRange)).toISOString();
       
+      // First get calls with lead info
       const { data, error } = await supabase
         .from("calls")
         .select(`
           *,
-          lead:leads(name, phone_number)
+          lead:leads(name, phone_number, uploaded_by)
         `)
         .eq("client_id", user!.id)
         .gte("created_at", startDate)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+      
+      // Filter to only show:
+      // 1. Batch calls (have batch_id) - these are production calls for the client
+      // 2. Calls where the lead was uploaded by the client themselves (their own test calls)
+      // This excludes admin/engineer test calls using client's agents
+      const filteredData = data?.filter(call => {
+        const isBatchCall = call.batch_id !== null;
+        const isClientOwnCall = (call.lead as any)?.uploaded_by === user!.id;
+        return isBatchCall || isClientOwnCall;
+      });
+      
       // Map to include agent placeholder since we removed the join
-      return data?.map(d => ({ ...d, agent: { name: 'Agent' } })) as Call[];
+      return filteredData?.map(d => ({ ...d, agent: { name: 'Agent' } })) as Call[];
     },
   });
 
