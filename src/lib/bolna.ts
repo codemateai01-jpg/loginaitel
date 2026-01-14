@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const BOLNA_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bolna-proxy`;
+const AITEL_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy`;
 
 interface BolnaResponse<T> {
   data: T | null;
@@ -18,7 +18,7 @@ async function callBolnaProxy<T>(
       return { data: null, error: "Not authenticated" };
     }
 
-    const url = new URL(BOLNA_PROXY_URL);
+    const url = new URL(AITEL_PROXY_URL);
     url.searchParams.set("action", action);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
