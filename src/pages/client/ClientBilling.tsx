@@ -20,10 +20,13 @@ import {
   History,
   Loader2,
   Wallet,
+  Calendar,
+  BarChart3,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { format } from "date-fns";
+import { format, subDays, startOfDay, startOfWeek, eachDayOfInterval } from "date-fns";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface Transaction {
   id: string;
@@ -82,6 +85,74 @@ export default function ClientBilling() {
     callsDeducted: transactions
       ?.filter((t) => t.transaction_type === "call_deduction").length || 0,
   };
+
+  // Calculate daily usage for the last 7 days
+  const dailyUsage = (() => {
+    const now = new Date();
+    const days = eachDayOfInterval({
+      start: subDays(now, 6),
+      end: now,
+    });
+
+    return days.map((day) => {
+      const dayStart = startOfDay(day);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      const dayTransactions = transactions?.filter((t) => {
+        const txDate = new Date(t.created_at);
+        return txDate >= dayStart && txDate < dayEnd && t.amount < 0;
+      }) || [];
+
+      const used = dayTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      return {
+        day: format(day, "EEE"),
+        date: format(day, "MMM d"),
+        used,
+      };
+    });
+  })();
+
+  // Calculate weekly usage stats
+  const weeklyStats = (() => {
+    const now = new Date();
+    const thisWeekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const lastWeekStart = subDays(thisWeekStart, 7);
+
+    const thisWeekUsed = transactions
+      ?.filter((t) => {
+        const txDate = new Date(t.created_at);
+        return txDate >= thisWeekStart && t.amount < 0;
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+
+    const lastWeekUsed = transactions
+      ?.filter((t) => {
+        const txDate = new Date(t.created_at);
+        return txDate >= lastWeekStart && txDate < thisWeekStart && t.amount < 0;
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+
+    const todayStart = startOfDay(now);
+    const todayUsed = transactions
+      ?.filter((t) => {
+        const txDate = new Date(t.created_at);
+        return txDate >= todayStart && t.amount < 0;
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+
+    const weekChange = lastWeekUsed > 0 
+      ? ((thisWeekUsed - lastWeekUsed) / lastWeekUsed * 100).toFixed(0)
+      : thisWeekUsed > 0 ? "+100" : "0";
+
+    return {
+      thisWeek: thisWeekUsed,
+      lastWeek: lastWeekUsed,
+      today: todayUsed,
+      weekChange,
+    };
+  })();
 
   const getTransactionIcon = (type: string, amount: number) => {
     if (amount > 0) {
@@ -178,6 +249,85 @@ export default function ClientBilling() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Credit Usage Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Credit Usage Summary
+            </CardTitle>
+            <CardDescription>
+              Track your credit consumption over time
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+              <div className="p-4 border-2 border-border bg-muted/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Today</span>
+                </div>
+                <p className="text-2xl font-bold text-destructive">-{weeklyStats.today}</p>
+                <p className="text-xs text-muted-foreground">credits used</p>
+              </div>
+              <div className="p-4 border-2 border-border bg-muted/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">This Week</span>
+                </div>
+                <p className="text-2xl font-bold text-destructive">-{weeklyStats.thisWeek}</p>
+                <p className="text-xs text-muted-foreground">
+                  {Number(weeklyStats.weekChange) > 0 ? "↑" : Number(weeklyStats.weekChange) < 0 ? "↓" : "→"} {Math.abs(Number(weeklyStats.weekChange))}% vs last week
+                </p>
+              </div>
+              <div className="p-4 border-2 border-border bg-muted/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Last Week</span>
+                </div>
+                <p className="text-2xl font-bold text-muted-foreground">-{weeklyStats.lastWeek}</p>
+                <p className="text-xs text-muted-foreground">credits used</p>
+              </div>
+            </div>
+
+            {/* Daily Usage Chart */}
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyUsage}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis 
+                    dataKey="day" 
+                    tick={{ fontSize: 12 }}
+                    className="text-muted-foreground"
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    className="text-muted-foreground"
+                    allowDecimals={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '2px solid hsl(var(--border))',
+                      borderRadius: '0px'
+                    }}
+                    labelFormatter={(_, payload) => payload[0]?.payload?.date || ''}
+                    formatter={(value: number) => [`${value} credits`, 'Used']}
+                  />
+                  <Bar 
+                    dataKey="used" 
+                    fill="hsl(var(--destructive))" 
+                    radius={[0, 0, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Daily credit usage (last 7 days)
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Pricing Info */}
         <Card>
