@@ -371,26 +371,44 @@ export type Database = {
       }
       client_credits: {
         Row: {
+          auto_recharge_amount: number | null
+          auto_recharge_enabled: boolean | null
+          auto_recharge_trigger_balance: number | null
           balance: number
           client_id: string
           created_at: string
           id: string
+          last_low_balance_alert_at: string | null
+          low_balance_alert_enabled: boolean | null
+          low_balance_threshold: number | null
           price_per_credit: number
           updated_at: string
         }
         Insert: {
+          auto_recharge_amount?: number | null
+          auto_recharge_enabled?: boolean | null
+          auto_recharge_trigger_balance?: number | null
           balance?: number
           client_id: string
           created_at?: string
           id?: string
+          last_low_balance_alert_at?: string | null
+          low_balance_alert_enabled?: boolean | null
+          low_balance_threshold?: number | null
           price_per_credit?: number
           updated_at?: string
         }
         Update: {
+          auto_recharge_amount?: number | null
+          auto_recharge_enabled?: boolean | null
+          auto_recharge_trigger_balance?: number | null
           balance?: number
           client_id?: string
           created_at?: string
           id?: string
+          last_low_balance_alert_at?: string | null
+          low_balance_alert_enabled?: boolean | null
+          low_balance_threshold?: number | null
           price_per_credit?: number
           updated_at?: string
         }
@@ -570,6 +588,7 @@ export type Database = {
           created_at: string
           credits: number
           id: string
+          invoice_url: string | null
           razorpay_order_id: string
           razorpay_payment_id: string | null
           refund_amount: number | null
@@ -586,6 +605,7 @@ export type Database = {
           created_at?: string
           credits: number
           id?: string
+          invoice_url?: string | null
           razorpay_order_id: string
           razorpay_payment_id?: string | null
           refund_amount?: number | null
@@ -602,6 +622,7 @@ export type Database = {
           created_at?: string
           credits?: number
           id?: string
+          invoice_url?: string | null
           razorpay_order_id?: string
           razorpay_payment_id?: string | null
           refund_amount?: number | null
