@@ -242,12 +242,33 @@ serve(async (req) => {
           );
         }
 
-        // Get lead phone number (only client or admin with client_id can access)
-        const { data: lead } = await supabase
+        // Get lead phone number - check both leads table and real_estate_leads table
+        let lead: { phone_number: string; client_id: string } | null = null;
+        let leadTable: "leads" | "real_estate_leads" = "leads";
+        
+        // First try regular leads table
+        const { data: regularLead } = await supabase
           .from("leads")
           .select("phone_number, client_id")
           .eq("id", body.lead_id)
           .maybeSingle();
+
+        if (regularLead) {
+          lead = regularLead;
+          leadTable = "leads";
+        } else {
+          // Try real_estate_leads table
+          const { data: reLead } = await supabase
+            .from("real_estate_leads")
+            .select("phone_number, client_id")
+            .eq("id", body.lead_id)
+            .maybeSingle();
+          
+          if (reLead) {
+            lead = reLead;
+            leadTable = "real_estate_leads";
+          }
+        }
 
         if (!lead) {
           return new Response(
@@ -292,11 +313,19 @@ serve(async (req) => {
             started_at: new Date().toISOString(),
           });
 
-          // Update lead status
-          await supabase
-            .from("leads")
-            .update({ status: "queued" })
-            .eq("id", body.lead_id);
+          // Update lead status based on which table it came from
+          if (leadTable === "leads") {
+            await supabase
+              .from("leads")
+              .update({ status: "queued" })
+              .eq("id", body.lead_id);
+          } else {
+            // For real_estate_leads, update stage to 'contacted' if it's still 'new'
+            await supabase
+              .from("real_estate_leads")
+              .update({ last_call_at: new Date().toISOString() })
+              .eq("id", body.lead_id);
+          }
 
           return new Response(
             JSON.stringify({ 
