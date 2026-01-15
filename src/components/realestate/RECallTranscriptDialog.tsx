@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,18 +9,24 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Phone,
   Clock,
   Calendar,
   Play,
-  Download,
   User,
   Bot,
   CheckCircle,
   XCircle,
+  Save,
+  Loader2,
+  StickyNote,
 } from "lucide-react";
 import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface CallData {
   id: string;
@@ -34,10 +41,12 @@ interface CallData {
   transcript: string | null;
   recording_url: string | null;
   real_estate_calls?: {
+    id?: string;
     disposition: string | null;
     interest_score: number | null;
     ai_summary: string | null;
     objections_detected: string[] | null;
+    notes: string | null;
   }[];
 }
 
@@ -45,6 +54,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   call: CallData | null;
+  onNoteSaved?: () => void;
 }
 
 interface TranscriptMessage {
@@ -52,10 +62,85 @@ interface TranscriptMessage {
   content: string;
 }
 
-export function RECallTranscriptDialog({ open, onOpenChange, call }: Props) {
-  if (!call) return null;
+export function RECallTranscriptDialog({ open, onOpenChange, call, onNoteSaved }: Props) {
+  const { toast } = useToast();
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
-  const reCall = call.real_estate_calls?.[0];
+  const reCall = call?.real_estate_calls?.[0];
+
+  useEffect(() => {
+    if (open && reCall?.notes) {
+      setNotes(reCall.notes);
+      setHasChanges(false);
+    } else if (open) {
+      setNotes("");
+      setHasChanges(false);
+    }
+  }, [open, reCall?.notes]);
+
+  const handleNotesChange = (value: string) => {
+    setNotes(value);
+    setHasChanges(value !== (reCall?.notes || ""));
+  };
+
+  const handleSaveNotes = async () => {
+    if (!call) return;
+
+    setSaving(true);
+    try {
+      if (reCall?.id) {
+        // Update existing real_estate_calls record
+        const { error } = await supabase
+          .from("real_estate_calls")
+          .update({ notes })
+          .eq("id", reCall.id);
+
+        if (error) throw error;
+      } else {
+        // Need to get lead_id and client_id from the call to create a new record
+        const { data: callData, error: callError } = await supabase
+          .from("calls")
+          .select("lead_id, client_id")
+          .eq("id", call.id)
+          .single();
+
+        if (callError) throw callError;
+
+        // Create new real_estate_calls record
+        const { error } = await supabase
+          .from("real_estate_calls")
+          .insert({
+            call_id: call.id,
+            lead_id: callData.lead_id,
+            client_id: callData.client_id,
+            notes,
+          });
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Notes saved",
+        description: "Your notes have been saved successfully.",
+      });
+
+      setHasChanges(false);
+      onNoteSaved?.();
+    } catch (error) {
+      console.error("Error saving notes:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save notes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!call) return null;
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "—";
@@ -228,6 +313,45 @@ export function RECallTranscriptDialog({ open, onOpenChange, call }: Props) {
                 </div>
               )}
             </ScrollArea>
+          </div>
+
+          <Separator />
+
+          {/* Notes Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <StickyNote className="h-4 w-4" />
+              <Label htmlFor="call-notes" className="font-medium">Notes</Label>
+            </div>
+            <Textarea
+              id="call-notes"
+              placeholder="Add your notes about this call..."
+              value={notes}
+              onChange={(e) => handleNotesChange(e.target.value)}
+              className="min-h-[100px] resize-none"
+            />
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {reCall?.notes ? "Last saved notes will be updated" : "Notes will be saved with this call"}
+              </p>
+              <Button
+                onClick={handleSaveNotes}
+                disabled={saving || !hasChanges}
+                size="sm"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Notes
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Disposition */}

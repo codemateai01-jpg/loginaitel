@@ -36,10 +36,12 @@ interface CallHistoryItem {
   transcript: string | null;
   recording_url: string | null;
   real_estate_calls?: {
+    id: string;
     disposition: string | null;
     interest_score: number | null;
     ai_summary: string | null;
     objections_detected: string[] | null;
+    notes: string | null;
   }[];
 }
 
@@ -99,10 +101,12 @@ export function RELeadDetailsDialog({ open, onOpenChange, lead }: Props) {
           transcript,
           recording_url,
           real_estate_calls (
+            id,
             disposition,
             interest_score,
             ai_summary,
-            objections_detected
+            objections_detected,
+            notes
           )
         `)
         .eq("lead_id", lead.id)
@@ -305,6 +309,7 @@ export function RELeadDetailsDialog({ open, onOpenChange, lead }: Props) {
         open={transcriptDialogOpen}
         onOpenChange={setTranscriptDialogOpen}
         call={selectedCall}
+        onNoteSaved={fetchCallHistory}
       />
     </Dialog>
   );
