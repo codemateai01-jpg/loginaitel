@@ -214,6 +214,14 @@ serve(async (req) => {
       // CALL MANAGEMENT
       // ==========================================
       case "make-call":
+        // Validate required fields
+        if (!body.phone_number) {
+          return new Response(
+            JSON.stringify({ error: "phone_number is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         // Validate client has credits
         const { data: credits } = await supabase
           .from("client_credits")
@@ -242,50 +250,7 @@ serve(async (req) => {
           );
         }
 
-        // Get lead phone number - check both leads table and real_estate_leads table
-        let lead: { phone_number: string; client_id: string } | null = null;
-        let leadTable: "leads" | "real_estate_leads" = "leads";
-        
-        // First try regular leads table
-        const { data: regularLead } = await supabase
-          .from("leads")
-          .select("phone_number, client_id")
-          .eq("id", body.lead_id)
-          .maybeSingle();
-
-        if (regularLead) {
-          lead = regularLead;
-          leadTable = "leads";
-        } else {
-          // Try real_estate_leads table
-          const { data: reLead } = await supabase
-            .from("real_estate_leads")
-            .select("phone_number, client_id")
-            .eq("id", body.lead_id)
-            .maybeSingle();
-          
-          if (reLead) {
-            lead = reLead;
-            leadTable = "real_estate_leads";
-          }
-        }
-
-        if (!lead) {
-          return new Response(
-            JSON.stringify({ error: "Lead not found" }),
-            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Verify user can access this lead
-        if (userRole === "client" && lead.client_id !== userId) {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Get the client's allocated phone number
+        // Get the client's allocated phone number (caller ID)
         const { data: clientPhone } = await supabase
           .from("client_phone_numbers")
           .select("phone_number")
@@ -309,7 +274,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             agent_id: agentRecord.external_agent_id,
-            recipient_phone_number: lead.phone_number,
+            recipient_phone_number: body.phone_number,
             from_phone_number: clientPhone.phone_number,
             user_data: body.user_data,
           }),
@@ -319,37 +284,14 @@ serve(async (req) => {
           const callResult = await response.json();
           
           // Create call record in database - execution_id is the call identifier
-          const { data: callRecord } = await supabase.from("calls").insert({
-            lead_id: body.lead_id,
+          await supabase.from("calls").insert({
+            lead_id: body.phone_number, // Store phone number as lead_id for reference
             agent_id: body.agent_id,
             client_id: body.client_id,
             external_call_id: callResult.execution_id,
             status: "initiated",
             started_at: new Date().toISOString(),
-          }).select("id").single();
-
-          // Update lead status based on which table it came from
-          if (leadTable === "leads") {
-            await supabase
-              .from("leads")
-              .update({ status: "queued" })
-              .eq("id", body.lead_id);
-          } else {
-            // For real_estate_leads, update last_call_at and create real_estate_calls record
-            await supabase
-              .from("real_estate_leads")
-              .update({ last_call_at: new Date().toISOString() })
-              .eq("id", body.lead_id);
-
-            // Create real_estate_calls record for tracking
-            if (callRecord?.id) {
-              await supabase.from("real_estate_calls").insert({
-                lead_id: body.lead_id,
-                call_id: callRecord.id,
-                client_id: body.client_id,
-              });
-            }
-          }
+          });
 
           return new Response(
             JSON.stringify({ 
