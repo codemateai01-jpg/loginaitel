@@ -27,12 +27,23 @@ declare global {
   }
 }
 
+// Credit packages with bulk discounts
 const CREDIT_PACKAGES = [
-  { credits: 100, popular: false },
-  { credits: 500, popular: true },
-  { credits: 1000, popular: false },
-  { credits: 2500, popular: false },
+  { credits: 100, discount: 0, popular: false },
+  { credits: 500, discount: 5, popular: true },     // 5% off
+  { credits: 1000, discount: 10, popular: false },  // 10% off
+  { credits: 2500, discount: 15, popular: false },  // 15% off
+  { credits: 5000, discount: 20, popular: false },  // 20% off
 ];
+
+// Calculate discount based on custom amount
+const getCustomDiscount = (credits: number): number => {
+  if (credits >= 5000) return 20;
+  if (credits >= 2500) return 15;
+  if (credits >= 1000) return 10;
+  if (credits >= 500) return 5;
+  return 0;
+};
 
 export function BuyCreditsDialog({ 
   open, 
@@ -45,7 +56,20 @@ export function BuyCreditsDialog({
   const [isLoading, setIsLoading] = useState(false);
 
   const credits = customCredits ? parseInt(customCredits) || 0 : selectedCredits;
-  const amount = credits * pricePerCredit;
+  
+  // Calculate discount
+  const getDiscountPercent = () => {
+    if (customCredits) {
+      return getCustomDiscount(credits);
+    }
+    const pkg = CREDIT_PACKAGES.find(p => p.credits === selectedCredits);
+    return pkg?.discount || 0;
+  };
+  
+  const discountPercent = getDiscountPercent();
+  const baseAmount = credits * pricePerCredit;
+  const discountAmount = baseAmount * (discountPercent / 100);
+  const amount = Math.round(baseAmount - discountAmount);
 
   const loadRazorpayScript = (): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -167,38 +191,60 @@ export function BuyCreditsDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Package Selection */}
-          <div className="grid grid-cols-2 gap-3">
-            {CREDIT_PACKAGES.map((pkg) => (
-              <Card
-                key={pkg.credits}
-                className={`cursor-pointer transition-all hover:border-primary ${
-                  selectedCredits === pkg.credits && !customCredits
-                    ? "border-primary bg-primary/5"
-                    : ""
-                } ${pkg.popular ? "ring-2 ring-primary/20" : ""}`}
-                onClick={() => {
-                  setSelectedCredits(pkg.credits);
-                  setCustomCredits("");
-                }}
-              >
-                <CardContent className="p-4 text-center relative">
-                  {pkg.popular && (
-                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs px-2 py-0.5">
-                      Popular
-                    </span>
-                  )}
-                  <p className="text-2xl font-bold">{pkg.credits}</p>
-                  <p className="text-sm text-muted-foreground">credits</p>
-                  <p className="text-sm font-medium mt-1">
-                    ₹{(pkg.credits * pricePerCredit).toLocaleString()}
-                  </p>
-                  {selectedCredits === pkg.credits && !customCredits && (
-                    <Check className="absolute top-2 right-2 h-4 w-4 text-primary" />
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          {/* Package Selection with Discounts */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {CREDIT_PACKAGES.map((pkg) => {
+              const pkgBasePrice = pkg.credits * pricePerCredit;
+              const pkgDiscount = pkgBasePrice * (pkg.discount / 100);
+              const pkgFinalPrice = pkgBasePrice - pkgDiscount;
+              
+              return (
+                <Card
+                  key={pkg.credits}
+                  className={`cursor-pointer transition-all hover:border-primary relative ${
+                    selectedCredits === pkg.credits && !customCredits
+                      ? "border-primary bg-primary/5"
+                      : ""
+                  } ${pkg.popular ? "ring-2 ring-primary/20" : ""}`}
+                  onClick={() => {
+                    setSelectedCredits(pkg.credits);
+                    setCustomCredits("");
+                  }}
+                >
+                  <CardContent className="p-3 text-center">
+                    {pkg.popular && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs px-2 py-0.5">
+                        Popular
+                      </span>
+                    )}
+                    {pkg.discount > 0 && (
+                      <span className="absolute -top-2 right-2 bg-green-500 text-white text-xs px-2 py-0.5">
+                        {pkg.discount}% OFF
+                      </span>
+                    )}
+                    <p className="text-xl font-bold">{pkg.credits.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">credits</p>
+                    {pkg.discount > 0 ? (
+                      <div className="mt-1">
+                        <p className="text-xs text-muted-foreground line-through">
+                          ₹{pkgBasePrice.toLocaleString()}
+                        </p>
+                        <p className="text-sm font-bold text-green-600">
+                          ₹{Math.round(pkgFinalPrice).toLocaleString()}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-medium mt-1">
+                        ₹{pkgBasePrice.toLocaleString()}
+                      </p>
+                    )}
+                    {selectedCredits === pkg.credits && !customCredits && (
+                      <Check className="absolute top-2 right-2 h-4 w-4 text-primary" />
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           {/* Custom Amount */}
@@ -214,9 +260,9 @@ export function BuyCreditsDialog({
             />
           </div>
 
-          {/* Summary */}
+          {/* Summary with Discount */}
           <Card className="bg-muted/50">
-            <CardContent className="p-4">
+            <CardContent className="p-4 space-y-2">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -224,10 +270,27 @@ export function BuyCreditsDialog({
                 </div>
                 <span className="font-bold">{credits.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center mt-2 pt-2 border-t border-border">
+              {discountPercent > 0 && (
+                <>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="text-muted-foreground line-through">₹{baseAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-green-600">
+                    <span>Bulk Discount ({discountPercent}%)</span>
+                    <span>-₹{Math.round(discountAmount).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-border">
                 <span className="font-medium">Total Amount</span>
                 <span className="text-xl font-bold">₹{amount.toLocaleString()}</span>
               </div>
+              {discountPercent > 0 && (
+                <p className="text-xs text-green-600 text-center">
+                  You save ₹{Math.round(discountAmount).toLocaleString()}!
+                </p>
+              )}
             </CardContent>
           </Card>
 

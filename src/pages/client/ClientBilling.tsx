@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -23,12 +23,18 @@ import {
   Wallet,
   Calendar,
   BarChart3,
+  Settings,
+  AlertTriangle,
+  Bell,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, subDays, startOfDay, startOfWeek, eachDayOfInterval } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { BuyCreditsDialog } from "@/components/billing/BuyCreditsDialog";
+import { CreditSettingsDialog } from "@/components/billing/CreditSettingsDialog";
+import { PaymentHistoryCard } from "@/components/billing/PaymentHistoryCard";
+import { toast } from "sonner";
 
 interface Transaction {
   id: string;
@@ -43,23 +49,49 @@ export default function ClientBilling() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
-  // Fetch credit balance and price
-  const { data: creditData, isLoading: creditsLoading } = useQuery({
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  
+  // Fetch credit balance, price, and settings
+  const { data: creditData, isLoading: creditsLoading, refetch: refetchCredits } = useQuery({
     queryKey: ["client-credits-balance", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_credits")
-        .select("balance, price_per_credit")
+        .select("balance, price_per_credit, low_balance_threshold, low_balance_alert_enabled, auto_recharge_enabled, auto_recharge_amount, auto_recharge_trigger_balance")
         .eq("client_id", user!.id)
         .maybeSingle();
       if (error) throw error;
       return { 
         balance: data?.balance || 0, 
-        pricePerCredit: data?.price_per_credit || 3.00 
+        pricePerCredit: data?.price_per_credit || 3.00,
+        settings: {
+          low_balance_threshold: data?.low_balance_threshold,
+          low_balance_alert_enabled: data?.low_balance_alert_enabled,
+          auto_recharge_enabled: data?.auto_recharge_enabled,
+          auto_recharge_amount: data?.auto_recharge_amount,
+          auto_recharge_trigger_balance: data?.auto_recharge_trigger_balance,
+        }
       };
     },
   });
+
+  // Check for low balance and show alert
+  useEffect(() => {
+    if (creditData?.settings?.low_balance_alert_enabled && creditData?.balance) {
+      const threshold = creditData.settings.low_balance_threshold || 50;
+      if (creditData.balance <= threshold) {
+        toast.warning(`Low credit balance! You have ${creditData.balance} credits remaining.`, {
+          id: 'low-balance-alert',
+          duration: 10000,
+          action: {
+            label: "Buy Credits",
+            onClick: () => setBuyDialogOpen(true),
+          },
+        });
+      }
+    }
+  }, [creditData]);
 
   // Fetch transactions
   const { data: transactions, isLoading: transactionsLoading } = useQuery({
@@ -191,10 +223,16 @@ export default function ClientBilling() {
               Manage your credits and view transaction history
             </p>
           </div>
-          <Button onClick={() => setBuyDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Buy Credits
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setSettingsDialogOpen(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </Button>
+            <Button onClick={() => setBuyDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Buy Credits
+            </Button>
+          </div>
         </div>
 
         <BuyCreditsDialog
@@ -204,15 +242,29 @@ export default function ClientBilling() {
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ["client-credits-balance"] });
             queryClient.invalidateQueries({ queryKey: ["client-transactions"] });
+            queryClient.invalidateQueries({ queryKey: ["client-payments"] });
+          }}
+        />
+
+        <CreditSettingsDialog
+          open={settingsDialogOpen}
+          onOpenChange={setSettingsDialogOpen}
+          currentSettings={creditData?.settings}
+          onSuccess={() => {
+            refetchCredits();
           }}
         />
 
         {/* Stats Cards */}
-        <div className="grid sm:grid-cols-4 gap-4">
-          <Card>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className={creditData?.settings?.low_balance_alert_enabled && creditData?.balance <= (creditData?.settings?.low_balance_threshold || 50) ? "border-amber-500" : ""}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Current Balance</CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
+              {creditData?.settings?.low_balance_alert_enabled && creditData?.balance <= (creditData?.settings?.low_balance_threshold || 50) ? (
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+              ) : (
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+              )}
             </CardHeader>
             <CardContent>
               {creditsLoading ? (
@@ -223,6 +275,12 @@ export default function ClientBilling() {
                   <p className="text-xs text-muted-foreground">
                     ₹{((creditData?.balance || 0) * (creditData?.pricePerCredit || 3)).toLocaleString()} value
                   </p>
+                  {creditData?.settings?.auto_recharge_enabled && (
+                    <Badge variant="outline" className="mt-2 text-xs">
+                      <Bell className="h-3 w-3 mr-1" />
+                      Auto-recharge ON
+                    </Badge>
+                  )}
                 </>
               )}
             </CardContent>
@@ -426,6 +484,9 @@ export default function ClientBilling() {
             )}
           </CardContent>
         </Card>
+
+        {/* Payment History with Invoice Downloads */}
+        <PaymentHistoryCard />
       </div>
     </DashboardLayout>
   );
