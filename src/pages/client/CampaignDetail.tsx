@@ -35,6 +35,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { BulkCallDialog } from "@/components/campaigns/BulkCallDialog";
 import { GoogleSheetSync } from "@/components/campaigns/GoogleSheetSync";
+import { LeadDetailsDialog } from "@/components/campaigns/LeadDetailsDialog";
 import {
   Plus,
   Upload,
@@ -54,6 +55,7 @@ import {
   BookOpen,
   PhoneCall,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 
 interface CampaignLead {
@@ -66,8 +68,11 @@ interface CampaignLead {
   call_status: string | null;
   call_duration: number | null;
   call_summary: string | null;
+  call_sentiment: string | null;
   notes: string | null;
+  call_id: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 const STAGES = [
@@ -97,6 +102,8 @@ export default function CampaignDetail() {
   const [activeTab, setActiveTab] = useState("all");
   const [newLead, setNewLead] = useState({ name: "", phone_number: "", email: "" });
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [selectedLead, setSelectedLead] = useState<CampaignLead | null>(null);
+  const [isLeadDetailsOpen, setIsLeadDetailsOpen] = useState(false);
 
   // Fetch campaign details
   const { data: campaign, isLoading: campaignLoading } = useQuery({
@@ -430,6 +437,13 @@ export default function CampaignDetail() {
           existingSheetId={campaign?.google_sheet_id}
         />
 
+        {/* Lead Details Dialog */}
+        <LeadDetailsDialog
+          lead={selectedLead}
+          open={isLeadDetailsOpen}
+          onOpenChange={setIsLeadDetailsOpen}
+        />
+
         {/* Leads Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
@@ -538,7 +552,18 @@ export default function CampaignDetail() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setSelectedLead(lead);
+                                setIsLeadDetailsOpen(true);
+                              }}
+                              title="View details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" title="Make call">
                               <Phone className="h-4 w-4" />
                             </Button>
                             <Button
@@ -549,6 +574,7 @@ export default function CampaignDetail() {
                                   deleteLead.mutate(lead.id);
                                 }
                               }}
+                              title="Delete lead"
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
