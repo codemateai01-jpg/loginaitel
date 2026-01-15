@@ -55,12 +55,14 @@ interface CallDetailsDialogProps {
   call: Call | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  hidePhoneNumber?: boolean;
 }
 
 export function CallDetailsDialog({
   call,
   open,
   onOpenChange,
+  hidePhoneNumber = false,
 }: CallDetailsDialogProps) {
   const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -210,15 +212,16 @@ export function CallDetailsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* Call Info */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-muted/50 border-2 border-border">
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">Phone</p>
-              <p className="font-medium text-sm font-mono">{call.phone_number || "—"}</p>
+          {!hidePhoneNumber && (
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-xs text-muted-foreground">Phone</p>
+                <p className="font-medium text-sm font-mono">{call.phone_number || "—"}</p>
+              </div>
             </div>
-          </div>
+          )}
           <div className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-muted-foreground" />
             <div>
