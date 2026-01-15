@@ -34,6 +34,10 @@ import {
   BarChart3,
   Download,
   Loader2,
+  PhoneIncoming,
+  PhoneOutgoing,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,7 +69,10 @@ interface CallDisplay {
   recording_url: string | null;
   sentiment: string | null;
   external_call_id: string | null;
+  call_type: "inbound" | "outbound" | null;
 }
+
+const ITEMS_PER_PAGE = 20;
 
 const statusConfig: Record<string, { label: string; icon: typeof Phone; className: string }> = {
   completed: {
@@ -73,12 +80,27 @@ const statusConfig: Record<string, { label: string; icon: typeof Phone; classNam
     icon: CheckCircle,
     className: "bg-chart-2/10 border-chart-2 text-chart-2",
   },
+  "call-disconnected": {
+    label: "Disconnected",
+    icon: PhoneOff,
+    className: "bg-chart-4/10 border-chart-4 text-chart-4",
+  },
   initiated: {
     label: "Initiated",
     icon: Phone,
     className: "bg-chart-1/10 border-chart-1 text-chart-1",
   },
-  in_progress: {
+  queued: {
+    label: "Queued",
+    icon: Clock,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  ringing: {
+    label: "Ringing",
+    icon: Phone,
+    className: "bg-chart-1/10 border-chart-1 text-chart-1",
+  },
+  "in-progress": {
     label: "In Progress",
     icon: Clock,
     className: "bg-chart-4/10 border-chart-4 text-chart-4",
@@ -88,10 +110,30 @@ const statusConfig: Record<string, { label: string; icon: typeof Phone; classNam
     icon: XCircle,
     className: "bg-destructive/10 border-destructive text-destructive",
   },
-  no_answer: {
+  "no-answer": {
     label: "No Answer",
     icon: PhoneOff,
     className: "bg-muted border-border text-muted-foreground",
+  },
+  busy: {
+    label: "Busy",
+    icon: PhoneOff,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  canceled: {
+    label: "Canceled",
+    icon: XCircle,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  stopped: {
+    label: "Stopped",
+    icon: XCircle,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  "balance-low": {
+    label: "Balance Low",
+    icon: XCircle,
+    className: "bg-destructive/10 border-destructive text-destructive",
   },
 };
 
@@ -101,8 +143,10 @@ export default function ClientCalls() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [callTypeFilter, setCallTypeFilter] = useState("all");
   const [selectedCall, setSelectedCall] = useState<CallDisplay | null>(null);
   const [dateRange, setDateRange] = useState("7");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Fetch agents for this client (to get external Bolna agent IDs)
   const { data: agents } = useQuery({
@@ -136,33 +180,54 @@ export default function ClientCalls() {
       const startDate = subDays(new Date(), parseInt(dateRange));
       const allCalls: CallDisplay[] = [];
 
-      // Fetch executions for each agent
+      // Fetch executions for each agent (client's assigned agents only)
       for (const agent of agents!) {
         if (!agent.external_agent_id) continue;
 
-        const result = await listAgentExecutions({
-          agent_id: agent.external_agent_id,
-          page_size: 50,
-          from: startDate.toISOString(),
-        });
+        try {
+          const result = await listAgentExecutions({
+            agent_id: agent.external_agent_id,
+            page_size: 50, // Bolna max is 50 per page
+            from: startDate.toISOString(),
+          });
 
-        if (result.data?.data) {
-          // Map Bolna execution to our display format
-          const mappedCalls = result.data.data.map((exec: CallExecution): CallDisplay => ({
-            id: exec.id,
-            phone_number: exec.telephony_data?.to_number || "Unknown",
-            agent_id: exec.agent_id,
-            agent_name: agent.agent_name,
-            status: exec.status,
-            duration_seconds: exec.conversation_time || null,
-            connected: (exec.conversation_time || 0) >= 45,
-            created_at: exec.created_at,
-            transcript: exec.transcript || null,
-            recording_url: exec.telephony_data?.recording_url || null,
-            sentiment: null, // Bolna doesn't provide sentiment
-            external_call_id: exec.id,
-          }));
-          allCalls.push(...mappedCalls);
+          if (result.data?.data) {
+            // Map Bolna execution to our display format
+            const mappedCalls = result.data.data.map((exec: CallExecution): CallDisplay => {
+              // Get duration - prefer telephony_data.duration, fallback to conversation_time
+              let durationSeconds: number | null = null;
+              if (exec.telephony_data?.duration) {
+                durationSeconds = Math.round(parseFloat(exec.telephony_data.duration));
+              } else if (exec.conversation_time !== undefined && exec.conversation_time !== null) {
+                durationSeconds = Math.round(exec.conversation_time);
+              }
+
+              // Get phone number - for inbound calls, show from_number; for outbound, show to_number
+              const callType = exec.telephony_data?.call_type || null;
+              const phoneNumber = callType === "inbound" 
+                ? exec.telephony_data?.from_number 
+                : exec.telephony_data?.to_number;
+
+              return {
+                id: exec.id,
+                phone_number: phoneNumber || "Unknown",
+                agent_id: exec.agent_id,
+                agent_name: agent.agent_name,
+                status: exec.status,
+                duration_seconds: durationSeconds,
+                connected: (durationSeconds || 0) >= 45,
+                created_at: exec.created_at,
+                transcript: exec.transcript || null,
+                recording_url: exec.telephony_data?.recording_url || null,
+                sentiment: null, // Bolna doesn't provide sentiment
+                external_call_id: exec.id,
+                call_type: callType,
+              };
+            });
+            allCalls.push(...mappedCalls);
+          }
+        } catch (err) {
+          console.error(`Failed to fetch executions for agent ${agent.agent_name}:`, err);
         }
       }
 
@@ -176,12 +241,30 @@ export default function ClientCalls() {
   });
 
   // Filter calls
-  const filteredCalls = calls?.filter((call) => {
-    const matchesSearch = call.phone_number?.toLowerCase().includes(search.toLowerCase()) || 
-                          call.id.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || call.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredCalls = useMemo(() => {
+    if (!calls) return [];
+    return calls.filter((call) => {
+      const matchesSearch = call.phone_number?.toLowerCase().includes(search.toLowerCase()) || 
+                            call.id.toLowerCase().includes(search.toLowerCase()) ||
+                            call.agent_name?.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === "all" || call.status === statusFilter;
+      const matchesCallType = callTypeFilter === "all" || call.call_type === callTypeFilter;
+      return matchesSearch && matchesStatus && matchesCallType;
+    });
+  }, [calls, search, statusFilter, callTypeFilter]);
+
+  // Pagination
+  const totalPages = Math.ceil((filteredCalls?.length || 0) / ITEMS_PER_PAGE);
+  const paginatedCalls = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredCalls.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredCalls, currentPage]);
+
+  // Reset to page 1 when filters change
+  const handleFilterChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (value: string) => {
+    setter(value);
+    setCurrentPage(1);
+  };
 
   // Calculate stats
   const stats = {
@@ -249,19 +332,19 @@ export default function ClientCalls() {
   };
 
   const exportCalls = () => {
-    if (!filteredCalls) return;
+    if (!filteredCalls || filteredCalls.length === 0) return;
     
     const csv = [
-      ["Date", "Phone Number", "Agent", "Status", "Duration", "Connected", "Sentiment"].join(","),
+      ["Date", "Type", "Phone Number", "Agent", "Status", "Duration", "Connected"].join(","),
       ...filteredCalls.map((call) =>
         [
           format(new Date(call.created_at), "yyyy-MM-dd HH:mm"),
+          call.call_type || "outbound",
           call.phone_number || "",
           call.agent_name || "",
           call.status,
           formatDuration(call.duration_seconds),
           call.connected ? "Yes" : "No",
-          call.sentiment || "neutral",
         ].join(",")
       ),
     ].join("\n");
@@ -354,23 +437,38 @@ export default function ClientCalls() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or phone..."
+                  placeholder="Search by phone, agent name..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="pl-10 border-2"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={callTypeFilter} onValueChange={handleFilterChange(setCallTypeFilter)}>
+                <SelectTrigger className="w-[150px] border-2">
+                  <SelectValue placeholder="Call Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
                 <SelectTrigger className="w-[180px] border-2">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="initiated">Initiated</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="call-disconnected">Disconnected</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="ringing">Ringing</SelectItem>
+                  <SelectItem value="no-answer">No Answer</SelectItem>
+                  <SelectItem value="busy">Busy</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="no_answer">No Answer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -380,11 +478,11 @@ export default function ClientCalls() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="font-bold">Type</TableHead>
                     <TableHead className="font-bold">Phone Number</TableHead>
                     <TableHead className="font-bold">Agent</TableHead>
                     <TableHead className="font-bold">Status</TableHead>
                     <TableHead className="font-bold">Duration</TableHead>
-                    <TableHead className="font-bold">Sentiment</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold w-32">Actions</TableHead>
                   </TableRow>
@@ -393,10 +491,11 @@ export default function ClientCalls() {
                   {isLoading ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                         Loading calls...
                       </TableCell>
                     </TableRow>
-                  ) : filteredCalls?.length === 0 ? (
+                  ) : paginatedCalls?.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8">
                         <Phone className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
@@ -404,11 +503,24 @@ export default function ClientCalls() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCalls?.map((call) => {
+                    paginatedCalls?.map((call) => {
                       const status = statusConfig[call.status] || statusConfig.initiated;
                       const StatusIcon = status.icon;
                       return (
                         <TableRow key={call.id} className="border-b-2 border-border">
+                          <TableCell>
+                            {call.call_type === "inbound" ? (
+                              <span className="inline-flex items-center gap-1 text-chart-1">
+                                <PhoneIncoming className="h-4 w-4" />
+                                <span className="text-xs">In</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-chart-2">
+                                <PhoneOutgoing className="h-4 w-4" />
+                                <span className="text-xs">Out</span>
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <p className="font-mono text-sm">{call.phone_number || "—"}</p>
                           </TableCell>
@@ -423,19 +535,6 @@ export default function ClientCalls() {
                           </TableCell>
                           <TableCell className="font-mono">
                             {formatDuration(call.duration_seconds)}
-                          </TableCell>
-                          <TableCell>
-                            <span
-                              className={`text-xs font-medium capitalize ${
-                                call.sentiment === "positive"
-                                  ? "text-chart-2"
-                                  : call.sentiment === "negative"
-                                  ? "text-destructive"
-                                  : "text-muted-foreground"
-                              }`}
-                            >
-                              {call.sentiment || "neutral"}
-                            </span>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {format(new Date(call.created_at), "MMM d, HH:mm")}
@@ -469,6 +568,38 @@ export default function ClientCalls() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredCalls.length)} of {filteredCalls.length} calls
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground px-2">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
