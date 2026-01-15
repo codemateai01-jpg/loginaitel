@@ -486,6 +486,7 @@ export type Database = {
           task_id: string
           transcript: string | null
           updated_at: string
+          uploaded_audio_url: string | null
         }
         Insert: {
           agent_id: string
@@ -502,6 +503,7 @@ export type Database = {
           task_id: string
           transcript?: string | null
           updated_at?: string
+          uploaded_audio_url?: string | null
         }
         Update: {
           agent_id?: string
@@ -518,6 +520,7 @@ export type Database = {
           task_id?: string
           transcript?: string | null
           updated_at?: string
+          uploaded_audio_url?: string | null
         }
         Relationships: [
           {

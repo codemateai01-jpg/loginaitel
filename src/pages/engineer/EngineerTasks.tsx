@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +38,9 @@ import {
   FileText,
   PhoneCall,
   Star,
+  Upload,
+  Music,
+  X,
 } from "lucide-react";
 import { formatDistanceToNow, format, differenceInMinutes } from "date-fns";
 
@@ -135,6 +140,9 @@ export default function EngineerTasks() {
   const [showSubmitDemoDialog, setShowSubmitDemoDialog] = useState(false);
   const [submissionNotes, setSubmissionNotes] = useState("");
   const [selectedDemoCallId, setSelectedDemoCallId] = useState<string | null>(null);
+  const [uploadedAudioFile, setUploadedAudioFile] = useState<File | null>(null);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch available tasks (pending - unassigned OR assigned to current user)
   const { data: availableTasks = [], isLoading: loadingAvailable } = useQuery({
@@ -317,13 +325,68 @@ export default function EngineerTasks() {
 
   // Submit demo call for final review
   const submitDemoMutation = useMutation({
-    mutationFn: async ({ taskId, demoCallId }: { taskId: string; demoCallId: string }) => {
+    mutationFn: async ({ taskId, demoCallId, audioFile }: { taskId: string; demoCallId?: string; audioFile?: File }) => {
+      let uploadedAudioUrl: string | null = null;
+      let finalDemoCallId = demoCallId;
+
+      // If audio file is provided, upload it first
+      if (audioFile && user?.id) {
+        setIsUploadingAudio(true);
+        const fileExt = audioFile.name.split('.').pop();
+        const fileName = `${user.id}/${taskId}/${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('demo-audio')
+          .upload(fileName, audioFile, {
+            contentType: audioFile.type,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          setIsUploadingAudio(false);
+          throw new Error(`Failed to upload audio: ${uploadError.message}`);
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('demo-audio')
+          .getPublicUrl(fileName);
+
+        uploadedAudioUrl = publicUrl;
+
+        // Create a demo call record for the uploaded audio
+        const { data: newDemoCall, error: demoError } = await supabase
+          .from("demo_calls")
+          .insert({
+            task_id: taskId,
+            engineer_id: user.id,
+            agent_id: selectedTask?.aitel_agent_id || '',
+            phone_number: 'uploaded',
+            status: 'completed',
+            uploaded_audio_url: uploadedAudioUrl,
+          })
+          .select()
+          .single();
+
+        if (demoError) {
+          setIsUploadingAudio(false);
+          throw new Error(`Failed to create demo call record: ${demoError.message}`);
+        }
+
+        finalDemoCallId = newDemoCall.id;
+        setIsUploadingAudio(false);
+      }
+
+      if (!finalDemoCallId) {
+        throw new Error("Please select a demo call or upload an audio file.");
+      }
+
       const { data, error } = await supabase
         .from("tasks")
         .update({
           status: "demo_submitted",
           demo_completed_at: new Date().toISOString(),
-          selected_demo_call_id: demoCallId,
+          selected_demo_call_id: finalDemoCallId,
         })
         .eq("id", taskId)
         .eq("assigned_to", user?.id)
@@ -337,15 +400,18 @@ export default function EngineerTasks() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["demo-calls"] });
       setShowSubmitDemoDialog(false);
       setSelectedTask(null);
       setSelectedDemoCallId(null);
+      setUploadedAudioFile(null);
       toast({
         title: "Demo Submitted!",
         description: "Your demo call has been submitted for final review.",
       });
     },
     onError: (error: Error) => {
+      setIsUploadingAudio(false);
       toast({
         title: "Error",
         description: error.message || "Failed to submit demo.",
@@ -994,12 +1060,18 @@ export default function EngineerTasks() {
       </Dialog>
 
       {/* Submit Demo Dialog */}
-      <Dialog open={showSubmitDemoDialog} onOpenChange={setShowSubmitDemoDialog}>
+      <Dialog open={showSubmitDemoDialog} onOpenChange={(open) => {
+        setShowSubmitDemoDialog(open);
+        if (!open) {
+          setUploadedAudioFile(null);
+          setSelectedDemoCallId(null);
+        }
+      }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Submit Demo Call for Final Review</DialogTitle>
             <DialogDescription>
-              Select the best demo call to submit for admin review.
+              Select a demo call from below or upload an audio file.
             </DialogDescription>
           </DialogHeader>
           {selectedTask && (
@@ -1007,23 +1079,88 @@ export default function EngineerTasks() {
               <div className="border-2 border-border p-4">
                 <h4 className="font-bold">{selectedTask.title}</h4>
               </div>
+
+              {/* Audio Upload Section */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Upload Audio File
+                </Label>
+                <div className="border-2 border-dashed border-border p-4 rounded-lg">
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setUploadedAudioFile(file);
+                        setSelectedDemoCallId(null);
+                      }
+                    }}
+                  />
+                  
+                  {uploadedAudioFile ? (
+                    <div className="flex items-center justify-between bg-primary/10 p-3 border border-primary">
+                      <div className="flex items-center gap-3">
+                        <Music className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="font-medium text-sm">{uploadedAudioFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(uploadedAudioFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setUploadedAudioFile(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      className="text-center cursor-pointer py-4"
+                      onClick={() => audioInputRef.current?.click()}
+                    >
+                      <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        Click to upload audio file (MP3, WAV, M4A)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">OR select from existing calls</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
               
-              {demoCalls.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No demo calls yet. Make a demo call first.</p>
+              {/* Existing Demo Calls */}
+              {demoCalls.filter(call => call.status === 'completed').length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Phone className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No completed demo calls yet.</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {demoCalls.filter(call => call.status === 'completed').map((call) => (
                     <div
                       key={call.id}
                       className={`border-2 p-3 cursor-pointer transition-colors ${
-                        selectedDemoCallId === call.id
+                        selectedDemoCallId === call.id && !uploadedAudioFile
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-primary/50'
                       }`}
-                      onClick={() => setSelectedDemoCallId(call.id)}
+                      onClick={() => {
+                        setSelectedDemoCallId(call.id);
+                        setUploadedAudioFile(null);
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -1032,7 +1169,7 @@ export default function EngineerTasks() {
                             Duration: {call.duration_seconds || 0}s • {format(new Date(call.created_at), "MMM d, h:mm a")}
                           </p>
                         </div>
-                        {selectedDemoCallId === call.id && (
+                        {selectedDemoCallId === call.id && !uploadedAudioFile && (
                           <CheckCircle className="h-5 w-5 text-primary" />
                         )}
                       </div>
@@ -1048,20 +1185,26 @@ export default function EngineerTasks() {
             </Button>
             <Button
               onClick={() =>
-                selectedTask && selectedDemoCallId &&
+                selectedTask &&
                 submitDemoMutation.mutate({
                   taskId: selectedTask.id,
-                  demoCallId: selectedDemoCallId,
+                  demoCallId: uploadedAudioFile ? undefined : selectedDemoCallId || undefined,
+                  audioFile: uploadedAudioFile || undefined,
                 })
               }
-              disabled={submitDemoMutation.isPending || !selectedDemoCallId}
+              disabled={submitDemoMutation.isPending || isUploadingAudio || (!selectedDemoCallId && !uploadedAudioFile)}
             >
-              {submitDemoMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              {submitDemoMutation.isPending || isUploadingAudio ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isUploadingAudio ? "Uploading..." : "Submitting..."}
+                </>
               ) : (
-                <Send className="h-4 w-4 mr-2" />
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Submit for Final Review
+                </>
               )}
-              Submit for Final Review
             </Button>
           </DialogFooter>
         </DialogContent>
