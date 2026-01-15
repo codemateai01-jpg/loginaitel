@@ -542,14 +542,7 @@ export default function AdminRealTimeMonitor() {
 
         {/* Call Details Dialog */}
         <CallDetailsDialog
-          call={
-            selectedCall
-              ? {
-                  ...selectedCall,
-                  lead: undefined,
-                }
-              : null
-          }
+          call={selectedCall}
           open={!!selectedCall}
           onOpenChange={(open) => !open && setSelectedCall(null)}
         />

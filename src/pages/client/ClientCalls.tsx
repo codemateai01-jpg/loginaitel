@@ -67,7 +67,7 @@ interface CallDisplay {
   created_at: string;
   transcript: string | null;
   recording_url: string | null;
-  sentiment: string | null;
+  summary: string | null;
   external_call_id: string | null;
   call_type: "inbound" | "outbound" | null;
 }
@@ -219,7 +219,7 @@ export default function ClientCalls() {
                 created_at: exec.created_at,
                 transcript: exec.transcript || null,
                 recording_url: exec.telephony_data?.recording_url || null,
-                sentiment: null, // Bolna doesn't provide sentiment
+                summary: exec.summary || null,
                 external_call_id: exec.id,
                 call_type: callType,
               };
@@ -294,11 +294,12 @@ export default function ClientCalls() {
       }))
     : [];
 
-  const sentimentDistribution = calls
+  // Call type distribution (instead of sentiment)
+  const callTypeDistribution = calls
     ? Object.entries(
         calls.reduce((acc, call) => {
-          const sentiment = call.sentiment || "neutral";
-          acc[sentiment] = (acc[sentiment] || 0) + 1;
+          const type = call.call_type || "outbound";
+          acc[type] = (acc[type] || 0) + 1;
           return acc;
         }, {} as Record<string, number>)
       ).map(([name, value]) => ({
@@ -696,22 +697,20 @@ export default function ClientCalls() {
               </div>
             </div>
 
-            {/* Sentiment Distribution */}
+            {/* Call Type Distribution */}
             <div className="border-2 border-border bg-card p-6">
               <div className="flex items-center gap-2 mb-6">
                 <BarChart3 className="h-5 w-5" />
-                <h3 className="font-bold">Sentiment Analysis</h3>
+                <h3 className="font-bold">Call Type Distribution</h3>
               </div>
-              <div className="grid sm:grid-cols-3 gap-6 text-center">
-                {sentimentDistribution.map((item) => (
+              <div className="grid sm:grid-cols-2 gap-6 text-center">
+                {callTypeDistribution.map((item) => (
                   <div key={item.name} className="p-4 border-2 border-border">
                     <p
                       className={`text-3xl font-bold ${
-                        item.name.toLowerCase() === "positive"
-                          ? "text-chart-2"
-                          : item.name.toLowerCase() === "negative"
-                          ? "text-destructive"
-                          : "text-muted-foreground"
+                        item.name.toLowerCase() === "inbound"
+                          ? "text-chart-1"
+                          : "text-chart-2"
                       }`}
                     >
                       {item.value}

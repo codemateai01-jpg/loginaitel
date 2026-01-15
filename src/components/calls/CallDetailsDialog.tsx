@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   Phone,
   FileText,
@@ -26,30 +23,15 @@ import {
   CheckCircle,
   XCircle,
   MessageSquare,
-  TrendingUp,
-  ListOrdered,
   PhoneIncoming,
   PhoneOutgoing,
   Download,
-  RefreshCw,
-  AlertCircle,
   Voicemail,
-  Star,
-  ThumbsUp,
-  ThumbsDown,
-  Target,
-  Mic,
-  Zap,
-  Save,
-  Loader2,
-  Sparkles,
-  Lightbulb,
-  TrendingDown,
+  AlertCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Slider } from "@/components/ui/slider";
-import { getExecution, getExecutionLogs, downloadRecording, CallExecution, ExecutionLogEntry } from "@/lib/aitel";
-import { supabase } from "@/integrations/supabase/client";
+import { getExecution, downloadRecording } from "@/lib/aitel";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -59,40 +41,14 @@ interface Call {
   status: string;
   duration_seconds: number | null;
   connected: boolean | null;
-  started_at?: string | null;
-  ended_at?: string | null;
   created_at: string;
   transcript: string | null;
   recording_url: string | null;
   summary?: string | null;
-  sentiment: string | null;
-  metadata?: unknown;
   external_call_id?: string | null;
   phone_number?: string;
   agent_name?: string;
-  lead_id?: string;
-  lead?: {
-    name: string | null;
-    phone_number: string;
-  };
-  agent?: {
-    name: string;
-  };
-}
-
-interface CallEvaluation {
-  overall_score: number;
-  greeting_score: number;
-  objection_handling: number;
-  closing_score: number;
-  clarity_score: number;
-  engagement_score: number;
-  goal_achieved: boolean;
-  notes: string;
-  ai_generated?: boolean;
-  key_moments?: string[];
-  improvement_suggestions?: string[];
-  evaluated_at?: string;
+  call_type?: "inbound" | "outbound" | null;
 }
 
 interface CallDetailsDialogProps {
@@ -101,298 +57,25 @@ interface CallDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const EVALUATION_CRITERIA = [
-  { key: "greeting_score", label: "Opening/Greeting", icon: Mic, description: "How well did the agent introduce themselves and set the tone?" },
-  { key: "clarity_score", label: "Clarity & Communication", icon: MessageSquare, description: "Was the agent clear and easy to understand?" },
-  { key: "engagement_score", label: "Engagement", icon: Zap, description: "Did the agent keep the lead engaged throughout?" },
-  { key: "objection_handling", label: "Objection Handling", icon: Target, description: "How well were objections addressed?" },
-  { key: "closing_score", label: "Closing", icon: CheckCircle, description: "Was there a clear call-to-action or next step?" },
-];
-
-function ScoreSlider({ 
-  value, 
-  onChange, 
-  label, 
-  description, 
-  icon: Icon 
-}: { 
-  value: number; 
-  onChange: (v: number) => void; 
-  label: string; 
-  description: string;
-  icon: React.ElementType;
-}) {
-  const getScoreColor = (score: number) => {
-    if (score >= 8) return "text-green-600";
-    if (score >= 5) return "text-yellow-600";
-    return "text-destructive";
-  };
-
-  const getScoreLabel = (score: number) => {
-    if (score >= 9) return "Excellent";
-    if (score >= 7) return "Good";
-    if (score >= 5) return "Average";
-    if (score >= 3) return "Poor";
-    return "Very Poor";
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{label}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={cn("text-lg font-bold", getScoreColor(value))}>{value}</span>
-          <span className="text-xs text-muted-foreground">/ 10</span>
-        </div>
-      </div>
-      <Slider
-        value={[value]}
-        max={10}
-        min={1}
-        step={1}
-        onValueChange={(v) => onChange(v[0])}
-        className="w-full"
-      />
-      <div className="flex justify-between">
-        <p className="text-xs text-muted-foreground">{description}</p>
-        <Badge variant="outline" className={cn("text-xs", getScoreColor(value))}>
-          {getScoreLabel(value)}
-        </Badge>
-      </div>
-    </div>
-  );
-}
-
-function OverallScoreDisplay({ score }: { score: number }) {
-  const getScoreColor = (s: number) => {
-    if (s >= 80) return { bg: "bg-green-500", text: "text-green-600", label: "Excellent" };
-    if (s >= 60) return { bg: "bg-yellow-500", text: "text-yellow-600", label: "Good" };
-    if (s >= 40) return { bg: "bg-orange-500", text: "text-orange-600", label: "Average" };
-    return { bg: "bg-destructive", text: "text-destructive", label: "Needs Improvement" };
-  };
-
-  const config = getScoreColor(score);
-
-  return (
-    <div className="flex flex-col items-center gap-3 p-6 bg-muted/50 border-2 border-border">
-      <div className="relative w-24 h-24">
-        <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            stroke="currentColor"
-            strokeWidth="8"
-            fill="none"
-            className="text-muted"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            stroke="currentColor"
-            strokeWidth="8"
-            fill="none"
-            strokeDasharray={`${(score / 100) * 251.2} 251.2`}
-            strokeLinecap="round"
-            className={config.text}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className={cn("text-2xl font-bold", config.text)}>{score}%</span>
-        </div>
-      </div>
-      <Badge className={cn(config.bg, "text-white")}>{config.label}</Badge>
-    </div>
-  );
-}
-
 export function CallDetailsDialog({
   call,
   open,
   onOpenChange,
 }: CallDetailsDialogProps) {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
-  
-  // Evaluation state
-  const [evaluation, setEvaluation] = useState<CallEvaluation>({
-    overall_score: 70,
-    greeting_score: 7,
-    objection_handling: 7,
-    closing_score: 7,
-    clarity_score: 7,
-    engagement_score: 7,
-    goal_achieved: false,
-    notes: "",
-  });
 
   // Fetch execution details from Bolna if we have external_call_id
-  const { data: execution, isLoading: executionLoading } = useQuery({
+  const { data: execution } = useQuery({
     queryKey: ["execution", call?.external_call_id],
     enabled: !!call?.external_call_id && open,
     queryFn: async () => {
       const response = await getExecution(call!.external_call_id!);
       if (response.error) throw new Error(response.error);
       return response.data;
-    },
-  });
-
-  // Fetch execution logs from Bolna
-  const { data: executionLogs, isLoading: logsLoading } = useQuery({
-    queryKey: ["execution-logs", call?.external_call_id],
-    enabled: !!call?.external_call_id && open,
-    queryFn: async () => {
-      const response = await getExecutionLogs(call!.external_call_id!);
-      if (response.error) throw new Error(response.error);
-      return response.data?.data || [];
-    },
-  });
-
-  // Load existing evaluation from metadata
-  useEffect(() => {
-    if (call?.metadata && typeof call.metadata === 'object') {
-      const meta = call.metadata as Record<string, unknown>;
-      if (meta.evaluation) {
-        setEvaluation(meta.evaluation as CallEvaluation);
-      }
-    }
-  }, [call]);
-
-  // Calculate overall score when criteria change
-  useEffect(() => {
-    const scores = [
-      evaluation.greeting_score,
-      evaluation.clarity_score,
-      evaluation.engagement_score,
-      evaluation.objection_handling,
-      evaluation.closing_score,
-    ];
-    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const overall = Math.round(avg * 10);
-    setEvaluation(prev => ({ ...prev, overall_score: overall }));
-  }, [
-    evaluation.greeting_score,
-    evaluation.clarity_score,
-    evaluation.engagement_score,
-    evaluation.objection_handling,
-    evaluation.closing_score,
-  ]);
-
-  // Save evaluation mutation
-  const saveEvaluation = useMutation({
-    mutationFn: async () => {
-      if (!call) return;
-      
-      const currentMetadata = (call.metadata as Record<string, unknown>) || {};
-      const evaluationData = {
-        overall_score: evaluation.overall_score,
-        greeting_score: evaluation.greeting_score,
-        objection_handling: evaluation.objection_handling,
-        closing_score: evaluation.closing_score,
-        clarity_score: evaluation.clarity_score,
-        engagement_score: evaluation.engagement_score,
-        goal_achieved: evaluation.goal_achieved,
-        notes: evaluation.notes,
-        key_moments: evaluation.key_moments,
-        improvement_suggestions: evaluation.improvement_suggestions,
-        ai_generated: evaluation.ai_generated,
-      };
-      
-      const { error } = await supabase
-        .from("calls")
-        .update({
-          metadata: JSON.parse(JSON.stringify({
-            ...currentMetadata,
-            evaluation: evaluationData,
-            evaluated_at: new Date().toISOString(),
-          })),
-        })
-        .eq("id", call.id);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Evaluation Saved",
-        description: "Call evaluation has been saved successfully",
-      });
-      queryClient.invalidateQueries({ queryKey: ["recent-calls"] });
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Save Failed",
-        description: error instanceof Error ? error.message : "Failed to save evaluation",
-      });
-    },
-  });
-
-  // AI Evaluation mutation
-  const aiEvaluation = useMutation({
-    mutationFn: async () => {
-      if (!call) throw new Error("No call selected");
-      
-      const transcriptSource = execution?.transcript || call.transcript;
-      if (!transcriptSource) {
-        throw new Error("No transcript available for evaluation");
-      }
-
-      const { data: session } = await supabase.auth.getSession();
-      if (!session?.session?.access_token) {
-        throw new Error("Not authenticated");
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/evaluate-call`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
-            callId: call.id,
-            transcript: transcriptSource,
-            agentName: call.agent?.name,
-            leadName: call.lead?.name,
-            callDuration: call.duration_seconds,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "AI evaluation failed");
-      }
-
-      const data = await response.json();
-      return data.evaluation;
-    },
-    onSuccess: (evaluationResult) => {
-      setEvaluation({
-        ...evaluationResult,
-        ai_generated: true,
-      });
-      toast({
-        title: "AI Evaluation Complete",
-        description: "Call has been analyzed and scored by AI",
-      });
-      queryClient.invalidateQueries({ queryKey: ["recent-calls"] });
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "AI Evaluation Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze call",
-      });
     },
   });
 
@@ -447,17 +130,6 @@ export function CallDetailsDialog({
     }
   };
 
-  const getSentimentColor = (sentiment: string | null) => {
-    switch (sentiment) {
-      case "positive":
-        return "text-green-600";
-      case "negative":
-        return "text-destructive";
-      default:
-        return "text-muted-foreground";
-    }
-  };
-
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
       completed: { variant: "default", label: "Completed" },
@@ -479,6 +151,9 @@ export function CallDetailsDialog({
 
   // Get recording URL from execution or call
   const recordingUrl = execution?.telephony_data?.recording_url || call.recording_url;
+
+  // Get summary from execution or call
+  const callSummary = execution?.summary || call.summary;
 
   // Parse transcript into messages
   const parseTranscript = (transcript: string | null) => {
@@ -524,23 +199,6 @@ export function CallDetailsDialog({
     }
   };
 
-  const getComponentIcon = (component: string) => {
-    switch (component.toLowerCase()) {
-      case "llm":
-        return <Bot className="h-3 w-3" />;
-      case "synthesizer":
-        return <Volume2 className="h-3 w-3" />;
-      case "transcriber":
-        return <FileText className="h-3 w-3" />;
-      default:
-        return <MessageSquare className="h-3 w-3" />;
-    }
-  };
-
-  const updateEvaluationScore = (key: string, value: number) => {
-    setEvaluation(prev => ({ ...prev, [key]: value }));
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-2 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -548,7 +206,7 @@ export function CallDetailsDialog({
           <DialogTitle className="flex items-center gap-2">
             <Phone className="h-5 w-5" />
             Call Details
-            {execution && getStatusBadge(execution.status)}
+            {getStatusBadge(execution?.status || call.status)}
           </DialogTitle>
         </DialogHeader>
 
@@ -557,16 +215,15 @@ export function CallDetailsDialog({
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground" />
             <div>
-              <p className="text-xs text-muted-foreground">Lead</p>
-              <p className="font-medium text-sm">{call.lead?.name || "Unknown"}</p>
-              <p className="text-xs text-muted-foreground font-mono">{call.lead?.phone_number}</p>
+              <p className="text-xs text-muted-foreground">Phone</p>
+              <p className="font-medium text-sm font-mono">{call.phone_number || "—"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-muted-foreground" />
             <div>
               <p className="text-xs text-muted-foreground">Agent</p>
-              <p className="font-medium text-sm">{call.agent?.name || "—"}</p>
+              <p className="font-medium text-sm">{call.agent_name || "—"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -603,14 +260,14 @@ export function CallDetailsDialog({
               <span>{call.connected || execution.status === "completed" ? "Connected" : "Not Connected"}</span>
             </div>
             
-            {execution.telephony_data?.call_type && (
+            {(execution.telephony_data?.call_type || call.call_type) && (
               <div className="flex items-center gap-2">
-                {execution.telephony_data.call_type === "outbound" ? (
-                  <PhoneOutgoing className="h-4 w-4 text-blue-600" />
+                {(execution.telephony_data?.call_type || call.call_type) === "outbound" ? (
+                  <PhoneOutgoing className="h-4 w-4 text-chart-2" />
                 ) : (
-                  <PhoneIncoming className="h-4 w-4 text-green-600" />
+                  <PhoneIncoming className="h-4 w-4 text-chart-1" />
                 )}
-                <span className="capitalize">{execution.telephony_data.call_type}</span>
+                <span className="capitalize">{execution.telephony_data?.call_type || call.call_type}</span>
               </div>
             )}
 
@@ -620,14 +277,6 @@ export function CallDetailsDialog({
                 <span>Voicemail</span>
               </div>
             )}
-
-
-            <div className="flex items-center gap-2">
-              <TrendingUp className={`h-4 w-4 ${getSentimentColor(call.sentiment)}`} />
-              <span className={`capitalize ${getSentimentColor(call.sentiment)}`}>
-                {call.sentiment || "Neutral"}
-              </span>
-            </div>
           </div>
         )}
 
@@ -639,7 +288,7 @@ export function CallDetailsDialog({
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs - Only Transcript, Recording, Summary */}
         <Tabs defaultValue="transcript" className="flex-1 flex flex-col min-h-0">
           <TabsList className="border-2 border-border bg-card p-1 flex-wrap h-auto gap-1">
             <TabsTrigger
@@ -656,22 +305,6 @@ export function CallDetailsDialog({
             >
               <Volume2 className="h-4 w-4" />
               Recording
-            </TabsTrigger>
-            <TabsTrigger
-              value="evaluation"
-              className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Star className="h-4 w-4" />
-              Evaluation
-            </TabsTrigger>
-            <TabsTrigger
-              value="logs"
-              className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              disabled={!call.external_call_id}
-            >
-              <ListOrdered className="h-4 w-4" />
-              Logs
-              {logsLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
             </TabsTrigger>
             <TabsTrigger
               value="summary"
@@ -697,14 +330,14 @@ export function CallDetailsDialog({
                         <div
                           className={`w-8 h-8 flex items-center justify-center border-2 shrink-0 ${
                             isAgent
-                              ? "bg-blue-500/10 border-blue-500"
-                              : "bg-green-500/10 border-green-500"
+                              ? "bg-chart-1/10 border-chart-1"
+                              : "bg-chart-2/10 border-chart-2"
                           }`}
                         >
                           {isAgent ? (
-                            <Bot className="h-4 w-4 text-blue-600" />
+                            <Bot className="h-4 w-4 text-chart-1" />
                           ) : (
-                            <User className="h-4 w-4 text-green-600" />
+                            <User className="h-4 w-4 text-chart-2" />
                           )}
                         </div>
                         <div
@@ -802,261 +435,61 @@ export function CallDetailsDialog({
             </div>
           </TabsContent>
 
-          {/* Evaluation Tab */}
-          <TabsContent value="evaluation" className="flex-1 min-h-0">
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-6 p-4">
-                {/* AI Evaluation Button */}
-                <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/20">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 border border-primary/20">
-                      <Sparkles className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">AI-Powered Evaluation</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Automatically analyze transcript and score the call
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={() => aiEvaluation.mutate()}
-                    disabled={aiEvaluation.isPending || (!call?.transcript && !execution?.transcript)}
-                    variant="default"
-                    className="gap-2"
-                  >
-                    {aiEvaluation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4" />
-                        Run AI Evaluation
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {/* AI Badge */}
-                {evaluation.ai_generated && (
-                  <Badge variant="secondary" className="gap-1">
-                    <Sparkles className="h-3 w-3" />
-                    AI Generated
-                    {evaluation.evaluated_at && (
-                      <span className="text-xs opacity-70">
-                        • {format(new Date(evaluation.evaluated_at), "MMM d, HH:mm")}
-                      </span>
-                    )}
-                  </Badge>
-                )}
-
-                <div className="grid lg:grid-cols-3 gap-6">
-                  {/* Overall Score */}
-                  <div className="lg:col-span-1">
-                    <OverallScoreDisplay score={evaluation.overall_score} />
-                    
-                    {/* Goal Achievement */}
-                    <div className="mt-4 p-4 border-2 border-border">
-                      <Label className="text-sm font-medium mb-3 block">Goal Achieved?</Label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant={evaluation.goal_achieved ? "default" : "outline"}
-                          size="sm"
-                          className="flex-1 gap-2"
-                          onClick={() => setEvaluation(prev => ({ ...prev, goal_achieved: true }))}
-                        >
-                          <ThumbsUp className="h-4 w-4" />
-                          Yes
-                        </Button>
-                        <Button
-                          variant={!evaluation.goal_achieved ? "destructive" : "outline"}
-                          size="sm"
-                          className="flex-1 gap-2"
-                          onClick={() => setEvaluation(prev => ({ ...prev, goal_achieved: false }))}
-                        >
-                          <ThumbsDown className="h-4 w-4" />
-                          No
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Scoring Criteria */}
-                  <div className="lg:col-span-2 space-y-6">
-                    {EVALUATION_CRITERIA.map((criterion) => (
-                      <ScoreSlider
-                        key={criterion.key}
-                        value={evaluation[criterion.key as keyof CallEvaluation] as number}
-                        onChange={(v) => updateEvaluationScore(criterion.key, v)}
-                        label={criterion.label}
-                        description={criterion.description}
-                        icon={criterion.icon}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* AI Insights Section */}
-                {(evaluation.key_moments?.length || evaluation.improvement_suggestions?.length) && (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {/* Key Moments */}
-                    {evaluation.key_moments && evaluation.key_moments.length > 0 && (
-                      <div className="p-4 border-2 border-border bg-muted/30">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Star className="h-4 w-4 text-yellow-500" />
-                          <Label className="font-medium">Key Moments</Label>
-                        </div>
-                        <ul className="space-y-2">
-                          {evaluation.key_moments.map((moment, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm">
-                              <span className="text-primary font-bold">{i + 1}.</span>
-                              <span className="text-muted-foreground">{moment}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Improvement Suggestions */}
-                    {evaluation.improvement_suggestions && evaluation.improvement_suggestions.length > 0 && (
-                      <div className="p-4 border-2 border-border bg-muted/30">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Lightbulb className="h-4 w-4 text-orange-500" />
-                          <Label className="font-medium">Improvement Suggestions</Label>
-                        </div>
-                        <ul className="space-y-2">
-                          {evaluation.improvement_suggestions.map((suggestion, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm">
-                              <TrendingUp className="h-3 w-3 text-green-500 mt-1 shrink-0" />
-                              <span className="text-muted-foreground">{suggestion}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Notes */}
-                <div className="space-y-2">
-                  <Label>Evaluation Notes</Label>
-                  <Textarea
-                    placeholder="Add any observations or feedback about this call..."
-                    value={evaluation.notes}
-                    onChange={(e) => setEvaluation(prev => ({ ...prev, notes: e.target.value }))}
-                    className="min-h-[80px] border-2"
-                  />
-                </div>
-
-                {/* Save Button */}
-                <Button 
-                  onClick={() => saveEvaluation.mutate()} 
-                  disabled={saveEvaluation.isPending}
-                  className="w-full"
-                >
-                  {saveEvaluation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Evaluation
-                    </>
-                  )}
-                </Button>
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          {/* Logs Tab */}
-          <TabsContent value="logs" className="flex-1 min-h-0">
-            <ScrollArea className="h-[300px] border-2 border-border">
-              {logsLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : executionLogs && executionLogs.length > 0 ? (
-                <div className="divide-y divide-border">
-                  {executionLogs.map((log, index) => (
-                    <div key={index} className="p-3 hover:bg-muted/50">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant={log.type === "request" ? "outline" : "secondary"} className="text-xs">
-                          {log.type}
-                        </Badge>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          {getComponentIcon(log.component)}
-                          <span className="capitalize">{log.component}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {format(new Date(log.created_at), "HH:mm:ss.SSS")}
-                        </span>
-                      </div>
-                      <pre className="text-xs bg-muted/50 p-2 overflow-x-auto whitespace-pre-wrap break-all font-mono">
-                        {log.data.length > 500 ? `${log.data.slice(0, 500)}...` : log.data}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                  <ListOrdered className="h-8 w-8 mb-2" />
-                  <p>No execution logs available</p>
-                  <p className="text-xs">Logs will appear for calls with external IDs</p>
-                </div>
-              )}
-            </ScrollArea>
-          </TabsContent>
-
           {/* Summary Tab */}
           <TabsContent value="summary" className="flex-1">
             <ScrollArea className="h-[300px] border-2 border-border p-4">
               <div className="space-y-6">
                 {/* Call Summary */}
-                {call.summary ? (
+                {callSummary ? (
                   <div>
-                    <h4 className="font-medium mb-2">Call Summary</h4>
-                    <p className="text-sm text-muted-foreground">{call.summary}</p>
+                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Call Summary
+                    </h4>
+                    <div className="p-4 bg-muted/50 border-2 border-border">
+                      <p className="text-sm leading-relaxed">{callSummary}</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center py-4 text-muted-foreground">
+                  <div className="text-center py-8 text-muted-foreground">
                     <MessageSquare className="h-8 w-8 mx-auto mb-2" />
                     <p>No summary available</p>
+                    <p className="text-xs mt-1">Summary will appear here if summarization is enabled for the agent</p>
                   </div>
                 )}
-                
-                {/* Sentiment */}
-                {call.sentiment && (
+
+                {/* Extracted Data */}
+                {execution?.extracted_data && Object.keys(execution.extracted_data).length > 0 && (
                   <div>
-                    <h4 className="font-medium mb-2">Sentiment Analysis</h4>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-3 h-3 rounded-full ${
-                          call.sentiment === "positive"
-                            ? "bg-green-500"
-                            : call.sentiment === "negative"
-                            ? "bg-destructive"
-                            : "bg-muted-foreground"
-                        }`}
-                      />
-                      <span className="text-sm capitalize">{call.sentiment}</span>
+                    <h4 className="font-medium mb-3">Extracted Data</h4>
+                    <div className="p-4 bg-muted/50 border-2 border-border">
+                      <div className="space-y-2">
+                        {Object.entries(execution.extracted_data).map(([key, value]) => (
+                          <div key={key} className="flex justify-between text-sm">
+                            <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</span>
+                            <span className="font-medium">{String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
 
-
                 {/* Telephony Details */}
                 {execution?.telephony_data && (
                   <div>
-                    <h4 className="font-medium mb-2">Telephony Details</h4>
-                    <div className="space-y-1 text-sm">
+                    <h4 className="font-medium mb-3">Call Details</h4>
+                    <div className="p-4 bg-muted/50 border-2 border-border space-y-2 text-sm">
                       {execution.telephony_data.from_number && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">From</span>
                           <span className="font-mono">{execution.telephony_data.from_number}</span>
+                        </div>
+                      )}
+                      {execution.telephony_data.to_number && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">To</span>
+                          <span className="font-mono">{execution.telephony_data.to_number}</span>
                         </div>
                       )}
                       {execution.telephony_data.hangup_reason && (
@@ -1065,17 +498,13 @@ export function CallDetailsDialog({
                           <span>{execution.telephony_data.hangup_reason}</span>
                         </div>
                       )}
+                      {execution.telephony_data.hangup_by && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Hangup By</span>
+                          <span>{execution.telephony_data.hangup_by}</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* Extracted Data */}
-                {execution?.extracted_data && Object.keys(execution.extracted_data).length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-2">Extracted Data</h4>
-                    <pre className="text-xs bg-muted/50 p-3 border border-border overflow-x-auto font-mono">
-                      {JSON.stringify(execution.extracted_data, null, 2)}
-                    </pre>
                   </div>
                 )}
               </div>
