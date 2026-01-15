@@ -243,6 +243,11 @@ async function processCallUpdate(
     await processRealEstateCall(supabase, call, payload, isConnected);
   }
 
+  // Check if this is a campaign bulk call and update campaign leads
+  if (metadata.source === "campaign_bulk" && metadata.campaign_id && isCompleted) {
+    await processCampaignCall(supabase, call, payload, isConnected);
+  }
+
   console.log(`Call ${call.id} updated successfully with status: ${mappedStatus}`);
 
   return new Response(
@@ -381,5 +386,203 @@ async function processRealEstateCall(
 
   } catch (error) {
     console.error("Error processing real estate call:", error);
+  }
+}
+
+// Process campaign bulk calls - update campaign_leads with call results
+async function processCampaignCall(
+  supabase: any,
+  call: any,
+  payload: AitelWebhookPayload,
+  isConnected: boolean
+) {
+  const metadata = call.metadata as Record<string, unknown>;
+  const campaignId = metadata.campaign_id as string;
+  const queueItemId = metadata.queue_item_id as string;
+
+  try {
+    // Update campaign queue item as completed
+    if (queueItemId) {
+      await supabase
+        .from("campaign_call_queue")
+        .update({ 
+          status: "completed", 
+          completed_at: new Date().toISOString() 
+        })
+        .eq("id", queueItemId);
+    }
+
+    // Get the campaign lead
+    const { data: campaignLead } = await supabase
+      .from("campaign_leads")
+      .select("*")
+      .eq("id", call.lead_id)
+      .single();
+
+    if (!campaignLead) {
+      console.log("Campaign lead not found for call", call.id);
+      return;
+    }
+
+    // Analyze transcript for interest level
+    const transcript = payload.transcript || "";
+    const extractedData = payload.extracted_data || {};
+    const durationSeconds = payload.telephony_data?.duration || payload.conversation_time || 0;
+    
+    // Determine sentiment from call
+    let sentiment: string = "neutral";
+    let interestLevel: string = "unknown";
+    let newStage: string = campaignLead.stage;
+
+    // Interest detection keywords
+    const highInterestKeywords = [
+      "interested", "yes please", "tell me more", "want to", "schedule", 
+      "book", "sign up", "buy", "purchase", "great", "sounds good", "perfect"
+    ];
+    const lowInterestKeywords = [
+      "not interested", "no thanks", "don't call", "remove me", "stop calling",
+      "already have", "not looking", "no need", "don't want"
+    ];
+    const partialInterestKeywords = [
+      "maybe", "not sure", "think about", "call back", "later", "send info",
+      "email me", "need to discuss", "check with", "let me think"
+    ];
+
+    const lowerTranscript = transcript.toLowerCase();
+
+    // Check for interest indicators
+    if (highInterestKeywords.some(k => lowerTranscript.includes(k))) {
+      interestLevel = "interested";
+      sentiment = "positive";
+      newStage = "interested";
+    } else if (lowInterestKeywords.some(k => lowerTranscript.includes(k))) {
+      interestLevel = "not_interested";
+      sentiment = "negative";
+      newStage = "not_interested";
+    } else if (partialInterestKeywords.some(k => lowerTranscript.includes(k))) {
+      interestLevel = "partially_interested";
+      sentiment = "neutral";
+      newStage = "partially_interested";
+    } else if (isConnected && durationSeconds >= 60) {
+      // Decent conversation happened, assume some interest
+      interestLevel = "partially_interested";
+      sentiment = "neutral";
+      newStage = "contacted";
+    } else if (!isConnected) {
+      // Not connected - keep as contacted
+      newStage = "contacted";
+    }
+
+    // Use extracted data if available from Bolna
+    if (extractedData.interest_level) {
+      const level = String(extractedData.interest_level).toLowerCase();
+      if (level === "high" || level === "interested" || level === "very interested") {
+        interestLevel = "interested";
+        sentiment = "positive";
+        newStage = "interested";
+      } else if (level === "low" || level === "not interested" || level === "none") {
+        interestLevel = "not_interested";
+        sentiment = "negative";
+        newStage = "not_interested";
+      } else if (level === "medium" || level === "partial" || level === "maybe") {
+        interestLevel = "partially_interested";
+        sentiment = "neutral";
+        newStage = "partially_interested";
+      }
+    }
+
+    if (extractedData.sentiment) {
+      const extractedSentiment = String(extractedData.sentiment).toLowerCase();
+      if (["positive", "happy", "satisfied", "excited"].includes(extractedSentiment)) {
+        sentiment = "positive";
+      } else if (["negative", "angry", "frustrated", "annoyed"].includes(extractedSentiment)) {
+        sentiment = "negative";
+      }
+    }
+
+    // Generate call summary
+    let callSummary = "";
+    if (extractedData.summary) {
+      callSummary = String(extractedData.summary);
+    } else if (transcript) {
+      // Simple summary from transcript (first 300 chars of meaningful content)
+      callSummary = transcript.substring(0, 300);
+      if (transcript.length > 300) callSummary += "...";
+    } else if (!isConnected) {
+      if (payload.status === "no_answer" || payload.status === "no-answer") {
+        callSummary = "No answer - call was not picked up";
+      } else if (payload.status === "busy") {
+        callSummary = "Line busy - could not connect";
+      } else if (payload.answered_by_voice_mail) {
+        callSummary = "Reached voicemail";
+      } else {
+        callSummary = `Call ended - ${payload.status || "disconnected"}`;
+      }
+    }
+
+    // Update campaign lead with call results
+    const leadUpdate: Record<string, unknown> = {
+      call_id: call.id,
+      call_status: isConnected ? "connected" : "not_connected",
+      call_duration: durationSeconds,
+      call_summary: callSummary,
+      call_sentiment: sentiment,
+      interest_level: interestLevel,
+      stage: newStage,
+      updated_at: new Date().toISOString(),
+    };
+
+    await supabase
+      .from("campaign_leads")
+      .update(leadUpdate)
+      .eq("id", call.lead_id);
+
+    // Update campaign statistics
+    const campaignUpdate: Record<string, unknown> = {};
+    
+    if (interestLevel === "interested") {
+      // Increment interested_leads count
+      const { data: campaign } = await supabase
+        .from("campaigns")
+        .select("interested_leads, contacted_leads")
+        .eq("id", campaignId)
+        .single();
+      
+      if (campaign) {
+        campaignUpdate.interested_leads = (campaign.interested_leads || 0) + 1;
+      }
+    } else if (interestLevel === "not_interested") {
+      const { data: campaign } = await supabase
+        .from("campaigns")
+        .select("not_interested_leads")
+        .eq("id", campaignId)
+        .single();
+      
+      if (campaign) {
+        campaignUpdate.not_interested_leads = (campaign.not_interested_leads || 0) + 1;
+      }
+    } else if (interestLevel === "partially_interested") {
+      const { data: campaign } = await supabase
+        .from("campaigns")
+        .select("partially_interested_leads")
+        .eq("id", campaignId)
+        .single();
+      
+      if (campaign) {
+        campaignUpdate.partially_interested_leads = (campaign.partially_interested_leads || 0) + 1;
+      }
+    }
+
+    if (Object.keys(campaignUpdate).length > 0) {
+      await supabase
+        .from("campaigns")
+        .update(campaignUpdate)
+        .eq("id", campaignId);
+    }
+
+    console.log(`Campaign call processed for lead ${call.lead_id}: interest=${interestLevel}, sentiment=${sentiment}, stage=${newStage}`);
+
+  } catch (error) {
+    console.error("Error processing campaign call:", error);
   }
 }
