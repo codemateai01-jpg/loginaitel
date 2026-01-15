@@ -198,7 +198,6 @@ export default function AdminPhoneNumbers() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Phone Number (Masked)</TableHead>
-                        <TableHead>Provider</TableHead>
                         <TableHead>Assigned Agent</TableHead>
                         <TableHead>Client</TableHead>
                         <TableHead>Status</TableHead>
@@ -210,11 +209,6 @@ export default function AdminPhoneNumbers() {
                         <TableRow key={phone.id}>
                           <TableCell className="font-mono font-medium">
                             {maskPhoneNumber(phone.phone_number)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={getProviderBadgeVariant(phone.telephony_provider)}>
-                              {phone.telephony_provider}
-                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
