@@ -15,6 +15,7 @@ import {
   Trophy,
   Clock,
   Megaphone,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +30,7 @@ interface DashboardLayoutProps {
 const adminNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
   { icon: Users, label: "Prompt Engineers", href: "/admin/engineers" },
+  { icon: TrendingUp, label: "Performance", href: "/admin/performance" },
   { icon: Users, label: "Clients", href: "/admin/clients" },
   { icon: ClipboardList, label: "Tasks", href: "/admin/tasks" },
   { icon: Bot, label: "Agents", href: "/admin/agents" },
