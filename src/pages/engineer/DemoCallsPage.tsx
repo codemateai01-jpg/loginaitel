@@ -108,14 +108,76 @@ export default function DemoCallsPage() {
     enabled: !!user?.id,
   });
 
-  // Real-time subscription
+  // Auto-sync function
+  const autoSyncRecording = async (call: DemoCall) => {
+    if (!call.external_call_id || call.recording_url) return;
+    
+    try {
+      const result = await getExecution(call.external_call_id);
+      if (result.error || !result.data) return;
+
+      const execution = result.data;
+      const recordingUrl = execution.telephony_data?.recording_url || null;
+      const transcript = execution.transcript || null;
+      const duration = execution.conversation_time || null;
+      const status = execution.status === "completed" ? "completed" : execution.status;
+
+      if (recordingUrl) {
+        await supabase
+          .from("demo_calls")
+          .update({
+            recording_url: recordingUrl,
+            transcript: transcript,
+            duration_seconds: duration,
+            status: status,
+            ended_at: status === "completed" ? new Date().toISOString() : null,
+          })
+          .eq("id", call.id);
+
+        toast({
+          title: "Recording Auto-Synced",
+          description: "Call recording fetched automatically!",
+        });
+      }
+    } catch (error) {
+      console.error("Auto-sync failed:", error);
+    }
+  };
+
+  // Real-time subscription with auto-sync
   useEffect(() => {
     const channel = supabase
       .channel("demo-calls-realtime")
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
+          schema: "public",
+          table: "demo_calls",
+        },
+        async (payload) => {
+          const updatedCall = payload.new as DemoCall;
+          
+          // Auto-sync when call is completed but has no recording yet
+          if (
+            updatedCall.status === "completed" &&
+            updatedCall.external_call_id &&
+            !updatedCall.recording_url
+          ) {
+            // Wait 3 seconds for Bolna to process the recording
+            setTimeout(async () => {
+              await autoSyncRecording(updatedCall);
+              queryClient.invalidateQueries({ queryKey: ["demo-calls"] });
+            }, 3000);
+          } else {
+            queryClient.invalidateQueries({ queryKey: ["demo-calls"] });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
           schema: "public",
           table: "demo_calls",
         },
@@ -128,7 +190,7 @@ export default function DemoCallsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, toast]);
 
   // Sync demo call recording from Bolna
   const syncRecordingMutation = useMutation({
