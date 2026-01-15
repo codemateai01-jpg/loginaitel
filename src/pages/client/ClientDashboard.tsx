@@ -52,6 +52,22 @@ export default function ClientDashboard() {
     },
   });
 
+  // Fetch allocated phone numbers
+  const { data: allocatedPhones } = useQuery({
+    queryKey: ["client-allocated-phones", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_phone_numbers")
+        .select("phone_number, allocated_at")
+        .eq("client_id", user!.id)
+        .eq("is_active", true)
+        .order("allocated_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   // Fetch recent calls
   const { data: calls, isLoading: callsLoading } = useQuery({
     queryKey: ["client-recent-calls", user?.id],
@@ -188,6 +204,30 @@ export default function ClientDashboard() {
             </Link>
           </Button>
         </div>
+
+        {/* Allocated Phone Numbers */}
+        {allocatedPhones && allocatedPhones.length > 0 && (
+          <div className="border-2 border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Phone className="h-5 w-5 text-primary" />
+              <h3 className="font-bold">Your Outbound Numbers</h3>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {allocatedPhones.map((phone, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 px-3 py-2 bg-primary/10 border-2 border-primary/30 rounded-lg"
+                >
+                  <Phone className="h-4 w-4 text-primary" />
+                  <span className="font-mono font-medium">{phone.phone_number}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Calls will be made from {allocatedPhones.length === 1 ? "this number" : "one of these numbers"}
+            </p>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
