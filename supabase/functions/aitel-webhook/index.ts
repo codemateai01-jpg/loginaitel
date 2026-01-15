@@ -55,36 +55,65 @@ serve(async (req) => {
     const executionId = String(payload.id);
     const status = payload.status?.toLowerCase().replace(/-/g, "_");
     
-    // Try to find the call by external_call_id (execution ID)
-    const { data: call, error: callError } = await supabase
-      .from("calls")
-      .select("*")
-      .eq("external_call_id", executionId)
-      .maybeSingle();
+    // First, check if we have the internal call_id in context_details
+    const contextDetails = payload.context_details as Record<string, unknown> || {};
+    const recipientData = contextDetails.recipient_data as Record<string, unknown> || {};
+    const internalCallId = recipientData.call_id as string | undefined;
+    
+    let call = null;
+    
+    // Try to find by internal call_id first (most reliable)
+    if (internalCallId) {
+      const { data: callByInternalId, error } = await supabase
+        .from("calls")
+        .select("*")
+        .eq("id", internalCallId)
+        .maybeSingle();
+      
+      if (!error && callByInternalId) {
+        call = callByInternalId;
+        console.log(`Found call by internal ID: ${internalCallId}`);
+        
+        // Update the external_call_id if not set
+        if (!callByInternalId.external_call_id || callByInternalId.external_call_id !== executionId) {
+          await supabase
+            .from("calls")
+            .update({ external_call_id: executionId })
+            .eq("id", internalCallId);
+        }
+      }
+    }
+    
+    // Fallback: Try to find by external_call_id (execution ID)
+    if (!call) {
+      const { data: callByExternal, error: callError } = await supabase
+        .from("calls")
+        .select("*")
+        .eq("external_call_id", executionId)
+        .maybeSingle();
 
-    if (callError) {
-      console.error("Error finding call:", callError);
-      return new Response(
-        JSON.stringify({ success: false, error: "Database error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (!callError && callByExternal) {
+        call = callByExternal;
+        console.log(`Found call by external ID: ${executionId}`);
+      }
+    }
+
+    // Fallback: Try finding by provider_call_id from telephony_data
+    if (!call && payload.telephony_data?.provider_call_id) {
+      const { data: callByProvider } = await supabase
+        .from("calls")
+        .select("*")
+        .eq("external_call_id", payload.telephony_data.provider_call_id)
+        .maybeSingle();
+      
+      if (callByProvider) {
+        call = callByProvider;
+        console.log(`Found call by provider call ID: ${payload.telephony_data.provider_call_id}`);
+      }
     }
 
     if (!call) {
-      // If no call found, try finding by provider_call_id from telephony_data
-      if (payload.telephony_data?.provider_call_id) {
-        const { data: callByProvider } = await supabase
-          .from("calls")
-          .select("*")
-          .eq("external_call_id", payload.telephony_data.provider_call_id)
-          .maybeSingle();
-        
-        if (callByProvider) {
-          return await processCallUpdate(supabase, callByProvider, payload, status);
-        }
-      }
-      
-      console.log("Call not found for execution ID:", executionId);
+      console.log("Call not found for execution ID:", executionId, "or internal ID:", internalCallId);
       return new Response(
         JSON.stringify({ success: true, message: "Call not found, webhook acknowledged" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
