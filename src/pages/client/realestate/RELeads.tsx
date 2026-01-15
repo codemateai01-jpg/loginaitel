@@ -51,6 +51,7 @@ import { REAddLeadDialog } from "@/components/realestate/REAddLeadDialog";
 import { REBulkCallDialog } from "@/components/realestate/REBulkCallDialog";
 import { RELeadDetailsDialog } from "@/components/realestate/RELeadDetailsDialog";
 import { REScheduleVisitDialog } from "@/components/realestate/REScheduleVisitDialog";
+import { REClickToCallDialog } from "@/components/realestate/REClickToCallDialog";
 
 type LeadStage = 'new' | 'contacted' | 'interested' | 'site_visit_done' | 'negotiation' | 'token_paid' | 'closed' | 'lost';
 
@@ -115,6 +116,7 @@ export default function RELeads() {
   const [bulkCallDialogOpen, setBulkCallDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [scheduleVisitDialogOpen, setScheduleVisitDialogOpen] = useState(false);
+  const [clickToCallDialogOpen, setClickToCallDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<RELead | null>(null);
 
   // Call queue processor - auto-processes pending calls
@@ -281,6 +283,11 @@ export default function RELeads() {
   const handleScheduleVisit = (lead: RELead) => {
     setSelectedLead(lead);
     setScheduleVisitDialogOpen(true);
+  };
+
+  const handleClickToCall = (lead: RELead) => {
+    setSelectedLead(lead);
+    setClickToCallDialogOpen(true);
   };
 
   const uniqueSources = [...new Set(leads.map(l => l.source).filter(Boolean))];
@@ -450,19 +457,20 @@ export default function RELeads() {
                   <TableHead>Stage</TableHead>
                   <TableHead>Interest</TableHead>
                   <TableHead>Last Call</TableHead>
+                  <TableHead className="w-20 text-center">Call</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
+                    <TableCell colSpan={10} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : leads.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       No leads found. Upload a CSV or add leads manually.
                     </TableCell>
                   </TableRow>
@@ -523,6 +531,18 @@ export default function RELeads() {
                             {format(new Date(lead.last_call_at), "MMM d, h:mm a")}
                           </span>
                         ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleClickToCall(lead)}
+                          disabled={agents.length === 0}
+                          className="gap-1"
+                        >
+                          <Phone className="h-3 w-3" />
+                          Call
+                        </Button>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -601,6 +621,14 @@ export default function RELeads() {
             open={scheduleVisitDialogOpen}
             onOpenChange={setScheduleVisitDialogOpen}
             lead={selectedLead}
+            onSuccess={fetchLeads}
+          />
+
+          <REClickToCallDialog
+            open={clickToCallDialogOpen}
+            onOpenChange={setClickToCallDialogOpen}
+            lead={selectedLead}
+            agents={agents}
             onSuccess={fetchLeads}
           />
         </>
