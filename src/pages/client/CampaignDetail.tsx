@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -141,7 +141,7 @@ export default function CampaignDetail() {
   });
 
   // Fetch campaign leads
-  const { data: leads, isLoading: leadsLoading } = useQuery({
+  const { data: leads, isLoading: leadsLoading, refetch: refetchLeads } = useQuery({
     queryKey: ["campaign-leads", campaignId],
     enabled: !!campaignId,
     queryFn: async () => {
@@ -154,6 +154,74 @@ export default function CampaignDetail() {
       return (data || []) as CampaignLead[];
     },
   });
+
+  // Realtime subscription for campaign_leads updates
+  useEffect(() => {
+    if (!campaignId) return;
+
+    const leadsChannel = supabase
+      .channel(`campaign-leads-realtime-${campaignId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "campaign_leads",
+          filter: `campaign_id=eq.${campaignId}`,
+        },
+        (payload) => {
+          console.log("Lead update received:", payload);
+          refetchLeads();
+          queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+        }
+      )
+      .subscribe();
+
+    // Also subscribe to calls table for status updates
+    const callsChannel = supabase
+      .channel(`campaign-calls-realtime-${campaignId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "calls",
+        },
+        (payload) => {
+          // Check if this call belongs to our campaign by checking metadata
+          const metadata = payload.new?.metadata as Record<string, unknown> | undefined;
+          if (metadata?.campaign_id === campaignId) {
+            console.log("Call update received:", payload);
+            refetchLeads();
+            queryClient.invalidateQueries({ queryKey: ["campaign-active-calls", campaignId] });
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to campaign_call_queue for queue status
+    const queueChannel = supabase
+      .channel(`campaign-queue-realtime-${campaignId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "campaign_call_queue",
+          filter: `campaign_id=eq.${campaignId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["campaign-active-calls", campaignId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(callsChannel);
+      supabase.removeChannel(queueChannel);
+    };
+  }, [campaignId, refetchLeads, queryClient]);
 
   // Add single lead mutation
   const addLead = useMutation({
@@ -672,7 +740,30 @@ export default function CampaignDetail() {
                         </TableCell>
                         <TableCell>
                           {lead.call_status ? (
-                            <Badge variant="outline">{lead.call_status}</Badge>
+                            <div className="flex flex-col gap-1">
+                              <Badge 
+                                variant="outline" 
+                                className={
+                                  lead.call_status === "connected" 
+                                    ? "bg-green-500/10 text-green-600 border-green-500" 
+                                    : lead.call_status === "in_progress"
+                                    ? "bg-blue-500/10 text-blue-600 border-blue-500 animate-pulse"
+                                    : lead.call_status === "not_connected"
+                                    ? "bg-yellow-500/10 text-yellow-600 border-yellow-500"
+                                    : "bg-muted"
+                                }
+                              >
+                                {lead.call_status === "in_progress" && (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                )}
+                                {lead.call_status}
+                              </Badge>
+                              {lead.call_duration !== null && lead.call_duration > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  {Math.floor(lead.call_duration / 60)}:{String(lead.call_duration % 60).padStart(2, '0')}
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground text-sm">Not called</span>
                           )}
