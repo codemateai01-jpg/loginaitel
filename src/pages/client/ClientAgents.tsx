@@ -232,7 +232,7 @@ export default function ClientAgents() {
                           </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {format(new Date(agent.created_at), "PP")}
+                          {agent.created_at ? format(new Date(agent.created_at), "PP") : "-"}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
