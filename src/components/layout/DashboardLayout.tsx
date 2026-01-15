@@ -16,9 +16,15 @@ import {
   Trophy,
   Clock,
   Upload,
+  Building2,
+  CalendarCheck,
+  UserCheck,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -62,17 +68,49 @@ const clientNavItems = [
   { icon: Settings, label: "Settings", href: "/client/settings" },
 ];
 
+// Real Estate CRM navigation
+const realEstateNavItems = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/client/realestate" },
+  { icon: Building2, label: "Projects", href: "/client/realestate/projects" },
+  { icon: Users, label: "Leads", href: "/client/realestate/leads" },
+  { icon: CalendarCheck, label: "Site Visits", href: "/client/realestate/site-visits" },
+  { icon: UserCheck, label: "Sales Team", href: "/client/realestate/sales-team" },
+  { icon: History, label: "Call History", href: "/client/realestate/call-history" },
+  { icon: Bot, label: "My Agents", href: "/client/agents" },
+  { icon: CreditCard, label: "Credits & Billing", href: "/client/billing" },
+  { icon: Settings, label: "Settings", href: "/client/settings" },
+];
+
 export function DashboardLayout({ children, role }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+
+  // Fetch user's CRM type for clients
+  const { data: profile } = useQuery({
+    queryKey: ["profile-crm-type", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("crm_type")
+        .eq("user_id", user.id)
+        .single();
+      return data;
+    },
+    enabled: !!user?.id && role === "client",
+  });
+
+  const isRealEstateCRM = profile?.crm_type === "real_estate";
 
   const navItems =
     role === "admin"
       ? adminNavItems
       : role === "engineer"
       ? engineerNavItems
+      : isRealEstateCRM
+      ? realEstateNavItems
       : clientNavItems;
 
   const roleLabel =

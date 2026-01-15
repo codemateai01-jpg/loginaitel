@@ -11,3 +11,9 @@ verify_jwt = true
 
 [functions.evaluate-call]
 verify_jwt = true
+
+[functions.process-call-queue]
+verify_jwt = false
+
+[functions.aitel-webhook]
+verify_jwt = false

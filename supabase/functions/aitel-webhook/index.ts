@@ -235,6 +235,12 @@ async function processCallUpdate(
       .eq("id", call.lead_id);
   }
 
+  // Check if this is a real estate call and process AI analysis
+  const metadata = call.metadata as Record<string, unknown> || {};
+  if (metadata.source === "bulk_queue" && metadata.queue_item_id && isCompleted) {
+    await processRealEstateCall(supabase, call, payload, isConnected);
+  }
+
   console.log(`Call ${call.id} updated successfully with status: ${mappedStatus}`);
 
   return new Response(
@@ -247,4 +253,131 @@ async function processCallUpdate(
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
+}
+
+// Process real estate calls with AI analysis
+async function processRealEstateCall(
+  supabase: any,
+  call: any,
+  payload: AitelWebhookPayload,
+  isConnected: boolean
+) {
+  const metadata = call.metadata as Record<string, unknown>;
+  const queueItemId = metadata.queue_item_id as string;
+
+  try {
+    // Update queue item as completed
+    await supabase
+      .from("call_queue")
+      .update({ 
+        status: "completed", 
+        completed_at: new Date().toISOString() 
+      })
+      .eq("id", queueItemId);
+
+    // Get the real estate lead
+    const { data: reLead } = await supabase
+      .from("real_estate_leads")
+      .select("*")
+      .eq("id", call.lead_id)
+      .single();
+
+    if (!reLead) return;
+
+    // Determine disposition
+    let disposition: string = "not_answered";
+    if (isConnected) {
+      disposition = "answered";
+    } else if (payload.status === "busy") {
+      disposition = "busy";
+    } else if (payload.answered_by_voice_mail) {
+      disposition = "voicemail";
+    }
+
+    // Analyze transcript for interest and objections
+    const transcript = payload.transcript || "";
+    const extractedData = payload.extracted_data || {};
+    
+    // Simple interest detection from transcript/extracted data
+    let interestScore = 50; // Default neutral
+    let autoStageUpdate: string | null = null;
+    const objections: string[] = [];
+
+    // Check for interest indicators
+    const interestedKeywords = ["interested", "yes", "sure", "tell me more", "want to visit", "schedule", "book"];
+    const notInterestedKeywords = ["not interested", "no thanks", "don't call", "remove", "stop calling"];
+    const objectionKeywords = ["expensive", "budget", "location", "too far", "not now", "later", "busy"];
+
+    const lowerTranscript = transcript.toLowerCase();
+    
+    if (interestedKeywords.some(k => lowerTranscript.includes(k))) {
+      interestScore = 80;
+      autoStageUpdate = "interested";
+    }
+    
+    if (notInterestedKeywords.some(k => lowerTranscript.includes(k))) {
+      interestScore = 20;
+      autoStageUpdate = "lost";
+    }
+
+    // Detect objections
+    for (const keyword of objectionKeywords) {
+      if (lowerTranscript.includes(keyword)) {
+        objections.push(keyword);
+      }
+    }
+
+    // Use extracted data if available
+    if (extractedData.interest_level) {
+      const level = String(extractedData.interest_level).toLowerCase();
+      if (level === "high" || level === "interested") {
+        interestScore = 85;
+        autoStageUpdate = "interested";
+      } else if (level === "low" || level === "not interested") {
+        interestScore = 25;
+      }
+    }
+
+    // Create real estate call record
+    await supabase
+      .from("real_estate_calls")
+      .insert({
+        call_id: call.id,
+        lead_id: call.lead_id,
+        client_id: call.client_id,
+        disposition,
+        ai_summary: transcript.substring(0, 500) || "No transcript available",
+        objections_detected: objections.length > 0 ? objections : null,
+        interest_score: interestScore,
+        auto_stage_update: autoStageUpdate
+      });
+
+    // Update lead with call analysis
+    const leadUpdate: Record<string, unknown> = {
+      last_call_at: new Date().toISOString(),
+      last_call_summary: transcript.substring(0, 500) || "Call completed",
+      interest_score: interestScore,
+    };
+
+    if (objections.length > 0) {
+      leadUpdate.objections = [...(reLead.objections || []), ...objections].slice(-10);
+    }
+
+    // Auto-update stage to "interested" if detected
+    if (autoStageUpdate === "interested" && reLead.stage === "contacted") {
+      leadUpdate.stage = "interested";
+    } else if (autoStageUpdate === "lost") {
+      leadUpdate.stage = "lost";
+    }
+
+    await supabase
+      .from("real_estate_leads")
+      .update(leadUpdate)
+      .eq("id", call.lead_id);
+
+    console.log(`Real estate call processed for lead ${call.lead_id}, interest: ${interestScore}`);
+
+  } catch (error) {
+    console.error("Error processing real estate call:", error);
+  }
 }

@@ -18,6 +18,13 @@ import ClientPhoneNumbers from "./pages/client/ClientPhoneNumbers";
 import ClientAgents from "./pages/client/ClientAgents";
 import ClientBilling from "./pages/client/ClientBilling";
 import ClientSettings from "./pages/client/ClientSettings";
+// Real Estate CRM imports
+import RealEstateDashboard from "./pages/client/realestate/RealEstateDashboard";
+import RELeads from "./pages/client/realestate/RELeads";
+import REProjects from "./pages/client/realestate/REProjects";
+import RESiteVisits from "./pages/client/realestate/RESiteVisits";
+import RESalesTeam from "./pages/client/realestate/RESalesTeam";
+import RECallHistory from "./pages/client/realestate/RECallHistory";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
 import EngineerTasks from "./pages/engineer/EngineerTasks";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
@@ -323,6 +330,56 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <ClientSettings />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Real Estate CRM Routes */}
+            <Route
+              path="/client/realestate"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <RealEstateDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/realestate/leads"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <RELeads />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/realestate/projects"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <REProjects />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/realestate/site-visits"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <RESiteVisits />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/realestate/sales-team"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <RESalesTeam />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/realestate/call-history"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <RECallHistory />
                 </ProtectedRoute>
               }
             />
