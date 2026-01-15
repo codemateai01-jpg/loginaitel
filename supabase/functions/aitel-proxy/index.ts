@@ -892,8 +892,25 @@ serve(async (req) => {
         );
     }
 
-    // Forward Bolna response
-    const data = await response.json();
+    // Forward Bolna response - handle non-JSON responses gracefully
+    const responseText = await response.text();
+    
+    // Try to parse as JSON, but handle HTML error pages gracefully
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      // If response is not JSON (e.g., HTML error page), return a proper error
+      console.error("Bolna API returned non-JSON response:", response.status, responseText.substring(0, 200));
+      return new Response(
+        JSON.stringify({ 
+          error: `API returned non-JSON response (status ${response.status})`,
+          details: responseText.substring(0, 500)
+        }),
+        { status: response.status >= 400 ? response.status : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     return new Response(JSON.stringify(data), {
       status: response.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
