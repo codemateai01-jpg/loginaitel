@@ -23,7 +23,8 @@ import {
   AlertTriangle,
   Play,
   Pause,
-  StopCircle
+  StopCircle,
+  RefreshCw
 } from "lucide-react";
 
 interface BulkCallDialogProps {
@@ -237,6 +238,58 @@ export function BulkCallDialog({
     },
   });
 
+  // Retry failed leads mutation
+  const retryFailed = useMutation({
+    mutationFn: async () => {
+      if (!agentId) throw new Error("No agent assigned to this campaign");
+      
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.user) throw new Error("Not authenticated");
+
+      // Get failed queue items for this campaign
+      const { data: failedItems, error: fetchError } = await supabase
+        .from("campaign_call_queue")
+        .select("id, lead_id")
+        .eq("campaign_id", campaignId)
+        .eq("status", "failed");
+
+      if (fetchError) throw fetchError;
+      if (!failedItems || failedItems.length === 0) throw new Error("No failed items to retry");
+
+      // Reset failed items to pending
+      const { error: updateError } = await supabase
+        .from("campaign_call_queue")
+        .update({ 
+          status: "pending", 
+          error_message: null,
+          started_at: null,
+          completed_at: null
+        })
+        .eq("campaign_id", campaignId)
+        .eq("status", "failed");
+
+      if (updateError) throw updateError;
+
+      return failedItems.length;
+    },
+    onSuccess: (count) => {
+      toast({ 
+        title: "Retrying failed calls", 
+        description: `${count} leads re-queued for calling` 
+      });
+      setIsProcessing(true);
+      processQueue.mutate();
+      refetchQueue();
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
   const handleStartCalling = async () => {
     // First queue the leads
     await queueLeads.mutateAsync();
@@ -314,7 +367,23 @@ export function BulkCallDialog({
           {/* Failed items list */}
           {queueItems?.some(q => q.status === "failed") && (
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-destructive">Failed Calls</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-destructive">Failed Calls</h4>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => retryFailed.mutate()}
+                  disabled={retryFailed.isPending || isProcessing}
+                  className="h-7 text-xs border-destructive text-destructive hover:bg-destructive/10"
+                >
+                  {retryFailed.isPending ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                  )}
+                  Retry All ({queueStatus.failed})
+                </Button>
+              </div>
               <ScrollArea className="h-24 rounded border">
                 <div className="p-2 space-y-1">
                   {queueItems
