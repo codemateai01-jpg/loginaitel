@@ -24,19 +24,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { getExecution } from "@/lib/aitel";
+import { DemoCallPreviewModal } from "@/components/engineer/DemoCallPreviewModal";
 import {
   Phone,
   Search,
   ArrowLeft,
   CheckCircle,
   Clock,
-  Send,
   Loader2,
   Bot,
   Play,
   RefreshCw,
-  Headphones,
-  FileText,
+  Eye,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -71,6 +70,7 @@ export default function DemoCallsPage() {
   const taskIdFilter = searchParams.get("taskId");
   const [search, setSearch] = useState("");
   const [filterTaskId, setFilterTaskId] = useState<string>(taskIdFilter || "all");
+  const [previewCall, setPreviewCall] = useState<DemoCall | null>(null);
 
   // Fetch demo calls
   const { data: demoCalls = [], isLoading, refetch } = useQuery({
@@ -373,30 +373,10 @@ export default function DemoCallsPage() {
                       </TableCell>
                       <TableCell>
                         {call.recording_url ? (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => window.open(call.recording_url!, "_blank")}
-                            >
-                              <Headphones className="h-3 w-3 mr-1" />
-                              Play
-                            </Button>
-                            {call.transcript && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  toast({
-                                    title: "Transcript",
-                                    description: call.transcript?.slice(0, 500) + (call.transcript && call.transcript.length > 500 ? "..." : ""),
-                                  });
-                                }}
-                              >
-                                <FileText className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
+                          <Badge variant="outline" className="bg-chart-2/20 text-chart-2 border-chart-2">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Ready
+                          </Badge>
                         ) : (
                           <span className="text-muted-foreground text-sm">Not synced</span>
                         )}
@@ -426,15 +406,15 @@ export default function DemoCallsPage() {
                               )}
                             </Button>
                           )}
-                          {/* Submit Button - only if completed with recording and not already selected */}
-                          {call.status === "completed" && call.recording_url && !isSelected && (
+                          {/* Preview Button */}
+                          {call.recording_url && (
                             <Button
                               size="sm"
-                              onClick={() => submitDemoMutation.mutate(call.id)}
-                              disabled={submitDemoMutation.isPending}
+                              variant="outline"
+                              onClick={() => setPreviewCall(call)}
                             >
-                              <Send className="h-3 w-3 mr-1" />
-                              Submit
+                              <Eye className="h-3 w-3 mr-1" />
+                              Preview
                             </Button>
                           )}
                         </div>
@@ -446,6 +426,18 @@ export default function DemoCallsPage() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Preview Modal */}
+        <DemoCallPreviewModal
+          call={previewCall}
+          open={!!previewCall}
+          onOpenChange={(open) => !open && setPreviewCall(null)}
+          onSubmit={(callId) => {
+            submitDemoMutation.mutate(callId);
+            setPreviewCall(null);
+          }}
+          isSubmitting={submitDemoMutation.isPending}
+        />
       </div>
     </DashboardLayout>
   );
