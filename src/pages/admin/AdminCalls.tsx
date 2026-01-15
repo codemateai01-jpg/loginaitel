@@ -625,6 +625,7 @@ export default function AdminCalls() {
           call={selectedCall ? getCallForDialog(selectedCall) : null}
           open={!!selectedCall}
           onOpenChange={(open) => !open && setSelectedCall(null)}
+          hidePhoneNumber={true}
         />
       </div>
     </DashboardLayout>
