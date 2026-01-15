@@ -234,7 +234,58 @@ export default function RECallHistory() {
   useEffect(() => {
     fetchProjects();
     fetchCalls();
-  }, [fetchProjects, fetchCalls]);
+
+    // Set up realtime subscription for calls table
+    const channel = supabase
+      .channel('realtime-calls')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'calls',
+          filter: `client_id=eq.${user?.id}`,
+        },
+        (payload) => {
+          console.log('Call update received:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // Fetch the new call with lead data
+            fetchCalls();
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedCall = payload.new as any;
+            const metadata = updatedCall.metadata as any;
+            let displayStatus = updatedCall.status;
+            if (metadata?.aitel_status) {
+              displayStatus = metadata.aitel_status;
+            }
+            
+            // Update the specific call in state
+            setCalls(prev => prev.map(call => {
+              if (call.id === updatedCall.id) {
+                return {
+                  ...call,
+                  status: displayStatus,
+                  duration_seconds: updatedCall.duration_seconds,
+                  recording_url: updatedCall.recording_url,
+                  transcript: updatedCall.transcript,
+                  summary: updatedCall.summary,
+                  ai_summary: updatedCall.summary || call.ai_summary,
+                };
+              }
+              return call;
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            setCalls(prev => prev.filter(call => call.id !== (payload.old as any).id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchProjects, fetchCalls, user?.id]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "—";
