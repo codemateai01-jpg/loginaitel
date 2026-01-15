@@ -93,6 +93,7 @@ interface RECall {
   lead_stage: string;
   project_name: string | null;
   project_id: string | null;
+  from_phone: string | null;
   // From real_estate_calls if available
   disposition: CallDisposition | null;
   ai_summary: string | null;
@@ -203,6 +204,9 @@ export default function RECallHistory() {
           displayStatus = metadata.aitel_status;
         }
         
+        // Get the from_phone from metadata
+        const fromPhone = metadata?.from_phone_number || metadata?.from_number || null;
+        
         return {
           id: call.id,
           created_at: call.created_at,
@@ -216,6 +220,7 @@ export default function RECallHistory() {
           lead_stage: lead?.stage || "new",
           project_name: (lead?.projects as any)?.name || null,
           project_id: lead?.project_id || null,
+          from_phone: fromPhone,
           disposition: reCall?.disposition || null,
           ai_summary: reCall?.ai_summary || call.summary || null,
           objections_detected: reCall?.objections_detected || null,
@@ -503,6 +508,7 @@ export default function RECallHistory() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Lead</TableHead>
+                      <TableHead>From Number</TableHead>
                       <TableHead>Project</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Duration</TableHead>
@@ -514,13 +520,13 @@ export default function RECallHistory() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           Loading...
                         </TableCell>
                       </TableRow>
                     ) : calls.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           No call history found
                         </TableCell>
                       </TableRow>
@@ -544,6 +550,16 @@ export default function RECallHistory() {
                                   {call.lead_phone}
                                 </p>
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {call.from_phone ? (
+                                <Badge variant="secondary" className="font-mono text-xs">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  {call.from_phone}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               {call.project_name ? (
