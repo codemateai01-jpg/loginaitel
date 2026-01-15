@@ -120,22 +120,7 @@ export type Database = {
           summary?: string | null
           transcript?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "calls_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "calls_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_admin_view"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       client_credits: {
         Row: {
@@ -325,45 +310,6 @@ export type Database = {
           id?: string
           total_points?: number
           updated_at?: string
-        }
-        Relationships: []
-      }
-      leads: {
-        Row: {
-          client_id: string
-          created_at: string
-          email: string | null
-          id: string
-          metadata: Json | null
-          name: string | null
-          phone_number: string
-          status: string
-          updated_at: string
-          uploaded_by: string
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          email?: string | null
-          id?: string
-          metadata?: Json | null
-          name?: string | null
-          phone_number: string
-          status?: string
-          updated_at?: string
-          uploaded_by: string
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          email?: string | null
-          id?: string
-          metadata?: Json | null
-          name?: string | null
-          phone_number?: string
-          status?: string
-          updated_at?: string
-          uploaded_by?: string
         }
         Relationships: []
       }
@@ -644,45 +590,7 @@ export type Database = {
       }
     }
     Views: {
-      leads_admin_view: {
-        Row: {
-          client_id: string | null
-          created_at: string | null
-          email: string | null
-          id: string | null
-          metadata: Json | null
-          name: string | null
-          phone_number_masked: string | null
-          status: string | null
-          updated_at: string | null
-          uploaded_by: string | null
-        }
-        Insert: {
-          client_id?: string | null
-          created_at?: string | null
-          email?: string | null
-          id?: string | null
-          metadata?: Json | null
-          name?: string | null
-          phone_number_masked?: never
-          status?: string | null
-          updated_at?: string | null
-          uploaded_by?: string | null
-        }
-        Update: {
-          client_id?: string | null
-          created_at?: string | null
-          email?: string | null
-          id?: string | null
-          metadata?: Json | null
-          name?: string | null
-          phone_number_masked?: never
-          status?: string | null
-          updated_at?: string | null
-          uploaded_by?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       calculate_task_score: { Args: { p_task_id: string }; Returns: Json }
