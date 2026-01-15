@@ -58,7 +58,6 @@ interface Client {
   credits: number;
   agents_count: number;
   calls_count: number;
-  crm_type: "generic" | "real_estate";
 }
 
 export default function AdminClients() {
@@ -66,14 +65,11 @@ export default function AdminClients() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editCrmClient, setEditCrmClient] = useState<Client | null>(null);
-  const [newCrmType, setNewCrmType] = useState<"generic" | "real_estate">("generic");
   const [newClient, setNewClient] = useState({
     email: "",
     full_name: "",
     phone: "",
     password: "",
-    crm_type: "generic" as "generic" | "real_estate",
   });
 
   // Fetch clients with stats
@@ -139,7 +135,6 @@ export default function AdminClients() {
           credits: credit?.balance || 0,
           agents_count: agentCount,
           calls_count: callCount,
-          crm_type: (profile.crm_type as "generic" | "real_estate") || "generic",
         };
       });
 
@@ -160,7 +155,6 @@ export default function AdminClients() {
           full_name: clientData.full_name || null,
           phone: clientData.phone || null,
           role: "client",
-          crm_type: clientData.crm_type,
         },
       });
 
@@ -171,7 +165,7 @@ export default function AdminClients() {
     onSuccess: () => {
       toast({ title: "Client Created", description: "New client account has been created." });
       setIsAddDialogOpen(false);
-      setNewClient({ email: "", full_name: "", phone: "", password: "", crm_type: "generic" });
+      setNewClient({ email: "", full_name: "", phone: "", password: "" });
       queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
     },
     onError: (error) => {
@@ -179,25 +173,6 @@ export default function AdminClients() {
     },
   });
 
-  // Update CRM type mutation
-  const updateCrmTypeMutation = useMutation({
-    mutationFn: async ({ userId, crmType }: { userId: string; crmType: "generic" | "real_estate" }) => {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ crm_type: crmType })
-        .eq("user_id", userId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "CRM Type Updated", description: "Client CRM type has been changed." });
-      setEditCrmClient(null);
-      queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
-    },
-    onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
 
   const filteredClients = clients.filter((client) =>
     client.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -275,26 +250,6 @@ export default function AdminClients() {
                     className="border-2"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>CRM Type *</Label>
-                  <Select
-                    value={newClient.crm_type}
-                    onValueChange={(value: "generic" | "real_estate") => 
-                      setNewClient({ ...newClient, crm_type: value })
-                    }
-                  >
-                    <SelectTrigger className="border-2">
-                      <SelectValue placeholder="Select CRM type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="generic">Generic CRM</SelectItem>
-                      <SelectItem value="real_estate">Real Estate CRM</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Real Estate CRM includes projects, site visits, and AI call analysis
-                  </p>
-                </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
@@ -371,7 +326,6 @@ export default function AdminClients() {
                 <TableRow className="border-b-2 border-border hover:bg-transparent">
                   <TableHead className="font-bold">Client</TableHead>
                   <TableHead className="font-bold">Email</TableHead>
-                  <TableHead className="font-bold">CRM Type</TableHead>
                   <TableHead className="font-bold">Credits</TableHead>
                   <TableHead className="font-bold">Agents</TableHead>
                   <TableHead className="font-bold">Calls</TableHead>
@@ -386,14 +340,6 @@ export default function AdminClients() {
                       {client.full_name || "—"}
                     </TableCell>
                     <TableCell>{client.email}</TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant={client.crm_type === "real_estate" ? "default" : "secondary"}
-                        className="capitalize"
-                      >
-                        {client.crm_type === "real_estate" ? "Real Estate" : "Generic"}
-                      </Badge>
-                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono">
                         {client.credits.toLocaleString()}
@@ -416,14 +362,6 @@ export default function AdminClients() {
                           <DropdownMenuItem>Manage Credits</DropdownMenuItem>
                           <DropdownMenuItem>View Agents</DropdownMenuItem>
                           <DropdownMenuItem>View Calls</DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditCrmClient(client);
-                              setNewCrmType(client.crm_type);
-                            }}
-                          >
-                            Change CRM Type
-                          </DropdownMenuItem>
                           <DropdownMenuItem className="text-destructive">
                             Deactivate
                           </DropdownMenuItem>
@@ -436,56 +374,6 @@ export default function AdminClients() {
             </Table>
           )}
         </div>
-
-        {/* Edit CRM Type Dialog */}
-        <Dialog open={!!editCrmClient} onOpenChange={(open) => !open && setEditCrmClient(null)}>
-          <DialogContent className="border-2">
-            <DialogHeader>
-              <DialogTitle>Change CRM Type</DialogTitle>
-              <DialogDescription>
-                Update CRM type for {editCrmClient?.full_name || editCrmClient?.email}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>CRM Type</Label>
-                <Select
-                  value={newCrmType}
-                  onValueChange={(value: "generic" | "real_estate") => setNewCrmType(value)}
-                >
-                  <SelectTrigger className="border-2">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="generic">Generic CRM</SelectItem>
-                    <SelectItem value="real_estate">Real Estate CRM</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Changing CRM type will update the client's dashboard and available features.
-                </p>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setEditCrmClient(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => {
-                    if (editCrmClient) {
-                      updateCrmTypeMutation.mutate({
-                        userId: editCrmClient.user_id,
-                        crmType: newCrmType,
-                      });
-                    }
-                  }}
-                  disabled={updateCrmTypeMutation.isPending || newCrmType === editCrmClient?.crm_type}
-                >
-                  {updateCrmTypeMutation.isPending ? "Updating..." : "Update CRM Type"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );
