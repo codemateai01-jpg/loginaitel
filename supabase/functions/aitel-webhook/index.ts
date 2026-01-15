@@ -164,8 +164,10 @@ async function processCallUpdate(
       mappedStatus = status;
   }
 
-  // Determine if call was connected (answered and had any conversation)
-  const isConnected = durationSeconds > 0 && (status === "completed" || status === "call_disconnected");
+  // Calculate if call had any conversation (for lead status updates and real estate processing)
+  // Note: The database trigger process_call_completion determines 'connected' based on duration >= 45 seconds
+  // and handles credit deduction. We don't set 'connected' here to let the trigger manage it properly.
+  const isConnected = durationSeconds >= 45 && (status === "completed" || status === "call_disconnected");
 
   // Build update object
   const updateData: Record<string, unknown> = {
@@ -183,9 +185,9 @@ async function processCallUpdate(
   };
 
   // Add completion data if call is finished
+  // The trigger will set 'connected' based on duration_seconds >= 45 and handle credit deduction
   if (isCompleted) {
     updateData.duration_seconds = durationSeconds;
-    updateData.connected = isConnected;
     updateData.ended_at = new Date().toISOString();
     
     if (recordingUrl) {
