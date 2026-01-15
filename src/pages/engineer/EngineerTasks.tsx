@@ -202,6 +202,23 @@ export default function EngineerTasks() {
     enabled: !!selectedTask?.id && !!user?.id,
   });
 
+  // Fetch agent details for selected task (to get external_agent_id)
+  const { data: selectedAgent } = useQuery({
+    queryKey: ["agent-for-task", selectedTask?.aitel_agent_id],
+    queryFn: async () => {
+      if (!selectedTask?.aitel_agent_id) return null;
+      const { data, error } = await supabase
+        .from("aitel_agents")
+        .select("id, external_agent_id, agent_name")
+        .eq("id", selectedTask.aitel_agent_id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedTask?.aitel_agent_id,
+  });
+
   // Real-time subscription for tasks
   useEffect(() => {
     const channel = supabase
@@ -1051,14 +1068,14 @@ export default function EngineerTasks() {
       </Dialog>
 
       {/* Demo Call Dialog */}
-      {selectedTask && selectedTask.aitel_agent_id && (
+      {selectedTask && selectedTask.aitel_agent_id && selectedAgent && (
         <DemoCallDialog
           open={showDemoCallDialog}
           onOpenChange={setShowDemoCallDialog}
           taskId={selectedTask.id}
           agentId={selectedTask.aitel_agent_id}
-          externalAgentId={selectedTask.aitel_agent_id}
-          agentName={selectedTask.title}
+          externalAgentId={selectedAgent.external_agent_id}
+          agentName={selectedAgent.agent_name || selectedTask.title}
         />
       )}
     </DashboardLayout>
