@@ -23,6 +23,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { getExecution } from "@/lib/aitel";
 import {
   Phone,
   Search,
@@ -33,8 +34,11 @@ import {
   Loader2,
   Bot,
   Play,
+  RefreshCw,
+  Headphones,
+  FileText,
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 
 interface DemoCall {
   id: string;
@@ -42,12 +46,16 @@ interface DemoCall {
   agent_id: string;
   phone_number: string;
   status: string;
-  duration_seconds: number;
+  duration_seconds: number | null;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
+  external_call_id: string | null;
+  recording_url: string | null;
+  transcript: string | null;
   tasks?: {
     title: string;
+    selected_demo_call_id?: string;
   };
   aitel_agents?: {
     agent_name: string;
@@ -65,7 +73,7 @@ export default function DemoCallsPage() {
   const [filterTaskId, setFilterTaskId] = useState<string>(taskIdFilter || "all");
 
   // Fetch demo calls
-  const { data: demoCalls = [], isLoading } = useQuery({
+  const { data: demoCalls = [], isLoading, refetch } = useQuery({
     queryKey: ["demo-calls", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -73,7 +81,7 @@ export default function DemoCallsPage() {
         .from("demo_calls")
         .select(`
           *,
-          tasks (title),
+          tasks (title, selected_demo_call_id),
           aitel_agents (agent_name)
         `)
         .eq("engineer_id", user.id)
@@ -122,12 +130,68 @@ export default function DemoCallsPage() {
     };
   }, [queryClient]);
 
+  // Sync demo call recording from Bolna
+  const syncRecordingMutation = useMutation({
+    mutationFn: async (call: DemoCall) => {
+      if (!call.external_call_id) throw new Error("No external call ID");
+
+      // Fetch execution data from Bolna
+      const result = await getExecution(call.external_call_id);
+      if (result.error || !result.data) {
+        throw new Error(result.error || "Failed to fetch call data");
+      }
+
+      const execution = result.data;
+      const recordingUrl = execution.telephony_data?.recording_url || null;
+      const transcript = execution.transcript || null;
+      const duration = execution.conversation_time || null;
+      const status = execution.status === "completed" ? "completed" : execution.status;
+
+      // Update demo call with recording data
+      const { error } = await supabase
+        .from("demo_calls")
+        .update({
+          recording_url: recordingUrl,
+          transcript: transcript,
+          duration_seconds: duration,
+          status: status,
+          ended_at: status === "completed" ? new Date().toISOString() : null,
+        })
+        .eq("id", call.id);
+
+      if (error) throw error;
+
+      return { recordingUrl, transcript, duration, status };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["demo-calls"] });
+      toast({
+        title: "Recording Synced",
+        description: data.recordingUrl 
+          ? "Recording and transcript fetched successfully!" 
+          : "Call data updated. Recording may not be available yet.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Sync Failed",
+        description: error.message,
+      });
+    },
+  });
+
   // Submit demo call for review
   const submitDemoMutation = useMutation({
     mutationFn: async (callId: string) => {
       // Get the demo call to find the task
       const call = demoCalls.find((c) => c.id === callId);
       if (!call) throw new Error("Call not found");
+
+      // Ensure recording is available
+      if (!call.recording_url) {
+        throw new Error("Please sync recording first before submitting");
+      }
 
       // Update task with selected demo call and change status
       const { error } = await supabase
@@ -242,6 +306,11 @@ export default function DemoCallsPage() {
           </Select>
         </div>
 
+        {/* Info */}
+        <div className="text-sm text-muted-foreground bg-muted/30 p-4 border-2 border-border">
+          <p><strong>How it works:</strong> Make demo calls to test your agent. After the call ends, click "Sync Recording" to fetch the recording from Bolna. Then submit your best demo call for admin review.</p>
+        </div>
+
         {/* Table */}
         <div className="border-2 border-border bg-card">
           <Table>
@@ -252,60 +321,127 @@ export default function DemoCallsPage() {
                 <TableHead className="font-bold">Agent</TableHead>
                 <TableHead className="font-bold">Status</TableHead>
                 <TableHead className="font-bold">Duration</TableHead>
+                <TableHead className="font-bold">Recording</TableHead>
                 <TableHead className="font-bold">Date</TableHead>
-                <TableHead className="font-bold w-32"></TableHead>
+                <TableHead className="font-bold w-48"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : filteredCalls.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No demo calls found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredCalls.map((call) => (
-                  <TableRow key={call.id} className="border-b-2 border-border">
-                    <TableCell className="font-mono">{call.phone_number}</TableCell>
-                    <TableCell>{call.tasks?.title || "Unknown"}</TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-1">
-                        <Bot className="h-3 w-3" />
-                        {call.aitel_agents?.agent_name || "Unknown"}
-                      </span>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(call.status)}</TableCell>
-                    <TableCell className="font-mono">
-                      {call.duration_seconds}s
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDistanceToNow(new Date(call.created_at), {
-                        addSuffix: true,
-                      })}
-                    </TableCell>
-                    <TableCell>
-                      {call.status === "completed" && (
-                        <Button
-                          size="sm"
-                          onClick={() => submitDemoMutation.mutate(call.id)}
-                          disabled={submitDemoMutation.isPending}
-                        >
-                          <Send className="h-3 w-3 mr-1" />
-                          Submit for Review
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
+                filteredCalls.map((call) => {
+                  const isSelected = call.tasks?.selected_demo_call_id === call.id;
+                  return (
+                    <TableRow 
+                      key={call.id} 
+                      className={`border-b-2 border-border ${isSelected ? 'bg-chart-2/10' : ''}`}
+                    >
+                      <TableCell className="font-mono">{call.phone_number}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {call.tasks?.title || "Unknown"}
+                          {isSelected && (
+                            <Badge variant="outline" className="bg-chart-2/20 text-chart-2 border-chart-2">
+                              Selected
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1">
+                          <Bot className="h-3 w-3" />
+                          {call.aitel_agents?.agent_name || "Unknown"}
+                        </span>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(call.status)}</TableCell>
+                      <TableCell className="font-mono">
+                        {call.duration_seconds ? `${call.duration_seconds}s` : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {call.recording_url ? (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(call.recording_url!, "_blank")}
+                            >
+                              <Headphones className="h-3 w-3 mr-1" />
+                              Play
+                            </Button>
+                            {call.transcript && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  toast({
+                                    title: "Transcript",
+                                    description: call.transcript?.slice(0, 500) + (call.transcript && call.transcript.length > 500 ? "..." : ""),
+                                  });
+                                }}
+                              >
+                                <FileText className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Not synced</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDistanceToNow(new Date(call.created_at), {
+                          addSuffix: true,
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {/* Sync Recording Button */}
+                          {call.external_call_id && !call.recording_url && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => syncRecordingMutation.mutate(call)}
+                              disabled={syncRecordingMutation.isPending}
+                            >
+                              {syncRecordingMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <RefreshCw className="h-3 w-3 mr-1" />
+                                  Sync
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          {/* Submit Button - only if completed with recording and not already selected */}
+                          {call.status === "completed" && call.recording_url && !isSelected && (
+                            <Button
+                              size="sm"
+                              onClick={() => submitDemoMutation.mutate(call.id)}
+                              disabled={submitDemoMutation.isPending}
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              Submit
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
