@@ -563,6 +563,57 @@ export type Database = {
         }
         Relationships: []
       }
+      payments: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          credits: number
+          id: string
+          razorpay_order_id: string
+          razorpay_payment_id: string | null
+          refund_amount: number | null
+          refund_id: string | null
+          refund_reason: string | null
+          refunded_at: string | null
+          refunded_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          created_at?: string
+          credits: number
+          id?: string
+          razorpay_order_id: string
+          razorpay_payment_id?: string | null
+          refund_amount?: number | null
+          refund_id?: string | null
+          refund_reason?: string | null
+          refunded_at?: string | null
+          refunded_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          credits?: number
+          id?: string
+          razorpay_order_id?: string
+          razorpay_payment_id?: string | null
+          refund_amount?: number | null
+          refund_id?: string | null
+          refund_reason?: string | null
+          refunded_at?: string | null
+          refunded_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       point_transactions: {
         Row: {
           created_at: string

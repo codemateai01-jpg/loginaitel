@@ -45,6 +45,7 @@ import AdminDemoLogs from "./pages/admin/AdminDemoLogs";
 import AdminCredits from "./pages/admin/AdminCredits";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminPerformance from "./pages/admin/AdminPerformance";
+import AdminPayments from "./pages/admin/AdminPayments";
 
 const queryClient = new QueryClient();
 
@@ -166,6 +167,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <AdminSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/payments"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminPayments />
                 </ProtectedRoute>
               }
             />

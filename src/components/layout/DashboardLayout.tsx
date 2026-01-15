@@ -38,6 +38,7 @@ const adminNavItems = [
   { icon: Phone, label: "Calls", href: "/admin/calls" },
   { icon: Phone, label: "Phone Numbers", href: "/admin/phone-numbers" },
   { icon: CreditCard, label: "Credits", href: "/admin/credits" },
+  { icon: CreditCard, label: "Payments", href: "/admin/payments" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
 

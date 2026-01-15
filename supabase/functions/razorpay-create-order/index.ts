@@ -78,6 +78,23 @@ serve(async (req) => {
 
     const order = await razorpayResponse.json();
 
+    // Use service role to store the payment record
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    // Create payment record with pending status
+    await supabaseAdmin
+      .from("payments")
+      .insert({
+        client_id: user.id,
+        razorpay_order_id: order.id,
+        amount: order.amount,
+        credits: credits,
+        status: "pending",
+      });
+
     return new Response(
       JSON.stringify({
         orderId: order.id,

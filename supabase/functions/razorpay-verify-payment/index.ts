@@ -82,14 +82,14 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Check if this payment was already processed
-    const { data: existingTx } = await supabaseAdmin
-      .from("credit_transactions")
-      .select("id")
-      .eq("description", `Razorpay: ${razorpay_payment_id}`)
+    // Check if this payment was already processed via payments table
+    const { data: existingPayment } = await supabaseAdmin
+      .from("payments")
+      .select("id, status")
+      .eq("razorpay_payment_id", razorpay_payment_id)
       .maybeSingle();
 
-    if (existingTx) {
+    if (existingPayment && existingPayment.status === "completed") {
       return new Response(
         JSON.stringify({ success: true, message: "Payment already processed" }),
         {
@@ -98,6 +98,16 @@ serve(async (req) => {
         }
       );
     }
+
+    // Update payment record with payment ID and completed status
+    const { error: paymentUpdateError } = await supabaseAdmin
+      .from("payments")
+      .update({
+        razorpay_payment_id: razorpay_payment_id,
+        status: "completed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("razorpay_order_id", razorpay_order_id);
 
     // Get current credits
     const { data: currentCredits } = await supabaseAdmin
