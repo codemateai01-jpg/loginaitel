@@ -51,6 +51,7 @@ interface RecentCall {
   created_at: string;
   agent_id: string;
   duration_seconds?: number;
+  external_call_id?: string | null;
   lead: {
     name: string | null;
     phone_number: string;
@@ -165,6 +166,46 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     }
   }, [role, approvedPromptsCheck]);
 
+  // Terminal statuses that indicate a call has ended
+  const TERMINAL_STATUSES = ['completed', 'failed', 'no-answer', 'busy', 'canceled', 'call-disconnected'];
+  const ACTIVE_STATUSES = ['initiated', 'queued', 'ringing', 'in-progress'];
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+  // Function to sync stale calls with Bolna API
+  const syncStaleCall = async (callId: string, externalCallId: string | null) => {
+    if (!externalCallId) {
+      // No external ID, mark as failed
+      await supabase
+        .from("calls")
+        .update({ status: 'failed', ended_at: new Date().toISOString() })
+        .eq("id", callId);
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await supabase.functions.invoke("aitel-proxy", {
+        body: { action: "sync-call-status", executionId: externalCallId },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+
+      if (response.error || !response.data?.status) {
+        // API call failed, mark as failed if stale
+        await supabase
+          .from("calls")
+          .update({ status: 'failed', ended_at: new Date().toISOString() })
+          .eq("id", callId);
+      }
+    } catch (error) {
+      console.error("Error syncing call status:", error);
+      // Mark as failed if we can't sync
+      await supabase
+        .from("calls")
+        .update({ status: 'failed', ended_at: new Date().toISOString() })
+        .eq("id", callId);
+    }
+  };
+
   // Fetch recent calls with agent info
   const { data: recentCalls = [], refetch: refetchCalls, isLoading: loadingCalls } = useQuery({
     queryKey: ["recent-calls", user?.id, role],
@@ -177,6 +218,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           created_at,
           agent_id,
           duration_seconds,
+          external_call_id,
           lead:leads(name, phone_number)
         `)
         .order("created_at", { ascending: false })
@@ -188,6 +230,23 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
 
       const { data, error } = await query;
       if (error) throw error;
+
+      // Check for stale active calls and sync them
+      const now = Date.now();
+      const staleCalls = (data || []).filter(call => {
+        if (!ACTIVE_STATUSES.includes(call.status)) return false;
+        const callAge = now - new Date(call.created_at).getTime();
+        return callAge > STALE_THRESHOLD_MS;
+      });
+
+      // Sync stale calls in background (don't block UI)
+      if (staleCalls.length > 0) {
+        Promise.all(staleCalls.map(call => syncStaleCall(call.id, call.external_call_id)))
+          .then(() => {
+            // Refetch after syncing
+            setTimeout(() => refetchCalls(), 1000);
+          });
+      }
       
       const agentIds = [...new Set((data || []).map(c => c.agent_id))];
       const { data: agentsData } = await supabase
@@ -204,6 +263,31 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     },
     enabled: !!user,
   });
+
+  // Real-time subscription for call updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('recent-calls-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'calls',
+        },
+        () => {
+          // Refetch when any call changes
+          refetchCalls();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, refetchCalls]);
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
