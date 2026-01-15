@@ -224,7 +224,7 @@ serve(async (req) => {
             agent_id: item.agent_id,
             client_id: item.client_id,
             lead_id: item.lead_id,
-            status: "initiating",
+            status: "initiated",
             metadata: {
               source: "campaign_bulk",
               campaign_id: item.campaign_id,
