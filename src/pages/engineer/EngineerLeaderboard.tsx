@@ -2,6 +2,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useState } from "react";
 import {
   Trophy,
   Medal,
@@ -12,6 +13,7 @@ import {
   Star,
   Flame,
   Crown,
+  Eye,
 } from "lucide-react";
 import {
   Table,
@@ -21,9 +23,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
+import { ScoreBreakdownModal } from "@/components/engineer/ScoreBreakdownModal";
 interface EngineerRanking {
   engineer_id: string;
   total_points: number;
@@ -48,6 +51,11 @@ interface CompletedTask {
     efficiency_score?: number;
     earned_points?: number;
     base_points?: number;
+    total_minutes?: number;
+    prompt_edits?: number;
+    demo_edits?: number;
+    prompt_rejections?: number;
+    demo_rejections?: number;
   } | null;
 }
 
@@ -89,6 +97,7 @@ function getRankBadgeIcon(rank: number) {
 
 export default function EngineerLeaderboard() {
   const { user } = useAuth();
+  const [selectedTask, setSelectedTask] = useState<CompletedTask | null>(null);
 
   // Fetch all-time leaderboard
   const { data: allTimeRankings, isLoading: allTimeLoading } = useQuery({
@@ -466,6 +475,7 @@ export default function EngineerLeaderboard() {
                   <TableHead className="font-bold text-center">Score</TableHead>
                   <TableHead className="font-bold text-right">Points Earned</TableHead>
                   <TableHead className="font-bold">Completed</TableHead>
+                  <TableHead className="font-bold text-center">Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -517,6 +527,17 @@ export default function EngineerLeaderboard() {
                           ? format(new Date(task.completed_at), "MMM d, yyyy HH:mm")
                           : "—"}
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedTask(task)}
+                          className="gap-1"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -530,6 +551,16 @@ export default function EngineerLeaderboard() {
             </div>
           )}
         </div>
+
+        {/* Score Breakdown Modal */}
+        <ScoreBreakdownModal
+          open={!!selectedTask}
+          onOpenChange={(open) => !open && setSelectedTask(null)}
+          taskTitle={selectedTask?.title || ""}
+          finalScore={selectedTask?.final_score ?? null}
+          breakdown={selectedTask?.score_breakdown ?? null}
+          basePoints={selectedTask?.points || 0}
+        />
       </div>
     </DashboardLayout>
   );
