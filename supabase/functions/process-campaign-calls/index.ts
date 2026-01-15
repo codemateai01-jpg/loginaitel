@@ -118,6 +118,26 @@ serve(async (req) => {
 
     if (campaignId) {
       pendingQuery = pendingQuery.eq("campaign_id", campaignId);
+      
+      // Check if campaign is paused
+      const { data: campaignStatus } = await supabase
+        .from("campaigns")
+        .select("status")
+        .eq("id", campaignId)
+        .single();
+      
+      if (campaignStatus?.status === "paused") {
+        console.log(`Campaign ${campaignId} is paused, skipping processing`);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: "Campaign is paused", 
+            paused: true,
+            processed: 0 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const { data: pendingItems, error: queueError } = await pendingQuery;

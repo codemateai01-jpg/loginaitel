@@ -40,6 +40,7 @@ import {
   Plus,
   Upload,
   Play,
+  Pause,
   ArrowLeft,
   Phone,
   Users,
@@ -253,6 +254,29 @@ export default function CampaignDetail() {
     },
   });
 
+  // Pause/Resume campaign mutation
+  const toggleCampaignStatus = useMutation({
+    mutationFn: async (newStatus: "active" | "paused") => {
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ status: newStatus })
+        .eq("id", campaignId!);
+      if (error) throw error;
+    },
+    onSuccess: (_, newStatus) => {
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast({ 
+        title: newStatus === "paused" ? "Campaign paused" : "Campaign resumed",
+        description: newStatus === "paused" 
+          ? "No new calls will be initiated" 
+          : "Calls will continue processing"
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Filter leads based on active tab
   const filteredLeads = leads?.filter((lead) => {
     if (activeTab === "all") return true;
@@ -430,6 +454,38 @@ export default function CampaignDetail() {
             </Button>
           )}
 
+          {/* Pause/Resume Campaign */}
+          {campaign?.status === "active" && (
+            <Button
+              variant="outline"
+              onClick={() => toggleCampaignStatus.mutate("paused")}
+              disabled={toggleCampaignStatus.isPending}
+              className="border-yellow-500 text-yellow-600 hover:bg-yellow-500/10"
+            >
+              {toggleCampaignStatus.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Pause className="h-4 w-4 mr-2" />
+              )}
+              Pause Campaign
+            </Button>
+          )}
+
+          {campaign?.status === "paused" && (
+            <Button
+              variant="default"
+              onClick={() => toggleCampaignStatus.mutate("active")}
+              disabled={toggleCampaignStatus.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {toggleCampaignStatus.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              Resume Campaign
+            </Button>
+          )}
           {selectedLeads.length > 0 && (
             <Button variant="default" onClick={() => setIsBulkCallOpen(true)}>
               <PhoneCall className="h-4 w-4 mr-2" />
