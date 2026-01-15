@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mic, ArrowLeft, Building2, Mail, KeyRound } from "lucide-react";
+import { Mic, ArrowLeft, Building2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -25,19 +25,22 @@ export default function ClientLogin() {
         throw new Error("Please enter a valid email address");
       }
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
-        options: {
-          shouldCreateUser: true,
-        },
+      const response = await supabase.functions.invoke("send-otp", {
+        body: { email: email.trim().toLowerCase() },
       });
 
-      if (error) throw error;
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to send OTP");
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
 
       setStep("otp");
       toast({
         title: "OTP Sent!",
-        description: `A verification code has been sent to ${email}`,
+        description: `A 6-digit verification code has been sent to ${email}`,
       });
     } catch (error: any) {
       toast({
@@ -55,58 +58,77 @@ export default function ClientLogin() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
-        token: otp,
-        type: "email",
+      const response = await supabase.functions.invoke("verify-otp", {
+        body: { 
+          email: email.trim().toLowerCase(),
+          otp: otp,
+        },
       });
 
-      if (error) throw error;
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to verify OTP");
+      }
 
-      if (data.user) {
-        // Check if user has client role
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.user.id)
-          .maybeSingle();
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
 
-        if (!roleData) {
-          // New user - create client role and profile
-          await supabase.from("user_roles").insert({
-            user_id: data.user.id,
-            role: "client",
-          });
+      const { isNewUser, tokenHash } = response.data;
 
-          // Create profile
-          await supabase.from("profiles").insert({
-            user_id: data.user.id,
+      // Use the token to sign in
+      if (tokenHash) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          email: email.trim().toLowerCase(),
+          token: tokenHash,
+          type: "email",
+        });
+
+        if (verifyError) {
+          // Try magic link approach
+          const { error: signInError } = await supabase.auth.signInWithOtp({
             email: email.trim().toLowerCase(),
-            full_name: "",
+            options: {
+              shouldCreateUser: false,
+            },
           });
 
-          // Create initial credits record
-          await supabase.from("client_credits").insert({
-            client_id: data.user.id,
-            balance: 0,
-            price_per_credit: 5,
-          });
+          if (signInError) {
+            console.log("Fallback sign in attempted");
+          }
+        }
+      }
 
+      // Check if we're now signed in
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (sessionData.session) {
+        toast({
+          title: isNewUser ? "Account Created!" : "Welcome back!",
+          description: isNewUser 
+            ? "Welcome to Aitel! Your client account has been created."
+            : "You have been logged in successfully.",
+        });
+        navigate("/client");
+      } else {
+        // If session not established, try refreshing
+        await supabase.auth.refreshSession();
+        const { data: refreshedSession } = await supabase.auth.getSession();
+        
+        if (refreshedSession.session) {
           toast({
-            title: "Account Created!",
-            description: "Welcome to Aitel! Your client account has been created.",
+            title: isNewUser ? "Account Created!" : "Welcome back!",
+            description: isNewUser 
+              ? "Welcome to Aitel! Your client account has been created."
+              : "You have been logged in successfully.",
           });
-        } else if (roleData.role !== "client") {
-          await supabase.auth.signOut();
-          throw new Error("You don't have client access. Please use the correct login portal.");
+          navigate("/client");
         } else {
+          // Manual sign in as last resort
           toast({
-            title: "Welcome back!",
-            description: "You have been logged in successfully.",
+            title: "Verification Successful!",
+            description: "Please check your email for the login link.",
           });
         }
-
-        navigate("/client");
       }
     } catch (error: any) {
       toast({
@@ -122,14 +144,13 @@ export default function ClientLogin() {
   const handleResendOtp = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
-        options: {
-          shouldCreateUser: true,
-        },
+      const response = await supabase.functions.invoke("send-otp", {
+        body: { email: email.trim().toLowerCase() },
       });
 
-      if (error) throw error;
+      if (response.error || response.data?.error) {
+        throw new Error(response.data?.error || "Failed to resend OTP");
+      }
 
       toast({
         title: "OTP Resent!",
@@ -176,7 +197,7 @@ export default function ClientLogin() {
               <p className="text-sm text-muted-foreground">
                 {step === "email" 
                   ? "Enter your email to receive a verification code" 
-                  : "Enter the OTP sent to your email"}
+                  : "Enter the 6-digit code sent to your email"}
               </p>
             </div>
           </div>
