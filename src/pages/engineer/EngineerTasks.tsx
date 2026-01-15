@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { TaskTimer } from "@/components/tasks/TaskTimer";
 import { DemoCallDialog } from "@/components/engineer/DemoCallDialog";
+import { getExecution } from "@/lib/aitel";
 import {
   ClipboardList,
   Clock,
@@ -41,6 +42,7 @@ import {
   Upload,
   Music,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { formatDistanceToNow, format, differenceInMinutes } from "date-fns";
 
@@ -142,6 +144,7 @@ export default function EngineerTasks() {
   const [selectedDemoCallId, setSelectedDemoCallId] = useState<string | null>(null);
   const [uploadedAudioFile, setUploadedAudioFile] = useState<File | null>(null);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [isSyncingCalls, setIsSyncingCalls] = useState(false);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch available tasks (pending - unassigned OR assigned to current user)
@@ -449,6 +452,104 @@ export default function EngineerTasks() {
   const handleSubmitDemo = (task: Task) => {
     setSelectedTask(task);
     setShowSubmitDemoDialog(true);
+  };
+
+  // Sync demo calls from API to get updated status and recordings
+  const syncDemoCalls = async () => {
+    if (!selectedTask?.id || !user?.id) return;
+    
+    setIsSyncingCalls(true);
+    let syncedCount = 0;
+    
+    try {
+      // Get all demo calls for this task that have an external_call_id but are still in_progress
+      const callsToSync = demoCalls.filter(
+        call => call.external_call_id && 
+        call.status === 'in_progress' && 
+        !call.recording_url && 
+        !call.uploaded_audio_url
+      );
+      
+      for (const call of callsToSync) {
+        try {
+          const result = await getExecution(call.external_call_id!);
+          
+          if (result.data) {
+            const execution = result.data;
+            const telephonyData = execution.telephony_data || {};
+            
+            // Determine new status based on Bolna execution status
+            const terminalStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
+            const isTerminal = terminalStatuses.includes(execution.status);
+            
+            // Calculate duration
+            let durationSeconds = 0;
+            if (telephonyData.duration) {
+              durationSeconds = Math.round(parseFloat(telephonyData.duration)) || 0;
+            } else if (execution.conversation_time !== undefined) {
+              durationSeconds = Math.round(execution.conversation_time);
+            }
+            
+            // Update demo call record
+            const updateData: Record<string, unknown> = {
+              duration_seconds: durationSeconds,
+              transcript: execution.transcript || null,
+            };
+            
+            if (telephonyData.recording_url) {
+              updateData.recording_url = telephonyData.recording_url;
+            }
+            
+            if (isTerminal) {
+              updateData.status = execution.status === 'completed' || execution.status === 'call-disconnected' 
+                ? 'completed' 
+                : 'failed';
+              updateData.ended_at = new Date().toISOString();
+            }
+            
+            const { error } = await supabase
+              .from("demo_calls")
+              .update(updateData)
+              .eq("id", call.id);
+            
+            if (!error) {
+              syncedCount++;
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to sync call ${call.id}:`, err);
+        }
+      }
+      
+      // Refresh demo calls
+      queryClient.invalidateQueries({ queryKey: ["demo-calls", selectedTask.id] });
+      
+      if (syncedCount > 0) {
+        toast({
+          title: "Sync Complete",
+          description: `Updated ${syncedCount} demo call(s)`,
+        });
+      } else if (callsToSync.length === 0) {
+        toast({
+          title: "No Calls to Sync",
+          description: "All demo calls are already up to date",
+        });
+      } else {
+        toast({
+          title: "Sync Complete",
+          description: "No updates available from API yet",
+        });
+      }
+    } catch (error) {
+      console.error("Sync error:", error);
+      toast({
+        title: "Sync Failed",
+        description: "Failed to sync demo calls",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingCalls(false);
+    }
   };
 
   const getTimeRemaining = (deadline: string | null) => {
@@ -1134,10 +1235,20 @@ export default function EngineerTasks() {
                 </div>
               </div>
 
-              {/* Divider */}
+              {/* Divider with Sync Button */}
               <div className="flex items-center gap-4">
                 <div className="flex-1 h-px bg-border" />
                 <span className="text-xs text-muted-foreground">OR select from existing calls</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={syncDemoCalls}
+                  disabled={isSyncingCalls}
+                  className="h-6 px-2 text-xs"
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1 ${isSyncingCalls ? 'animate-spin' : ''}`} />
+                  {isSyncingCalls ? 'Syncing...' : 'Sync'}
+                </Button>
                 <div className="flex-1 h-px bg-border" />
               </div>
               
@@ -1150,10 +1261,23 @@ export default function EngineerTasks() {
                   call.uploaded_audio_url
                 );
                 
+                // Count in-progress calls that might need syncing
+                const pendingCalls = demoCalls.filter(call => 
+                  call.external_call_id && 
+                  call.status === 'in_progress' && 
+                  !call.recording_url && 
+                  !call.uploaded_audio_url
+                );
+                
                 return availableCalls.length === 0 ? (
                   <div className="text-center py-4 text-muted-foreground">
                     <Phone className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No completed demo calls yet.</p>
+                    {pendingCalls.length > 0 && (
+                      <p className="text-xs mt-2">
+                        {pendingCalls.length} call(s) in progress - click "Sync" to check for updates
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
