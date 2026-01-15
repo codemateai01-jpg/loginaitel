@@ -108,13 +108,19 @@ export default function DemoCallsPage() {
     enabled: !!user?.id,
   });
 
-  // Auto-sync function
-  const autoSyncRecording = async (call: DemoCall) => {
-    if (!call.external_call_id || call.recording_url) return;
+  // Auto-sync function with retry mechanism
+  const autoSyncRecording = async (
+    call: DemoCall,
+    attempt: number = 1,
+    maxAttempts: number = 5
+  ): Promise<boolean> => {
+    if (!call.external_call_id || call.recording_url) return true;
     
     try {
       const result = await getExecution(call.external_call_id);
-      if (result.error || !result.data) return;
+      if (result.error || !result.data) {
+        throw new Error(result.error || "Failed to fetch");
+      }
 
       const execution = result.data;
       const recordingUrl = execution.telephony_data?.recording_url || null;
@@ -138,9 +144,30 @@ export default function DemoCallsPage() {
           title: "Recording Auto-Synced",
           description: "Call recording fetched automatically!",
         });
+        return true;
       }
+
+      // Recording not ready yet, retry if attempts remaining
+      if (attempt < maxAttempts) {
+        const delay = Math.min(attempt * 5000, 15000); // 5s, 10s, 15s, 15s, 15s
+        console.log(`Recording not ready, retry ${attempt}/${maxAttempts} in ${delay/1000}s`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return autoSyncRecording(call, attempt + 1, maxAttempts);
+      }
+
+      console.log("Max retry attempts reached, recording may not be available");
+      return false;
     } catch (error) {
-      console.error("Auto-sync failed:", error);
+      console.error(`Auto-sync attempt ${attempt} failed:`, error);
+      
+      // Retry on error if attempts remaining
+      if (attempt < maxAttempts) {
+        const delay = Math.min(attempt * 5000, 15000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return autoSyncRecording(call, attempt + 1, maxAttempts);
+      }
+      return false;
     }
   };
 
@@ -164,9 +191,9 @@ export default function DemoCallsPage() {
             updatedCall.external_call_id &&
             !updatedCall.recording_url
           ) {
-            // Wait 3 seconds for Bolna to process the recording
+            // Wait 3 seconds initially, then start retry mechanism
             setTimeout(async () => {
-              await autoSyncRecording(updatedCall);
+              await autoSyncRecording(updatedCall, 1, 5);
               queryClient.invalidateQueries({ queryKey: ["demo-calls"] });
             }, 3000);
           } else {
