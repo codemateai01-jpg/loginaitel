@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, subDays, startOfDay, startOfWeek, eachDayOfInterval } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BuyCreditsDialog } from "@/components/billing/BuyCreditsDialog";
 
 interface Transaction {
   id: string;
@@ -39,7 +41,8 @@ interface Transaction {
 
 export default function ClientBilling() {
   const { user } = useAuth();
-
+  const queryClient = useQueryClient();
+  const [buyDialogOpen, setBuyDialogOpen] = useState(false);
   // Fetch credit balance and price
   const { data: creditData, isLoading: creditsLoading } = useQuery({
     queryKey: ["client-credits-balance", user?.id],
@@ -188,11 +191,21 @@ export default function ClientBilling() {
               Manage your credits and view transaction history
             </p>
           </div>
-          <Button>
+          <Button onClick={() => setBuyDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Buy Credits
           </Button>
         </div>
+
+        <BuyCreditsDialog
+          open={buyDialogOpen}
+          onOpenChange={setBuyDialogOpen}
+          pricePerCredit={creditData?.pricePerCredit || 3}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["client-credits-balance"] });
+            queryClient.invalidateQueries({ queryKey: ["client-transactions"] });
+          }}
+        />
 
         {/* Stats Cards */}
         <div className="grid sm:grid-cols-4 gap-4">
