@@ -196,7 +196,7 @@ export function CreditManagement() {
         .insert({
           client_id: clientId,
           amount: amount,
-          transaction_type: "admin_allocation",
+          transaction_type: "admin_adjustment",
           description: description || `Admin credit allocation (₹${price}/credit)`,
           created_by: user?.id || clientId,
         });
