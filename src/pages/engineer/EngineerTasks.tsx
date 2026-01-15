@@ -412,8 +412,10 @@ export default function EngineerTasks() {
           </div>
         )}
 
-        {/* Timer for active tasks */}
-        {task.status === "in_progress" && <TaskTimer pickedAt={task.picked_at} />}
+        {/* Timer for active tasks - only show if picked but not yet started working */}
+        {task.status === "in_progress" && task.picked_at && !task.prompt_started_at && (
+          <TaskTimer pickedAt={task.picked_at} />
+        )}
         
         <div className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
