@@ -109,6 +109,7 @@ export default function RELeads() {
   const [stageFilter, setStageFilter] = useState<string>(searchParams.get("stage") || "all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [contactedFilter, setContactedFilter] = useState<string>("all");
   
   // Dialogs
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -164,6 +165,12 @@ export default function RELeads() {
       if (searchQuery) {
         query = query.or(`name.ilike.%${searchQuery}%,phone_number.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
       }
+      // Filter by contacted status
+      if (contactedFilter === "contacted") {
+        query = query.not("last_call_at", "is", null);
+      } else if (contactedFilter === "not_contacted") {
+        query = query.is("last_call_at", null);
+      }
 
       const { data, error } = await query;
 
@@ -179,7 +186,7 @@ export default function RELeads() {
     } finally {
       setLoading(false);
     }
-  }, [user, stageFilter, projectFilter, sourceFilter, searchQuery, toast]);
+  }, [user, stageFilter, projectFilter, sourceFilter, searchQuery, contactedFilter, toast]);
 
   const fetchProjects = useCallback(async () => {
     if (!user) return;
@@ -398,6 +405,17 @@ export default function RELeads() {
                   {uniqueSources.map(source => (
                     <SelectItem key={source} value={source!}>{source}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={contactedFilter} onValueChange={setContactedFilter}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Contact Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Leads</SelectItem>
+                  <SelectItem value="contacted">Contacted</SelectItem>
+                  <SelectItem value="not_contacted">Not Contacted</SelectItem>
                 </SelectContent>
               </Select>
 
