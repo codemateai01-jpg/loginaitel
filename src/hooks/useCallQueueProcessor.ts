@@ -32,37 +32,13 @@ export function useCallQueueProcessor(options: QueueProcessorOptions = {}) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
 
-  // Get pending queue count
-  const { data: pendingCount = 0, refetch: refetchCount } = useQuery({
-    queryKey: ["call-queue-pending-count"],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("call_queue")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
+  // Get pending queue count - disabled since call_queue table was removed
+  const pendingCount = 0;
+  const refetchCount = () => {};
 
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled,
-    refetchInterval: intervalMs,
-  });
-
-  // Get in-progress count
-  const { data: inProgressCount = 0, refetch: refetchInProgress } = useQuery({
-    queryKey: ["call-queue-in-progress-count"],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("call_queue")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "in_progress");
-
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled,
-    refetchInterval: intervalMs,
-  });
+  // Get in-progress count - disabled since call_queue table was removed
+  const inProgressCount = 0;
+  const refetchInProgress = () => {};
 
   const processQueue = useCallback(async (): Promise<QueueProcessResult | null> => {
     if (isProcessingRef.current) {
