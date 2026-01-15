@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -23,6 +23,9 @@ import {
   Phone,
   Edit,
   Play,
+  Pause,
+  Volume2,
+  Music,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -58,6 +61,67 @@ export function DemoReviewDialog({
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [qualityScore, setQualityScore] = useState([30]);
+  
+  // Audio player state
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  // Reset audio state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+  }, [open]);
+
+  const togglePlayPause = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   // Fetch the selected demo call
   const { data: demoCall } = useQuery({
@@ -233,7 +297,7 @@ export function DemoReviewDialog({
 
           {/* Demo Call Info */}
           {demoCall && (
-            <div className="border-2 border-chart-2 bg-chart-2/10 p-4 space-y-2">
+            <div className="border-2 border-chart-2 bg-chart-2/10 p-4 space-y-3">
               <h4 className="font-medium flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 Submitted Demo Call
@@ -260,6 +324,73 @@ export function DemoReviewDialog({
                   </span>
                 </div>
               </div>
+
+              {/* Audio Player */}
+              {(demoCall.recording_url || demoCall.uploaded_audio_url) && (
+                <div className="border-t border-chart-2/30 pt-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    {demoCall.uploaded_audio_url ? (
+                      <>
+                        <Music className="h-4 w-4" />
+                        <span>Uploaded Audio</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="h-4 w-4" />
+                        <span>Call Recording</span>
+                      </>
+                    )}
+                  </div>
+                  
+                  <audio
+                    ref={audioRef}
+                    src={demoCall.uploaded_audio_url || demoCall.recording_url || undefined}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onEnded={handleEnded}
+                    preload="metadata"
+                  />
+                  
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      onClick={togglePlayPause}
+                    >
+                      {isPlaying ? (
+                        <Pause className="h-5 w-5" />
+                      ) : (
+                        <Play className="h-5 w-5" />
+                      )}
+                    </Button>
+                    
+                    <div className="flex-1 space-y-1">
+                      <input
+                        type="range"
+                        min={0}
+                        max={duration || 100}
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-chart-2"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                        <span>{formatTime(currentTime)}</span>
+                        <span>{formatTime(duration)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {!demoCall.recording_url && !demoCall.uploaded_audio_url && (
+                <div className="border-t border-chart-2/30 pt-3">
+                  <p className="text-sm text-muted-foreground italic">
+                    No audio available for this demo call
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
