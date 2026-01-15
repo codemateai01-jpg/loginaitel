@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { useRealtimeCalls } from "@/hooks/useRealtimeCalls";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -34,11 +33,11 @@ import {
   Calendar,
   BarChart3,
   Download,
+  Loader2,
 } from "lucide-react";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { CallDetailsDialog } from "@/components/calls/CallDetailsDialog";
-import { CallAnalytics } from "@/components/calls/CallAnalytics";
 import {
   BarChart,
   Bar,
@@ -50,25 +49,22 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { listAgentExecutions, type CallExecution } from "@/lib/aitel";
 
-interface Call {
+// Map Bolna execution to our display format
+interface CallDisplay {
   id: string;
-  lead_id: string; // Now stores phone number
+  phone_number: string;
   agent_id: string;
+  agent_name: string;
   status: string;
   duration_seconds: number | null;
-  connected: boolean | null;
-  started_at: string | null;
-  ended_at: string | null;
+  connected: boolean;
   created_at: string;
   transcript: string | null;
   recording_url: string | null;
-  summary: string | null;
   sentiment: string | null;
-  metadata: unknown;
   external_call_id: string | null;
-  batch_id: string | null;
-  agent_name?: string;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Phone; className: string }> = {
@@ -105,26 +101,17 @@ export default function ClientCalls() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedCall, setSelectedCall] = useState<Call | null>(null);
+  const [selectedCall, setSelectedCall] = useState<CallDisplay | null>(null);
   const [dateRange, setDateRange] = useState("7");
 
-  // Query key for calls - memoized to keep stable reference
-  const callsQueryKey = useMemo(
-    () => ["client-calls", user?.id, dateRange],
-    [user?.id, dateRange]
-  );
-
-  // Subscribe to realtime updates
-  useRealtimeCalls({ queryKey: callsQueryKey, clientId: user?.id });
-
-  // Fetch agents for lookup
+  // Fetch agents for this client (to get external Bolna agent IDs)
   const { data: agents } = useQuery({
-    queryKey: ["client-agents-lookup", user?.id],
+    queryKey: ["client-agents-bolna", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("aitel_agents")
-        .select("id, agent_name")
+        .select("id, agent_name, external_agent_id")
         .eq("client_id", user!.id);
 
       if (error) throw error;
@@ -132,45 +119,65 @@ export default function ClientCalls() {
     },
   });
 
-  // Create agent lookup map
-  const agentMap = useMemo(() => {
+  // Create agent lookup maps
+  const agentNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     agents?.forEach((a) => {
-      map[a.id] = a.agent_name;
+      map[a.external_agent_id] = a.agent_name;
     });
     return map;
   }, [agents]);
 
-  // Fetch calls
+  // Fetch call executions from Bolna API for each agent
   const { data: calls, isLoading } = useQuery({
-    queryKey: callsQueryKey,
-    enabled: !!user?.id,
+    queryKey: ["client-calls-bolna", user?.id, dateRange, agents?.length],
+    enabled: !!user?.id && !!agents && agents.length > 0,
     queryFn: async () => {
-      const startDate = subDays(new Date(), parseInt(dateRange)).toISOString();
-      
-      const { data, error } = await supabase
-        .from("calls")
-        .select("*")
-        .eq("client_id", user!.id)
-        .gte("created_at", startDate)
-        .order("created_at", { ascending: false });
+      const startDate = subDays(new Date(), parseInt(dateRange));
+      const allCalls: CallDisplay[] = [];
 
-      if (error) throw error;
-      return data as Call[];
+      // Fetch executions for each agent
+      for (const agent of agents!) {
+        if (!agent.external_agent_id) continue;
+
+        const result = await listAgentExecutions({
+          agent_id: agent.external_agent_id,
+          page_size: 50,
+          from: startDate.toISOString(),
+        });
+
+        if (result.data?.data) {
+          // Map Bolna execution to our display format
+          const mappedCalls = result.data.data.map((exec: CallExecution): CallDisplay => ({
+            id: exec.id,
+            phone_number: exec.telephony_data?.to_number || "Unknown",
+            agent_id: exec.agent_id,
+            agent_name: agent.agent_name,
+            status: exec.status,
+            duration_seconds: exec.conversation_time || null,
+            connected: (exec.conversation_time || 0) >= 45,
+            created_at: exec.created_at,
+            transcript: exec.transcript || null,
+            recording_url: exec.telephony_data?.recording_url || null,
+            sentiment: null, // Bolna doesn't provide sentiment
+            external_call_id: exec.id,
+          }));
+          allCalls.push(...mappedCalls);
+        }
+      }
+
+      // Sort by created_at descending
+      allCalls.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      return allCalls;
     },
   });
 
-  // Enrich calls with agent names
-  const enrichedCalls = useMemo(() => {
-    return calls?.map((call) => ({
-      ...call,
-      agent_name: agentMap[call.agent_id] || "Unknown Agent",
-    }));
-  }, [calls, agentMap]);
-
-  // Filter calls using enriched data
-  const filteredCalls = enrichedCalls?.filter((call) => {
-    const matchesSearch = call.lead_id?.toLowerCase().includes(search.toLowerCase()) || 
+  // Filter calls
+  const filteredCalls = calls?.filter((call) => {
+    const matchesSearch = call.phone_number?.toLowerCase().includes(search.toLowerCase()) || 
                           call.id.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || call.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -178,23 +185,23 @@ export default function ClientCalls() {
 
   // Calculate stats
   const stats = {
-    total: enrichedCalls?.length || 0,
-    completed: enrichedCalls?.filter((c) => c.status === "completed").length || 0,
-    connected: enrichedCalls?.filter((c) => c.connected).length || 0,
-    avgDuration: enrichedCalls?.length
+    total: calls?.length || 0,
+    completed: calls?.filter((c) => c.status === "completed" || c.status === "call-disconnected").length || 0,
+    connected: calls?.filter((c) => c.connected).length || 0,
+    avgDuration: calls?.length
       ? Math.round(
-          enrichedCalls.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) / enrichedCalls.length
+          calls.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) / calls.length
         )
       : 0,
-    connectionRate: enrichedCalls?.length
-      ? Math.round((enrichedCalls.filter((c) => c.connected).length / enrichedCalls.length) * 100)
+    connectionRate: calls?.length
+      ? Math.round((calls.filter((c) => c.connected).length / calls.length) * 100)
       : 0,
   };
 
   // Prepare chart data
-  const statusDistribution = enrichedCalls
+  const statusDistribution = calls
     ? Object.entries(
-        enrichedCalls.reduce((acc, call) => {
+        calls.reduce((acc, call) => {
           acc[call.status] = (acc[call.status] || 0) + 1;
           return acc;
         }, {} as Record<string, number>)
@@ -204,9 +211,9 @@ export default function ClientCalls() {
       }))
     : [];
 
-  const sentimentDistribution = enrichedCalls
+  const sentimentDistribution = calls
     ? Object.entries(
-        enrichedCalls.reduce((acc, call) => {
+        calls.reduce((acc, call) => {
           const sentiment = call.sentiment || "neutral";
           acc[sentiment] = (acc[sentiment] || 0) + 1;
           return acc;
@@ -218,12 +225,12 @@ export default function ClientCalls() {
     : [];
 
   // Daily call volume
-  const dailyVolume = enrichedCalls
+  const dailyVolume = calls
     ? Array.from({ length: 7 }, (_, i) => {
         const date = subDays(new Date(), 6 - i);
         const dayStart = startOfDay(date);
         const dayEnd = endOfDay(date);
-        const count = enrichedCalls.filter((c) => {
+        const count = calls.filter((c) => {
           const callDate = new Date(c.created_at);
           return callDate >= dayStart && callDate <= dayEnd;
         }).length;
@@ -237,7 +244,7 @@ export default function ClientCalls() {
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "0:00";
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -249,7 +256,7 @@ export default function ClientCalls() {
       ...filteredCalls.map((call) =>
         [
           format(new Date(call.created_at), "yyyy-MM-dd HH:mm"),
-          call.lead_id || "",
+          call.phone_number || "",
           call.agent_name || "",
           call.status,
           formatDuration(call.duration_seconds),
@@ -403,7 +410,7 @@ export default function ClientCalls() {
                       return (
                         <TableRow key={call.id} className="border-b-2 border-border">
                           <TableCell>
-                            <p className="font-mono text-sm">{call.lead_id || "—"}</p>
+                            <p className="font-mono text-sm">{call.phone_number || "—"}</p>
                           </TableCell>
                           <TableCell>{call.agent_name || "—"}</TableCell>
                           <TableCell>

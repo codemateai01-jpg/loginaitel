@@ -484,6 +484,42 @@ export async function getExecutionLogs(executionId: string): Promise<AitelRespon
   return callAitelProxy<ExecutionLogsResponse>("get-execution-logs", { execution_id: executionId });
 }
 
+// List executions for multiple agents (helper that combines results)
+export async function listMultipleAgentExecutions(
+  agentIds: string[],
+  params?: Omit<ListExecutionsParams, 'agent_id'>
+): Promise<AitelResponse<CallExecution[]>> {
+  try {
+    const allExecutions: CallExecution[] = [];
+    
+    // Fetch executions for each agent in parallel
+    const promises = agentIds.map(agentId => 
+      listAgentExecutions({ ...params, agent_id: agentId })
+    );
+    
+    const results = await Promise.all(promises);
+    
+    for (const result of results) {
+      if (result.error) {
+        console.error("Error fetching executions:", result.error);
+        continue;
+      }
+      if (result.data?.data) {
+        allExecutions.push(...result.data.data);
+      }
+    }
+    
+    // Sort by created_at descending
+    allExecutions.sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
+    return { data: allExecutions, error: null };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
 // Download recording through proxy to hide external URLs
 export async function downloadRecording(recordingUrl: string, filename?: string): Promise<void> {
   try {

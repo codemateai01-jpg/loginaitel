@@ -55,20 +55,22 @@ import { cn } from "@/lib/utils";
 
 interface Call {
   id: string;
-  lead_id: string;
   agent_id: string;
   status: string;
   duration_seconds: number | null;
   connected: boolean | null;
-  started_at: string | null;
-  ended_at: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
   created_at: string;
   transcript: string | null;
   recording_url: string | null;
-  summary: string | null;
+  summary?: string | null;
   sentiment: string | null;
-  metadata: unknown;
+  metadata?: unknown;
   external_call_id?: string | null;
+  phone_number?: string;
+  agent_name?: string;
+  lead_id?: string;
   lead?: {
     name: string | null;
     phone_number: string;
