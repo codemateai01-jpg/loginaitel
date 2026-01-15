@@ -153,11 +153,8 @@ export function ClientPhoneAllocation() {
     },
   });
 
-  // Get available phone numbers (not already allocated)
-  const allocatedNumbers = allocations?.map((a) => a.phone_number) || [];
-  const availablePhoneNumbers = phoneNumbers?.filter(
-    (p) => !allocatedNumbers.includes(p.phone_number)
-  );
+  // All phone numbers are available for allocation (multiple clients can share numbers)
+  const availablePhoneNumbers = phoneNumbers;
 
   const handleAllocate = () => {
     if (!selectedClientId || !selectedPhoneNumber) return;
