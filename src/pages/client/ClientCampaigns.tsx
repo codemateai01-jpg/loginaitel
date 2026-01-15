@@ -76,18 +76,45 @@ export default function ClientCampaigns() {
     concurrency_level: 5,
   });
 
-  // Fetch campaigns
+  // Fetch campaigns with live stats from campaign_leads
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ["client-campaigns", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First fetch campaigns
+      const { data: campaignsData, error } = await supabase
         .from("campaigns")
         .select("*")
         .eq("client_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as Campaign[];
+      
+      // Then fetch lead stats for each campaign from campaign_leads (more accurate than stored counters)
+      const campaignsWithStats = await Promise.all(
+        (campaignsData || []).map(async (campaign) => {
+          const { data: leads } = await supabase
+            .from("campaign_leads")
+            .select("call_status, interest_level")
+            .eq("campaign_id", campaign.id);
+          
+          const leadStats = leads || [];
+          const contacted = leadStats.filter(l => l.call_status !== null).length;
+          const interested = leadStats.filter(l => l.interest_level === "interested").length;
+          const notInterested = leadStats.filter(l => l.interest_level === "not_interested").length;
+          const partiallyInterested = leadStats.filter(l => l.interest_level === "partially_interested").length;
+          
+          return {
+            ...campaign,
+            total_leads: leadStats.length || campaign.total_leads,
+            contacted_leads: contacted,
+            interested_leads: interested,
+            not_interested_leads: notInterested,
+            partially_interested_leads: partiallyInterested,
+          } as Campaign;
+        })
+      );
+      
+      return campaignsWithStats;
     },
   });
 

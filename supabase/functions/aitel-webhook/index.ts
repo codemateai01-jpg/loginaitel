@@ -625,11 +625,25 @@ async function processCampaignCall(
     // Update campaign statistics
     const campaignUpdate: Record<string, unknown> = {};
     
+    // Always increment contacted_leads when a call completes (first time for this lead)
+    if (campaignLead.call_status === null) {
+      // This is the first call to this lead, increment contacted_leads
+      const { data: campaignStats } = await supabase
+        .from("campaigns")
+        .select("contacted_leads")
+        .eq("id", campaignId)
+        .single();
+      
+      if (campaignStats) {
+        campaignUpdate.contacted_leads = (campaignStats.contacted_leads || 0) + 1;
+      }
+    }
+    
     if (interestLevel === "interested") {
       // Increment interested_leads count
       const { data: campaign } = await supabase
         .from("campaigns")
-        .select("interested_leads, contacted_leads")
+        .select("interested_leads")
         .eq("id", campaignId)
         .single();
       
