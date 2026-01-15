@@ -12,6 +12,7 @@ interface CreateUserRequest {
   full_name?: string;
   phone?: string;
   role: "admin" | "engineer" | "client";
+  crm_type?: "generic" | "real_estate";
 }
 
 Deno.serve(async (req) => {
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
     }
 
     const body: CreateUserRequest = await req.json();
-    const { email, password, full_name, phone, role } = body;
+    const { email, password, full_name, phone, role, crm_type } = body;
 
     if (!email || !password || !role) {
       return new Response(
@@ -96,15 +97,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create profile
+    // Create profile with CRM type for clients
+    const profileData: Record<string, unknown> = {
+      user_id: newUser.user.id,
+      email,
+      full_name: full_name || null,
+      phone: phone || null,
+    };
+    
+    // Add CRM type for clients
+    if (role === "client" && crm_type) {
+      profileData.crm_type = crm_type;
+    }
+
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .insert({
-        user_id: newUser.user.id,
-        email,
-        full_name: full_name || null,
-        phone: phone || null,
-      });
+      .insert(profileData);
 
     if (profileError) {
       console.error("Profile creation error:", profileError);

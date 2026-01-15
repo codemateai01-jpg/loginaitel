@@ -25,6 +25,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,6 +58,7 @@ interface Client {
   credits: number;
   agents_count: number;
   calls_count: number;
+  crm_type: "generic" | "real_estate";
 }
 
 export default function AdminClients() {
@@ -63,6 +71,7 @@ export default function AdminClients() {
     full_name: "",
     phone: "",
     password: "",
+    crm_type: "generic" as "generic" | "real_estate",
   });
 
   // Fetch clients with stats
@@ -128,6 +137,7 @@ export default function AdminClients() {
           credits: credit?.balance || 0,
           agents_count: agentCount,
           calls_count: callCount,
+          crm_type: (profile.crm_type as "generic" | "real_estate") || "generic",
         };
       });
 
@@ -148,6 +158,7 @@ export default function AdminClients() {
           full_name: clientData.full_name || null,
           phone: clientData.phone || null,
           role: "client",
+          crm_type: clientData.crm_type,
         },
       });
 
@@ -158,7 +169,7 @@ export default function AdminClients() {
     onSuccess: () => {
       toast({ title: "Client Created", description: "New client account has been created." });
       setIsAddDialogOpen(false);
-      setNewClient({ email: "", full_name: "", phone: "", password: "" });
+      setNewClient({ email: "", full_name: "", phone: "", password: "", crm_type: "generic" });
       queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
     },
     onError: (error) => {
@@ -242,6 +253,26 @@ export default function AdminClients() {
                     className="border-2"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>CRM Type *</Label>
+                  <Select
+                    value={newClient.crm_type}
+                    onValueChange={(value: "generic" | "real_estate") => 
+                      setNewClient({ ...newClient, crm_type: value })
+                    }
+                  >
+                    <SelectTrigger className="border-2">
+                      <SelectValue placeholder="Select CRM type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="generic">Generic CRM</SelectItem>
+                      <SelectItem value="real_estate">Real Estate CRM</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Real Estate CRM includes projects, site visits, and AI call analysis
+                  </p>
+                </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
@@ -318,6 +349,7 @@ export default function AdminClients() {
                 <TableRow className="border-b-2 border-border hover:bg-transparent">
                   <TableHead className="font-bold">Client</TableHead>
                   <TableHead className="font-bold">Email</TableHead>
+                  <TableHead className="font-bold">CRM Type</TableHead>
                   <TableHead className="font-bold">Credits</TableHead>
                   <TableHead className="font-bold">Agents</TableHead>
                   <TableHead className="font-bold">Calls</TableHead>
@@ -332,6 +364,14 @@ export default function AdminClients() {
                       {client.full_name || "—"}
                     </TableCell>
                     <TableCell>{client.email}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={client.crm_type === "real_estate" ? "default" : "secondary"}
+                        className="capitalize"
+                      >
+                        {client.crm_type === "real_estate" ? "Real Estate" : "Generic"}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono">
                         {client.credits.toLocaleString()}
