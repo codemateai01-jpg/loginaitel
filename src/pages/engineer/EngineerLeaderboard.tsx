@@ -41,6 +41,14 @@ interface CompletedTask {
   points: number;
   completed_at: string;
   description: string | null;
+  final_score: number | null;
+  score_breakdown: {
+    speed_score?: number;
+    quality_score?: number;
+    efficiency_score?: number;
+    earned_points?: number;
+    base_points?: number;
+  } | null;
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -268,7 +276,7 @@ export default function EngineerLeaderboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("id, title, points, completed_at, description")
+        .select("id, title, points, completed_at, description, final_score, score_breakdown")
         .eq("assigned_to", user!.id)
         .eq("status", "completed")
         .order("completed_at", { ascending: false })
@@ -455,33 +463,63 @@ export default function EngineerLeaderboard() {
               <TableHeader>
                 <TableRow className="border-b-2 border-border hover:bg-transparent">
                   <TableHead className="font-bold">Task</TableHead>
+                  <TableHead className="font-bold text-center">Score</TableHead>
                   <TableHead className="font-bold text-right">Points Earned</TableHead>
                   <TableHead className="font-bold">Completed</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {taskHistory.map((task) => (
-                  <TableRow key={task.id} className="border-b-2 border-border">
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{task.title}</p>
-                        {task.description && (
-                          <p className="text-xs text-muted-foreground truncate max-w-[300px]">
-                            {task.description}
-                          </p>
+                {taskHistory.map((task) => {
+                  const breakdown = task.score_breakdown as CompletedTask['score_breakdown'];
+                  const earnedPoints = breakdown?.earned_points || task.points;
+                  const basePoints = breakdown?.base_points || task.points;
+                  
+                  return (
+                    <TableRow key={task.id} className="border-b-2 border-border">
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{task.title}</p>
+                          {task.description && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[300px]">
+                              {task.description}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {task.final_score !== null ? (
+                          <div className="inline-flex items-center gap-1">
+                            <span className={`font-mono font-bold ${
+                              task.final_score >= 90 ? "text-chart-2" :
+                              task.final_score >= 70 ? "text-chart-4" :
+                              task.final_score >= 50 ? "text-chart-5" :
+                              "text-destructive"
+                            }`}>
+                              {task.final_score}%
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className="font-mono font-bold text-chart-2">+{task.points}</span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {task.completed_at
-                        ? format(new Date(task.completed_at), "MMM d, yyyy HH:mm")
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div>
+                          <span className="font-mono font-bold text-chart-2">+{earnedPoints}</span>
+                          {earnedPoints !== basePoints && (
+                            <span className="text-xs text-muted-foreground ml-1">
+                              / {basePoints}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {task.completed_at
+                          ? format(new Date(task.completed_at), "MMM d, yyyy HH:mm")
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           ) : (

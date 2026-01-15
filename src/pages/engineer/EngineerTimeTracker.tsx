@@ -33,6 +33,7 @@ import {
   Timer,
   TrendingUp,
   Loader2,
+  Trophy,
 } from "lucide-react";
 import { format, differenceInMinutes, differenceInSeconds, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 
@@ -267,6 +268,7 @@ export default function EngineerTimeTracker() {
       today: `${Math.floor(todayMinutes / 60)}h ${todayMinutes % 60}m`,
       week: `${Math.floor(weekMinutes / 60)}h ${weekMinutes % 60}m`,
       month: `${Math.floor(monthMinutes / 60)}h ${monthMinutes % 60}m`,
+      todayMinutes,
     };
   };
 
@@ -376,13 +378,14 @@ export default function EngineerTimeTracker() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="border-2 border-border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Timer className="h-4 w-4" />
               <span className="text-sm">Today</span>
             </div>
             <p className="text-2xl font-bold">{stats.today}</p>
+            <p className="text-xs text-muted-foreground mt-1">Productive Hours</p>
           </div>
           <div className="border-2 border-border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -390,6 +393,7 @@ export default function EngineerTimeTracker() {
               <span className="text-sm">This Week</span>
             </div>
             <p className="text-2xl font-bold">{stats.week}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Work Time</p>
           </div>
           <div className="border-2 border-border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -397,7 +401,36 @@ export default function EngineerTimeTracker() {
               <span className="text-sm">This Month</span>
             </div>
             <p className="text-2xl font-bold">{stats.month}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Work Time</p>
           </div>
+          <div className="border-2 border-chart-2 bg-chart-2/10 p-4">
+            <div className="flex items-center gap-2 text-chart-2 mb-1">
+              <Trophy className="h-4 w-4" />
+              <span className="text-sm">Productivity</span>
+            </div>
+            <p className="text-2xl font-bold text-chart-2">
+              {stats.todayMinutes > 0 
+                ? `${Math.round((stats.todayMinutes / 480) * 100)}%` 
+                : "0%"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">of 8h target</p>
+          </div>
+        </div>
+
+        {/* Productive Hours Info */}
+        <div className="border-2 border-border bg-muted/30 p-4">
+          <h3 className="font-bold mb-2 flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Productive Hours Tracking
+          </h3>
+          <p className="text-sm text-muted-foreground mb-2">
+            <strong>Productive Hours</strong> = Check-in to Check-out − Breaks
+          </p>
+          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+            <li>Time spent on prompt editing and demo calls counts as task work</li>
+            <li>Waiting time for admin approval is tracked separately</li>
+            <li>Points are calculated based on speed, quality, and efficiency</li>
+          </ul>
         </div>
 
         {/* History */}

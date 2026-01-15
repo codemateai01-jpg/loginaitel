@@ -159,12 +159,21 @@ export function DemoReviewDialog({
   const rejectMutation = useMutation({
     mutationFn: async () => {
       if (!task) return;
+      
+      // Get current rejection count
+      const { data: currentTask } = await supabase
+        .from("tasks")
+        .select("demo_rejection_count")
+        .eq("id", task.id)
+        .single();
+      
       const { error } = await supabase
         .from("tasks")
         .update({
           status: "prompt_approved", // Send back to demo phase
           rejection_reason: rejectionReason,
           demo_edit_count: (task.demo_edit_count || 0) + 1,
+          demo_rejection_count: ((currentTask?.demo_rejection_count as number) || 0) + 1,
         })
         .eq("id", task.id);
       if (error) throw error;

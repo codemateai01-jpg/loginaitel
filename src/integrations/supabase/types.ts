@@ -693,6 +693,7 @@ export type Database = {
           deadline: string | null
           demo_completed_at: string | null
           demo_edit_count: number | null
+          demo_rejection_count: number | null
           demo_started_at: string | null
           description: string | null
           final_score: number | null
@@ -701,6 +702,7 @@ export type Database = {
           points: number
           prompt_approved_at: string | null
           prompt_edit_count: number | null
+          prompt_rejection_count: number | null
           prompt_started_at: string | null
           prompt_submitted_at: string | null
           rejection_reason: string | null
@@ -709,6 +711,7 @@ export type Database = {
           status: string
           title: string
           updated_at: string
+          waiting_approval_minutes: number | null
         }
         Insert: {
           aitel_agent_id?: string | null
@@ -719,6 +722,7 @@ export type Database = {
           deadline?: string | null
           demo_completed_at?: string | null
           demo_edit_count?: number | null
+          demo_rejection_count?: number | null
           demo_started_at?: string | null
           description?: string | null
           final_score?: number | null
@@ -727,6 +731,7 @@ export type Database = {
           points?: number
           prompt_approved_at?: string | null
           prompt_edit_count?: number | null
+          prompt_rejection_count?: number | null
           prompt_started_at?: string | null
           prompt_submitted_at?: string | null
           rejection_reason?: string | null
@@ -735,6 +740,7 @@ export type Database = {
           status?: string
           title: string
           updated_at?: string
+          waiting_approval_minutes?: number | null
         }
         Update: {
           aitel_agent_id?: string | null
@@ -745,6 +751,7 @@ export type Database = {
           deadline?: string | null
           demo_completed_at?: string | null
           demo_edit_count?: number | null
+          demo_rejection_count?: number | null
           demo_started_at?: string | null
           description?: string | null
           final_score?: number | null
@@ -753,6 +760,7 @@ export type Database = {
           points?: number
           prompt_approved_at?: string | null
           prompt_edit_count?: number | null
+          prompt_rejection_count?: number | null
           prompt_started_at?: string | null
           prompt_submitted_at?: string | null
           rejection_reason?: string | null
@@ -761,6 +769,7 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          waiting_approval_minutes?: number | null
         }
         Relationships: [
           {
@@ -782,7 +791,9 @@ export type Database = {
           engineer_id: string
           id: string
           notes: string | null
+          productive_minutes: number | null
           status: string
+          task_work_minutes: number | null
           total_break_minutes: number | null
           updated_at: string
         }
@@ -795,7 +806,9 @@ export type Database = {
           engineer_id: string
           id?: string
           notes?: string | null
+          productive_minutes?: number | null
           status?: string
+          task_work_minutes?: number | null
           total_break_minutes?: number | null
           updated_at?: string
         }
@@ -808,7 +821,9 @@ export type Database = {
           engineer_id?: string
           id?: string
           notes?: string | null
+          productive_minutes?: number | null
           status?: string
+          task_work_minutes?: number | null
           total_break_minutes?: number | null
           updated_at?: string
         }
@@ -840,7 +855,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_productive_hours: {
+        Args: { p_date?: string; p_engineer_id: string }
+        Returns: Json
+      }
       calculate_task_score: { Args: { p_task_id: string }; Returns: Json }
+      calculate_task_score_v2: { Args: { p_task_id: string }; Returns: Json }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]

@@ -88,11 +88,21 @@ export function PromptReviewDialog({
   const rejectMutation = useMutation({
     mutationFn: async () => {
       if (!task) return;
+      
+      // Get current rejection count
+      const { data: currentTask } = await supabase
+        .from("tasks")
+        .select("prompt_rejection_count")
+        .eq("id", task.id)
+        .single();
+      
       const { error } = await supabase
         .from("tasks")
         .update({
           status: "in_progress",
           rejection_reason: rejectionReason,
+          prompt_rejection_count: ((currentTask?.prompt_rejection_count as number) || 0) + 1,
+          prompt_edit_count: ((task as any).prompt_edit_count || 0) + 1,
         })
         .eq("id", task.id);
       if (error) throw error;
