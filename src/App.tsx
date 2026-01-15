@@ -307,6 +307,54 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/client/campaigns"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientCampaigns />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/campaigns/:id"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <CampaignDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/campaigns/:id/analytics"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <CampaignAnalytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/campaigns/:id/interested"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <CampaignInterestedLeads />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/campaigns/:id/not-interested"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <CampaignNotInterestedLeads />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/campaigns/:id/partial"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <CampaignPartialLeads />
+                </ProtectedRoute>
+              }
+            />
             
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />

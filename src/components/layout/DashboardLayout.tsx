@@ -14,6 +14,7 @@ import {
   X,
   Trophy,
   Clock,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,6 +52,7 @@ const engineerNavItems = [
 
 const clientNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/client" },
+  { icon: Megaphone, label: "Campaigns", href: "/client/campaigns" },
   { icon: Bot, label: "My Agents", href: "/client/agents" },
   { icon: Phone, label: "Make Call", href: "/client/make-call" },
   { icon: Phone, label: "Call History", href: "/client/calls" },
