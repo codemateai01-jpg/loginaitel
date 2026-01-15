@@ -54,6 +54,7 @@ export default function RealEstateDashboard() {
   });
   const [recentLeads, setRecentLeads] = useState<any[]>([]);
   const [upcomingVisits, setUpcomingVisits] = useState<any[]>([]);
+  const [allocatedPhoneNumbers, setAllocatedPhoneNumbers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
@@ -126,6 +127,15 @@ export default function RealEstateDashboard() {
         .limit(5);
 
       setUpcomingVisits(visitsData || []);
+
+      // Fetch allocated phone numbers for this client
+      const { data: phoneData } = await supabase
+        .from("client_phone_numbers")
+        .select("phone_number")
+        .eq("client_id", user.id)
+        .eq("is_active", true);
+
+      setAllocatedPhoneNumbers(phoneData?.map(p => p.phone_number) || []);
     } catch (error) {
       console.error("Error fetching stats:", error);
     } finally {
@@ -168,6 +178,29 @@ export default function RealEstateDashboard() {
             </Button>
           </div>
         </div>
+
+        {/* Allocated Phone Numbers */}
+        {allocatedPhoneNumbers.length > 0 && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Phone className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">Your Calling Numbers</p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {allocatedPhoneNumbers.map((phone) => (
+                      <Badge key={phone} variant="secondary" className="font-mono">
+                        {phone}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
