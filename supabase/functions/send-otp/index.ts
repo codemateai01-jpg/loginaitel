@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+// Use custom domain email if configured, otherwise fall back to Resend testing domain
+const FROM_EMAIL = Deno.env.get("FROM_EMAIL") || "Aitel <onboarding@resend.dev>";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,7 +72,7 @@ serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Aitel <onboarding@resend.dev>",
+        from: FROM_EMAIL,
         to: [normalizedEmail],
         subject: "Your Aitel Verification Code",
         html: `
