@@ -12,7 +12,6 @@ import ClientLogin from "./pages/auth/ClientLogin";
 import EngineerLogin from "./pages/auth/EngineerLogin";
 import AdminLogin from "./pages/auth/AdminLogin";
 import ClientDashboard from "./pages/client/ClientDashboard";
-import ClientLeads from "./pages/client/ClientLeads";
 import ClientCalls from "./pages/client/ClientCalls";
 import ClientPhoneNumbers from "./pages/client/ClientPhoneNumbers";
 import ClientAgents from "./pages/client/ClientAgents";
@@ -148,14 +147,6 @@ const App = () => (
               }
             />
             <Route
-              path="/admin/leads"
-              element={
-                <ProtectedRoute allowedRoles={["admin"]}>
-                  <ClientLeads role="admin" />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/admin/settings"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
@@ -244,14 +235,6 @@ const App = () => (
               }
             />
             <Route
-              path="/engineer/leads"
-              element={
-                <ProtectedRoute allowedRoles={["engineer"]}>
-                  <ClientLeads role="engineer" />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/engineer/make-call"
               element={
                 <ProtectedRoute allowedRoles={["engineer"]}>
@@ -275,14 +258,6 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <ClientAgents />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/client/leads"
-              element={
-                <ProtectedRoute allowedRoles={["client"]}>
-                  <ClientLeads />
                 </ProtectedRoute>
               }
             />

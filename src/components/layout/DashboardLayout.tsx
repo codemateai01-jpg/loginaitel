@@ -8,14 +8,12 @@ import {
   ClipboardList,
   CreditCard,
   Phone,
-  BarChart3,
   Settings,
   LogOut,
   Menu,
   X,
   Trophy,
   Clock,
-  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,7 +31,6 @@ const adminNavItems = [
   { icon: Users, label: "Clients", href: "/admin/clients" },
   { icon: ClipboardList, label: "Tasks", href: "/admin/tasks" },
   { icon: Bot, label: "Agents", href: "/admin/agents" },
-  { icon: Upload, label: "Leads", href: "/admin/leads" },
   { icon: Phone, label: "Make Call", href: "/admin/make-call" },
   { icon: Phone, label: "Calls", href: "/admin/calls" },
   { icon: Phone, label: "Phone Numbers", href: "/admin/phone-numbers" },
@@ -46,7 +43,6 @@ const engineerNavItems = [
   { icon: ClipboardList, label: "My Tasks", href: "/engineer/tasks" },
   { icon: Bot, label: "My Workspace", href: "/engineer/agents" },
   { icon: Settings, label: "Agent Config", href: "/engineer/agent-config" },
-  { icon: Upload, label: "Leads", href: "/engineer/leads" },
   { icon: Phone, label: "Make Call", href: "/engineer/make-call" },
   { icon: Trophy, label: "Leaderboard", href: "/engineer/leaderboard" },
   { icon: Clock, label: "Time Tracker", href: "/engineer/time" },
@@ -58,7 +54,6 @@ const clientNavItems = [
   { icon: Bot, label: "My Agents", href: "/client/agents" },
   { icon: Phone, label: "Make Call", href: "/client/make-call" },
   { icon: Phone, label: "Call History", href: "/client/calls" },
-  { icon: Upload, label: "Leads", href: "/client/leads" },
   { icon: Phone, label: "Phone Numbers", href: "/client/phone-numbers" },
   { icon: CreditCard, label: "Credits & Billing", href: "/client/billing" },
   { icon: Settings, label: "Settings", href: "/client/settings" },
