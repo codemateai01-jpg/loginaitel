@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { updateAitelAgent } from "@/lib/aitel";
+import { updateAitelAgentPrompt } from "@/lib/aitel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
@@ -146,14 +146,11 @@ export default function AgentEditor() {
           .eq("id", task.id);
       }
 
-      // Update in Aitel
-      const { error: aitelError } = await updateAitelAgent(agent.external_agent_id, {
-        agent_prompts: {
-          task_1: {
-            system_prompt: systemPrompt,
-          },
-        },
-      });
+      // Update in Aitel (use updateAitelAgentPrompt which fetches current config)
+      const { error: aitelError } = await updateAitelAgentPrompt(
+        agent.external_agent_id, 
+        systemPrompt
+      );
 
       if (aitelError) {
         throw new Error(aitelError);
