@@ -36,6 +36,7 @@ import { format } from "date-fns";
 import { BulkCallDialog } from "@/components/campaigns/BulkCallDialog";
 import { GoogleSheetSync } from "@/components/campaigns/GoogleSheetSync";
 import { LeadDetailsDialog } from "@/components/campaigns/LeadDetailsDialog";
+import { RetrySettingsDialog } from "@/components/campaigns/RetrySettingsDialog";
 import {
   Plus,
   Upload,
@@ -57,6 +58,7 @@ import {
   PhoneCall,
   RefreshCw,
   Eye,
+  Settings2,
 } from "lucide-react";
 
 interface CampaignLead {
@@ -100,6 +102,7 @@ export default function CampaignDetail() {
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isBulkCallOpen, setIsBulkCallOpen] = useState(false);
   const [isSheetSyncOpen, setIsSheetSyncOpen] = useState(false);
+  const [isRetrySettingsOpen, setIsRetrySettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [newLead, setNewLead] = useState({ name: "", phone_number: "", email: "" });
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -459,6 +462,11 @@ export default function CampaignDetail() {
             </Link>
           </Button>
 
+          <Button variant="outline" onClick={() => setIsRetrySettingsOpen(true)}>
+            <Settings2 className="h-4 w-4 mr-2" />
+            Retry Settings
+          </Button>
+
           {/* Activate Campaign - call all uncalled leads */}
           {newCount > 0 && campaign?.agent_id && (
             <Button
@@ -548,6 +556,15 @@ export default function CampaignDetail() {
           onOpenChange={setIsSheetSyncOpen}
           campaignId={campaignId!}
           existingSheetId={campaign?.google_sheet_id}
+        />
+
+        {/* Retry Settings Dialog */}
+        <RetrySettingsDialog
+          open={isRetrySettingsOpen}
+          onOpenChange={setIsRetrySettingsOpen}
+          campaignId={campaignId!}
+          currentRetryDelay={campaign?.retry_delay_minutes || 3}
+          currentMaxRetries={campaign?.max_daily_retries || 5}
         />
 
         {/* Lead Details Dialog */}

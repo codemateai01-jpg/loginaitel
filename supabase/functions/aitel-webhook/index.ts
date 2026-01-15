@@ -430,15 +430,71 @@ async function processCampaignCall(
   const queueItemId = metadata.queue_item_id as string;
 
   try {
-    // Update campaign queue item as completed
+    // Get campaign retry settings
+    const { data: campaign } = await supabase
+      .from("campaigns")
+      .select("retry_delay_minutes, max_daily_retries")
+      .eq("id", campaignId)
+      .single();
+
+    const retryDelayMinutes = campaign?.retry_delay_minutes || 3;
+    const maxDailyRetries = campaign?.max_daily_retries || 5;
+
+    // Check if this was a no_answer/busy call and should be retried
+    const shouldRetry = !isConnected && 
+      (payload.status === "no_answer" || payload.status === "no-answer" || 
+       payload.status === "busy" || !payload.answered_by_voice_mail);
+
+    // Get current queue item to check retry count
+    const { data: queueItem } = await supabase
+      .from("campaign_call_queue")
+      .select("retry_count, daily_retry_date")
+      .eq("id", queueItemId)
+      .single();
+
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    let currentRetryCount = queueItem?.retry_count || 0;
+    
+    // Reset retry count if it's a new day
+    if (queueItem?.daily_retry_date !== today) {
+      currentRetryCount = 0;
+    }
+
+    const canRetry = shouldRetry && currentRetryCount < maxDailyRetries;
+
+    // Update campaign queue item
     if (queueItemId) {
-      await supabase
-        .from("campaign_call_queue")
-        .update({ 
-          status: "completed", 
-          completed_at: new Date().toISOString() 
-        })
-        .eq("id", queueItemId);
+      if (canRetry) {
+        // Schedule a retry
+        const nextRetryAt = new Date(Date.now() + retryDelayMinutes * 60 * 1000);
+        await supabase
+          .from("campaign_call_queue")
+          .update({ 
+            status: "retry_pending",
+            last_attempt_at: new Date().toISOString(),
+            next_retry_at: nextRetryAt.toISOString(),
+            retry_count: currentRetryCount + 1,
+            daily_retry_date: today,
+            error_message: `No answer - retry ${currentRetryCount + 1}/${maxDailyRetries} scheduled for ${nextRetryAt.toLocaleTimeString()}`
+          })
+          .eq("id", queueItemId);
+        
+        console.log(`Scheduled retry ${currentRetryCount + 1}/${maxDailyRetries} for queue item ${queueItemId} at ${nextRetryAt.toISOString()}`);
+      } else {
+        // Mark as completed (or failed if max retries reached)
+        const finalStatus = shouldRetry && currentRetryCount >= maxDailyRetries ? "max_retries_reached" : "completed";
+        await supabase
+          .from("campaign_call_queue")
+          .update({ 
+            status: finalStatus, 
+            completed_at: new Date().toISOString(),
+            last_attempt_at: new Date().toISOString(),
+            error_message: finalStatus === "max_retries_reached" 
+              ? `Max daily retries (${maxDailyRetries}) reached without connection` 
+              : null
+          })
+          .eq("id", queueItemId);
+      }
     }
 
     // Get the campaign lead

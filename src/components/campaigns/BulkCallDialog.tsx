@@ -41,6 +41,8 @@ interface QueueStatus {
   in_progress: number;
   completed: number;
   failed: number;
+  retry_pending: number;
+  max_retries_reached: number;
 }
 
 export function BulkCallDialog({
@@ -59,6 +61,8 @@ export function BulkCallDialog({
     in_progress: 0,
     completed: 0,
     failed: 0,
+    retry_pending: 0,
+    max_retries_reached: 0,
   });
 
   // Fetch queue status for this campaign
@@ -86,10 +90,12 @@ export function BulkCallDialog({
         in_progress: queueItems.filter(q => q.status === "in_progress").length,
         completed: queueItems.filter(q => q.status === "completed").length,
         failed: queueItems.filter(q => q.status === "failed").length,
+        retry_pending: queueItems.filter(q => q.status === "retry_pending").length,
+        max_retries_reached: queueItems.filter(q => q.status === "max_retries_reached").length,
       });
 
-      // Stop polling if no pending/in_progress items
-      if (!queueItems.some(q => q.status === "pending" || q.status === "in_progress")) {
+      // Stop polling if no pending/in_progress/retry_pending items
+      if (!queueItems.some(q => ["pending", "in_progress", "retry_pending"].includes(q.status))) {
         setIsProcessing(false);
       }
     }
@@ -304,9 +310,10 @@ export function BulkCallDialog({
     processQueue.mutate();
   };
 
-  const totalInQueue = queueStatus.pending + queueStatus.in_progress + queueStatus.completed + queueStatus.failed;
+  const totalInQueue = queueStatus.pending + queueStatus.in_progress + queueStatus.completed + queueStatus.failed + queueStatus.retry_pending + queueStatus.max_retries_reached;
+  const completedCount = queueStatus.completed + queueStatus.failed + queueStatus.max_retries_reached;
   const progressPercent = totalInQueue > 0 
-    ? ((queueStatus.completed + queueStatus.failed) / totalInQueue) * 100 
+    ? (completedCount / totalInQueue) * 100 
     : 0;
 
   return (
@@ -335,11 +342,11 @@ export function BulkCallDialog({
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span>Progress</span>
-                <span>{queueStatus.completed + queueStatus.failed} / {totalInQueue}</span>
+                <span>{completedCount} / {totalInQueue}</span>
               </div>
               <Progress value={progressPercent} className="h-2" />
               
-              <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="border rounded p-2">
                   <Clock className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
                   <p className="text-lg font-bold">{queueStatus.pending}</p>
@@ -351,14 +358,27 @@ export function BulkCallDialog({
                   <p className="text-xs text-muted-foreground">In Progress</p>
                 </div>
                 <div className="border rounded p-2">
+                  <RefreshCw className="h-4 w-4 mx-auto mb-1 text-orange-500" />
+                  <p className="text-lg font-bold text-orange-600">{queueStatus.retry_pending}</p>
+                  <p className="text-xs text-muted-foreground">Retry Pending</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="border rounded p-2">
                   <CheckCircle className="h-4 w-4 mx-auto mb-1 text-green-500" />
                   <p className="text-lg font-bold text-green-600">{queueStatus.completed}</p>
-                  <p className="text-xs text-muted-foreground">Completed</p>
+                  <p className="text-xs text-muted-foreground">Connected</p>
                 </div>
                 <div className="border rounded p-2">
                   <XCircle className="h-4 w-4 mx-auto mb-1 text-red-500" />
                   <p className="text-lg font-bold text-red-600">{queueStatus.failed}</p>
                   <p className="text-xs text-muted-foreground">Failed</p>
+                </div>
+                <div className="border rounded p-2">
+                  <AlertTriangle className="h-4 w-4 mx-auto mb-1 text-yellow-500" />
+                  <p className="text-lg font-bold text-yellow-600">{queueStatus.max_retries_reached}</p>
+                  <p className="text-xs text-muted-foreground">Max Retries</p>
                 </div>
               </div>
             </div>
