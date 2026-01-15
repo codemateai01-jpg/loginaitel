@@ -130,11 +130,15 @@ export type Database = {
           client_id: string
           completed_at: string | null
           created_at: string
+          daily_retry_date: string | null
           error_message: string | null
           id: string
+          last_attempt_at: string | null
           lead_id: string
+          next_retry_at: string | null
           priority: number
           queued_at: string
+          retry_count: number
           started_at: string | null
           status: string
           updated_at: string
@@ -146,11 +150,15 @@ export type Database = {
           client_id: string
           completed_at?: string | null
           created_at?: string
+          daily_retry_date?: string | null
           error_message?: string | null
           id?: string
+          last_attempt_at?: string | null
           lead_id: string
+          next_retry_at?: string | null
           priority?: number
           queued_at?: string
+          retry_count?: number
           started_at?: string | null
           status?: string
           updated_at?: string
@@ -162,11 +170,15 @@ export type Database = {
           client_id?: string
           completed_at?: string | null
           created_at?: string
+          daily_retry_date?: string | null
           error_message?: string | null
           id?: string
+          last_attempt_at?: string | null
           lead_id?: string
+          next_retry_at?: string | null
           priority?: number
           queued_at?: string
+          retry_count?: number
           started_at?: string | null
           status?: string
           updated_at?: string
@@ -292,9 +304,11 @@ export type Database = {
           google_sheet_range: string | null
           id: string
           interested_leads: number | null
+          max_daily_retries: number
           name: string
           not_interested_leads: number | null
           partially_interested_leads: number | null
+          retry_delay_minutes: number
           status: string
           total_leads: number | null
           updated_at: string
@@ -313,9 +327,11 @@ export type Database = {
           google_sheet_range?: string | null
           id?: string
           interested_leads?: number | null
+          max_daily_retries?: number
           name: string
           not_interested_leads?: number | null
           partially_interested_leads?: number | null
+          retry_delay_minutes?: number
           status?: string
           total_leads?: number | null
           updated_at?: string
@@ -334,9 +350,11 @@ export type Database = {
           google_sheet_range?: string | null
           id?: string
           interested_leads?: number | null
+          max_daily_retries?: number
           name?: string
           not_interested_leads?: number | null
           partially_interested_leads?: number | null
+          retry_delay_minutes?: number
           status?: string
           total_leads?: number | null
           updated_at?: string

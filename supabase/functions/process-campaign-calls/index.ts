@@ -96,30 +96,8 @@ serve(async (req) => {
       );
     }
 
-    // Get pending queue items ordered by priority and queue time
-    let pendingQuery = supabase
-      .from("campaign_call_queue")
-      .select(`
-        id,
-        campaign_id,
-        lead_id,
-        client_id,
-        agent_id,
-        status,
-        priority,
-        lead:campaign_leads!campaign_call_queue_lead_id_fkey(id, phone_number, name),
-        agent:aitel_agents!campaign_call_queue_agent_id_fkey(id, external_agent_id, agent_name),
-        campaign:campaigns!campaign_call_queue_campaign_id_fkey(id, concurrency_level)
-      `)
-      .eq("status", "pending")
-      .order("priority", { ascending: false })
-      .order("queued_at", { ascending: true })
-      .limit(availableSlots);
-
+    // Check if campaign is paused
     if (campaignId) {
-      pendingQuery = pendingQuery.eq("campaign_id", campaignId);
-      
-      // Check if campaign is paused
       const { data: campaignStatus } = await supabase
         .from("campaigns")
         .select("status")
@@ -138,6 +116,34 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+    }
+
+    const now = new Date().toISOString();
+
+    // Get pending queue items AND retry_pending items whose time has come
+    // Use OR filter: status = 'pending' OR (status = 'retry_pending' AND next_retry_at <= now)
+    let pendingQuery = supabase
+      .from("campaign_call_queue")
+      .select(`
+        id,
+        campaign_id,
+        lead_id,
+        client_id,
+        agent_id,
+        status,
+        priority,
+        retry_count,
+        lead:campaign_leads!campaign_call_queue_lead_id_fkey(id, phone_number, name),
+        agent:aitel_agents!campaign_call_queue_agent_id_fkey(id, external_agent_id, agent_name),
+        campaign:campaigns!campaign_call_queue_campaign_id_fkey(id, concurrency_level, retry_delay_minutes, max_daily_retries)
+      `)
+      .or(`status.eq.pending,and(status.eq.retry_pending,next_retry_at.lte.${now})`)
+      .order("priority", { ascending: false })
+      .order("queued_at", { ascending: true })
+      .limit(availableSlots);
+
+    if (campaignId) {
+      pendingQuery = pendingQuery.eq("campaign_id", campaignId);
     }
 
     const { data: pendingItems, error: queueError } = await pendingQuery;
@@ -208,14 +214,18 @@ serve(async (req) => {
           continue;
         }
 
-        // Mark as in_progress
+        // Mark as in_progress (preserve retry_count for tracking)
         await supabase
           .from("campaign_call_queue")
           .update({ 
             status: "in_progress", 
-            started_at: new Date().toISOString() 
+            started_at: new Date().toISOString(),
+            last_attempt_at: new Date().toISOString()
           })
           .eq("id", item.id);
+
+        const isRetry = item.status === "retry_pending";
+        const retryCount = item.retry_count || 0;
 
         // Create call record first
         const { data: callRecord, error: callError } = await supabase
@@ -229,7 +239,9 @@ serve(async (req) => {
               source: "campaign_bulk",
               campaign_id: item.campaign_id,
               queue_item_id: item.id,
-              lead_name: lead.name
+              lead_name: lead.name,
+              is_retry: isRetry,
+              retry_attempt: retryCount
             }
           })
           .select()
