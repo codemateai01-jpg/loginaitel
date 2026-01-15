@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -40,9 +41,28 @@ import {
   PhoneCall,
   PhoneOff,
   PhoneMissed,
-  Loader2
+  Loader2,
+  BarChart3,
+  CheckCircle,
+  XCircle,
+  Timer
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays, startOfDay, eachDayOfInterval } from "date-fns";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
+} from "recharts";
 
 // Status config for call display
 const statusConfig: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
@@ -303,15 +323,111 @@ export default function RECallHistory() {
     setDetailsOpen(true);
   };
 
+  // Analytics calculations
+  const analytics = useMemo(() => {
+    const totalCalls = calls.length;
+    const completedCalls = calls.filter(c => c.status === 'completed').length;
+    const failedCalls = calls.filter(c => c.status === 'failed' || c.status === 'no_answer' || c.status === 'busy').length;
+    const successRate = totalCalls > 0 ? Math.round((completedCalls / totalCalls) * 100) : 0;
+    
+    // Average duration of completed calls
+    const completedWithDuration = calls.filter(c => c.status === 'completed' && c.duration_seconds && c.duration_seconds > 0);
+    const avgDuration = completedWithDuration.length > 0 
+      ? Math.round(completedWithDuration.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) / completedWithDuration.length)
+      : 0;
+    
+    // Average interest score
+    const callsWithScore = calls.filter(c => c.interest_score !== null);
+    const avgInterestScore = callsWithScore.length > 0 
+      ? Math.round(callsWithScore.reduce((sum, c) => sum + (c.interest_score || 0), 0) / callsWithScore.length)
+      : 0;
+
+    // Calls by project
+    const projectStats = projects.map(project => {
+      const projectCalls = calls.filter(c => c.project_id === project.id);
+      const projectCompleted = projectCalls.filter(c => c.status === 'completed').length;
+      return {
+        name: project.name,
+        total: projectCalls.length,
+        completed: projectCompleted,
+        failed: projectCalls.length - projectCompleted,
+      };
+    }).filter(p => p.total > 0);
+
+    // Status distribution
+    const statusDistribution = [
+      { name: 'Completed', value: completedCalls, color: '#22c55e' },
+      { name: 'Failed', value: failedCalls, color: '#ef4444' },
+      { name: 'In Progress', value: calls.filter(c => ['initiated', 'ringing', 'in_progress', 'in_call'].includes(c.status)).length, color: '#f97316' },
+    ].filter(s => s.value > 0);
+
+    // Daily call volume (last 7 days)
+    const last7Days = eachDayOfInterval({
+      start: subDays(new Date(), 6),
+      end: new Date(),
+    });
+
+    const dailyVolume = last7Days.map(day => {
+      const dayStart = startOfDay(day);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      
+      const dayCalls = calls.filter(c => {
+        const callDate = new Date(c.created_at);
+        return callDate >= dayStart && callDate < dayEnd;
+      });
+      
+      return {
+        date: format(day, 'MMM d'),
+        calls: dayCalls.length,
+        completed: dayCalls.filter(c => c.status === 'completed').length,
+      };
+    });
+
+    // Interest score trend (last 7 days)
+    const interestTrend = last7Days.map(day => {
+      const dayStart = startOfDay(day);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      
+      const dayCalls = calls.filter(c => {
+        const callDate = new Date(c.created_at);
+        return callDate >= dayStart && callDate < dayEnd && c.interest_score !== null;
+      });
+      
+      const avgScore = dayCalls.length > 0 
+        ? Math.round(dayCalls.reduce((sum, c) => sum + (c.interest_score || 0), 0) / dayCalls.length)
+        : null;
+      
+      return {
+        date: format(day, 'MMM d'),
+        score: avgScore,
+      };
+    });
+
+    return {
+      totalCalls,
+      completedCalls,
+      failedCalls,
+      successRate,
+      avgDuration,
+      avgInterestScore,
+      projectStats,
+      statusDistribution,
+      dailyVolume,
+      interestTrend,
+    };
+  }, [calls, projects]);
+
   return (
     <DashboardLayout role="client">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Call History</h1>
+            <h1 className="text-3xl font-bold">Call History & Analytics</h1>
             <p className="text-muted-foreground">
-              View AI call summaries and recordings
+              View AI call summaries, recordings, and performance metrics
             </p>
           </div>
           <Button variant="outline" onClick={fetchCalls}>
@@ -320,161 +436,383 @@ export default function RECallHistory() {
           </Button>
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[200px]">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name or phone..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
+        <Tabs defaultValue="history" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="history" className="gap-2">
+              <Phone className="h-4 w-4" />
+              Call History
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analytics
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Call History Tab */}
+          <TabsContent value="history" className="space-y-4">
+            {/* Filters */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex-1 min-w-[200px]">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name or phone..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="initiated">Initiated</SelectItem>
+                      <SelectItem value="ringing">Ringing</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={projectFilter} onValueChange={setProjectFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Projects</SelectItem>
+                      {projects.map(project => (
+                        <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-              
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="initiated">Initiated</SelectItem>
-                  <SelectItem value="ringing">Ringing</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
-                </SelectContent>
-              </Select>
+              </CardContent>
+            </Card>
 
-              <Select value={projectFilter} onValueChange={setProjectFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {projects.map(project => (
-                    <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Calls Table */}
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Lead</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Interest</TableHead>
-                  <TableHead>Summary</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : calls.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No call history found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  calls.map((call) => {
-                    const config = getStatusConfig(call.status);
-                    const StatusIcon = config.icon;
-                    return (
-                      <TableRow key={call.id}>
-                        <TableCell>
-                          <span className="text-sm">
-                            {format(new Date(call.created_at), "MMM d, h:mm a")}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">
-                              {call.lead_name || "Unknown"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {call.lead_phone}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {call.project_name ? (
-                            <Badge variant="outline">{call.project_name}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${config.color} flex items-center gap-1 w-fit`}>
-                            <StatusIcon className={`h-3 w-3 ${call.status === 'in_progress' || call.status === 'in_call' ? 'animate-spin' : ''}`} />
-                            {config.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            {formatDuration(call.duration_seconds)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {call.interest_score !== null ? (
-                            <Badge variant={call.interest_score >= 70 ? "default" : call.interest_score >= 40 ? "secondary" : "outline"}>
-                              <TrendingUp className="h-3 w-3 mr-1" />
-                              {call.interest_score}%
-                            </Badge>
-                          ) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm text-muted-foreground line-clamp-2 max-w-[200px]">
-                            {call.ai_summary || "No summary available"}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleViewDetails(call)}
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                            {call.recording_url && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => window.open(call.recording_url!, "_blank")}
-                              >
-                                <Play className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
+            {/* Calls Table */}
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Lead</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Duration</TableHead>
+                      <TableHead>Interest</TableHead>
+                      <TableHead>Summary</TableHead>
+                      <TableHead className="w-24">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          Loading...
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                    ) : calls.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No call history found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      calls.map((call) => {
+                        const config = getStatusConfig(call.status);
+                        const StatusIcon = config.icon;
+                        return (
+                          <TableRow key={call.id}>
+                            <TableCell>
+                              <span className="text-sm">
+                                {format(new Date(call.created_at), "MMM d, h:mm a")}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">
+                                  {call.lead_name || "Unknown"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {call.lead_phone}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {call.project_name ? (
+                                <Badge variant="outline">{call.project_name}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={`${config.color} flex items-center gap-1 w-fit`}>
+                                <StatusIcon className={`h-3 w-3 ${call.status === 'in_progress' || call.status === 'in_call' ? 'animate-spin' : ''}`} />
+                                {config.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                {formatDuration(call.duration_seconds)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {call.interest_score !== null ? (
+                                <Badge variant={call.interest_score >= 70 ? "default" : call.interest_score >= 40 ? "secondary" : "outline"}>
+                                  <TrendingUp className="h-3 w-3 mr-1" />
+                                  {call.interest_score}%
+                                </Badge>
+                              ) : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <p className="text-sm text-muted-foreground line-clamp-2 max-w-[200px]">
+                                {call.ai_summary || "No summary available"}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleViewDetails(call)}
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                                {call.recording_url && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => window.open(call.recording_url!, "_blank")}
+                                  >
+                                    <Play className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-6">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <Phone className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{analytics.totalCalls}</p>
+                      <p className="text-sm text-muted-foreground">Total Calls</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-500/10 rounded-lg">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{analytics.successRate}%</p>
+                      <p className="text-sm text-muted-foreground">Success Rate</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-500/10 rounded-lg">
+                      <Timer className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{formatDuration(analytics.avgDuration)}</p>
+                      <p className="text-sm text-muted-foreground">Avg Duration</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/10 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{analytics.avgInterestScore}%</p>
+                      <p className="text-sm text-muted-foreground">Avg Interest</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts Row 1 */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Daily Call Volume */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Daily Call Volume (Last 7 Days)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analytics.dailyVolume}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="date" className="text-xs" />
+                        <YAxis className="text-xs" />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="calls" name="Total Calls" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="completed" name="Completed" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Status Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Call Status Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px]">
+                    {analytics.statusDistribution.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analytics.statusDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={5}
+                            dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {analytics.statusDistribution.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No call data available
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts Row 2 */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Calls by Project */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Calls by Project</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px]">
+                    {analytics.projectStats.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analytics.projectStats} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis type="number" className="text-xs" />
+                          <YAxis dataKey="name" type="category" width={120} className="text-xs" />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'hsl(var(--card))', 
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Legend />
+                          <Bar dataKey="completed" name="Completed" stackId="a" fill="#22c55e" />
+                          <Bar dataKey="failed" name="Failed" stackId="a" fill="#ef4444" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No project data available
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Interest Score Trend */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Interest Score Trend</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={analytics.interestTrend}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="date" className="text-xs" />
+                        <YAxis domain={[0, 100]} className="text-xs" />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px'
+                          }}
+                          formatter={(value) => value !== null ? [`${value}%`, 'Interest Score'] : ['No data', '']}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="score" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={2}
+                          dot={{ fill: 'hsl(var(--primary))' }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Call Details Dialog */}
