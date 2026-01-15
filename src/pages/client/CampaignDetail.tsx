@@ -411,6 +411,25 @@ export default function CampaignDetail() {
             </Link>
           </Button>
 
+          {/* Activate Campaign - call all uncalled leads */}
+          {newCount > 0 && campaign?.agent_id && (
+            <Button
+              variant="default"
+              onClick={() => {
+                // Select all new/uncalled leads and open bulk call dialog
+                const uncalledLeadIds = leads?.filter(l => l.stage === "new" && !l.call_id).map(l => l.id) || [];
+                if (uncalledLeadIds.length > 0) {
+                  setSelectedLeads(uncalledLeadIds);
+                  setIsBulkCallOpen(true);
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Activate Campaign ({newCount} leads)
+            </Button>
+          )}
+
           {selectedLeads.length > 0 && (
             <Button variant="default" onClick={() => setIsBulkCallOpen(true)}>
               <PhoneCall className="h-4 w-4 mr-2" />
