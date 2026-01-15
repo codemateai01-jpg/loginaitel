@@ -201,6 +201,16 @@ export function CallDetailsDialog({
     }
   };
 
+  // Helper to mask phone numbers
+  const maskPhone = (phone: string | undefined | null) => {
+    if (!phone) return "—";
+    if (phone.length <= 4) return "****";
+    return phone.slice(0, -4).replace(/./g, '*') + phone.slice(-4);
+  };
+
+  // Generate short call ID for admin reference
+  const shortCallId = call.id.slice(0, 8);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-2 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -209,6 +219,9 @@ export function CallDetailsDialog({
             <Phone className="h-5 w-5" />
             Call Details
             {getStatusBadge(execution?.status || call.status)}
+            <span className="ml-auto text-xs font-mono text-muted-foreground">
+              ID: #{shortCallId}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
@@ -486,13 +499,17 @@ export function CallDetailsDialog({
                       {execution.telephony_data.from_number && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">From</span>
-                          <span className="font-mono">{execution.telephony_data.from_number}</span>
+                          <span className="font-mono">
+                            {hidePhoneNumber ? maskPhone(execution.telephony_data.from_number) : execution.telephony_data.from_number}
+                          </span>
                         </div>
                       )}
                       {execution.telephony_data.to_number && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">To</span>
-                          <span className="font-mono">{execution.telephony_data.to_number}</span>
+                          <span className="font-mono">
+                            {hidePhoneNumber ? maskPhone(execution.telephony_data.to_number) : execution.telephony_data.to_number}
+                          </span>
                         </div>
                       )}
                       {execution.telephony_data.hangup_reason && (

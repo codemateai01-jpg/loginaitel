@@ -88,6 +88,11 @@ const statusConfig: Record<string, { label: string; icon: typeof Phone; classNam
     icon: Clock,
     className: "bg-chart-4/10 border-chart-4 text-chart-4",
   },
+  "in-progress": {
+    label: "In Progress",
+    icon: Clock,
+    className: "bg-chart-4/10 border-chart-4 text-chart-4",
+  },
   failed: {
     label: "Failed",
     icon: XCircle,
@@ -97,6 +102,31 @@ const statusConfig: Record<string, { label: string; icon: typeof Phone; classNam
     label: "No Answer",
     icon: PhoneOff,
     className: "bg-muted border-border text-muted-foreground",
+  },
+  "no-answer": {
+    label: "No Answer",
+    icon: PhoneOff,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  "call-disconnected": {
+    label: "Disconnected",
+    icon: PhoneOff,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  busy: {
+    label: "Busy",
+    icon: PhoneOff,
+    className: "bg-muted border-border text-muted-foreground",
+  },
+  queued: {
+    label: "Queued",
+    icon: Clock,
+    className: "bg-chart-4/10 border-chart-4 text-chart-4",
+  },
+  ringing: {
+    label: "Ringing",
+    icon: Phone,
+    className: "bg-chart-1/10 border-chart-1 text-chart-1",
   },
 };
 
@@ -357,7 +387,7 @@ export default function AdminCalls() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name or phone..."
+                  placeholder="Search by Call ID..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-10 border-2"
@@ -398,7 +428,7 @@ export default function AdminCalls() {
                 <TableHeader>
                   <TableRow className="border-b-2 border-border hover:bg-transparent">
                     <TableHead className="font-bold">Client</TableHead>
-                    <TableHead className="font-bold">Lead</TableHead>
+                    <TableHead className="font-bold">Call ID</TableHead>
                     <TableHead className="font-bold">Status</TableHead>
                     <TableHead className="font-bold">Duration</TableHead>
                     <TableHead className="font-bold">Sentiment</TableHead>
