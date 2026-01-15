@@ -34,6 +34,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { BulkCallDialog } from "@/components/campaigns/BulkCallDialog";
+import { GoogleSheetSync } from "@/components/campaigns/GoogleSheetSync";
 import {
   Plus,
   Upload,
@@ -52,6 +53,7 @@ import {
   Trash2,
   BookOpen,
   PhoneCall,
+  RefreshCw,
 } from "lucide-react";
 
 interface CampaignLead {
@@ -91,6 +93,7 @@ export default function CampaignDetail() {
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isBulkCallOpen, setIsBulkCallOpen] = useState(false);
+  const [isSheetSyncOpen, setIsSheetSyncOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [newLead, setNewLead] = useState({ name: "", phone_number: "", email: "" });
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -389,6 +392,11 @@ export default function CampaignDetail() {
             Upload CSV
           </Button>
 
+          <Button variant="outline" onClick={() => setIsSheetSyncOpen(true)}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {campaign?.google_sheet_id ? "Sync Sheets" : "Connect Sheets"}
+          </Button>
+
           <Button variant="outline" asChild>
             <Link to={`/client/campaigns/${campaignId}/analytics`}>
               <History className="h-4 w-4 mr-2" />
@@ -412,6 +420,14 @@ export default function CampaignDetail() {
           agentId={campaign?.agent_id || null}
           selectedLeadIds={selectedLeads}
           concurrencyLevel={campaign?.concurrency_level || 5}
+        />
+
+        {/* Google Sheets Sync Dialog */}
+        <GoogleSheetSync
+          open={isSheetSyncOpen}
+          onOpenChange={setIsSheetSyncOpen}
+          campaignId={campaignId!}
+          existingSheetId={campaign?.google_sheet_id}
         />
 
         {/* Leads Tabs */}
