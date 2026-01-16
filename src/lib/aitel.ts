@@ -607,7 +607,23 @@ export async function listAgentExecutions(params: ListExecutionsParams): Promise
   if (params.from) queryParams.from = params.from;
   if (params.to) queryParams.to = params.to;
   
-  return callAitelProxy<ListExecutionsResponse>("list-agent-executions", queryParams);
+  const res = await callAitelProxy<ListExecutionsResponse>("list-agent-executions", queryParams);
+  
+  // Decode encoded fields in each execution for UI display
+  if (res.data?.data && Array.isArray(res.data.data)) {
+    res.data.data = res.data.data.map((exec) => {
+      const decoded = { ...exec };
+      if (decoded.transcript) {
+        decoded.transcript = decodeTranscript(decoded.transcript) || decoded.transcript;
+      }
+      if (decoded.summary) {
+        decoded.summary = decodeSummary(decoded.summary) || decoded.summary;
+      }
+      return decoded as CallExecution;
+    });
+  }
+  
+  return res;
 }
 
 // ==========================================
@@ -669,7 +685,23 @@ export async function stopBatch(batchId: string): Promise<AitelResponse<BatchAct
 }
 
 export async function listBatchExecutions(batchId: string): Promise<AitelResponse<CallExecution[]>> {
-  return callAitelProxy<CallExecution[]>("list-batch-executions", { batch_id: batchId });
+  const res = await callAitelProxy<CallExecution[]>("list-batch-executions", { batch_id: batchId });
+  
+  // Decode encoded fields in each execution for UI display
+  if (res.data && Array.isArray(res.data)) {
+    res.data = res.data.map((exec) => {
+      const decoded = { ...exec };
+      if (decoded.transcript) {
+        decoded.transcript = decodeTranscript(decoded.transcript) || decoded.transcript;
+      }
+      if (decoded.summary) {
+        decoded.summary = decodeSummary(decoded.summary) || decoded.summary;
+      }
+      return decoded as CallExecution;
+    });
+  }
+  
+  return res;
 }
 
 export async function deleteBatch(batchId: string): Promise<AitelResponse<BatchActionResponse>> {
