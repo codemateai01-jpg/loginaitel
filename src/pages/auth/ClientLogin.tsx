@@ -17,7 +17,6 @@ export default function ClientLogin() {
   const { toast } = useToast();
 
   const formatDisplayPhone = (value: string) => {
-    // Only allow digits
     const digits = value.replace(/\D/g, "");
     return digits.slice(0, 10);
   };
@@ -80,69 +79,25 @@ export default function ClientLogin() {
         throw new Error(response.data.error);
       }
 
-      const { isNewUser, tokenHash, email } = response.data;
+      const { isNewUser, session } = response.data;
 
-      // Use the token to sign in
-      if (tokenHash && email) {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          email: email,
-          token: tokenHash,
-          type: "email",
+      if (session) {
+        // Set the session directly from the edge function response
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
         });
 
-        if (verifyError) {
-          console.log("Token verification failed, trying alternative method");
-          // Try magic link approach
-          const { error: signInError } = await supabase.auth.signInWithOtp({
-            email: email,
-            options: {
-              shouldCreateUser: false,
-            },
-          });
-
-          if (signInError) {
-            console.log("Fallback sign in attempted");
-          }
-        }
-      }
-
-      // Check if we're now signed in
-      const { data: sessionData } = await supabase.auth.getSession();
-      
-      if (sessionData.session) {
         toast({
           title: isNewUser ? "Account Created!" : "Welcome back!",
           description: isNewUser 
             ? "Welcome to Aitel! Your client account has been created."
             : "You have been logged in successfully.",
         });
+        
         navigate("/client");
       } else {
-        // If session not established, try refreshing
-        await supabase.auth.refreshSession();
-        const { data: refreshedSession } = await supabase.auth.getSession();
-        
-        if (refreshedSession.session) {
-          toast({
-            title: isNewUser ? "Account Created!" : "Welcome back!",
-            description: isNewUser 
-              ? "Welcome to Aitel! Your client account has been created."
-              : "You have been logged in successfully.",
-          });
-          navigate("/client");
-        } else {
-          toast({
-            title: "Verification Successful!",
-            description: "Please wait while we complete your login...",
-          });
-          // Retry session check after a brief delay
-          setTimeout(async () => {
-            const { data: delayedSession } = await supabase.auth.getSession();
-            if (delayedSession.session) {
-              navigate("/client");
-            }
-          }, 1000);
-        }
+        throw new Error("Session not created. Please try again.");
       }
     } catch (error: any) {
       toast({

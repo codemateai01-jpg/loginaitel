@@ -65,6 +65,8 @@ serve(async (req) => {
 
     // Generate a unique email for this phone user (for Supabase auth)
     const phoneEmail = `${formattedPhone.replace("+", "")}@phone.aitel.local`;
+    // Use a consistent password based on phone number (hashed internally by Supabase)
+    const phonePassword = `phone_auth_${formattedPhone}_secret_key_2024`;
 
     // Check if user exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
@@ -89,9 +91,10 @@ serve(async (req) => {
         throw new Error("You don't have client access. Please use the correct login portal.");
       }
     } else {
-      // Create new user with phone-based email
+      // Create new user with email/password
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: phoneEmail,
+        password: phonePassword,
         email_confirm: true,
         user_metadata: {
           phone: formattedPhone,
@@ -128,18 +131,16 @@ serve(async (req) => {
       });
     }
 
-    // Generate a magic link for seamless login
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
+    // Sign in the user and get session
+    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
       email: phoneEmail,
+      password: phonePassword,
     });
 
-    if (linkError || !linkData) {
-      console.error("Error generating link:", linkError);
-      throw new Error("Failed to complete authentication");
+    if (signInError || !signInData.session) {
+      console.error("Error signing in:", signInError);
+      throw new Error("Failed to create session");
     }
-
-    const tokenHash = linkData.properties?.hashed_token;
 
     // Clean up used OTP
     await supabaseAdmin
@@ -152,8 +153,7 @@ serve(async (req) => {
         success: true,
         isNewUser,
         userId,
-        tokenHash,
-        email: phoneEmail,
+        session: signInData.session,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
