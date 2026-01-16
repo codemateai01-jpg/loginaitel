@@ -447,6 +447,53 @@ export type Database = {
         }
         Relationships: []
       }
+      client_subscriptions: {
+        Row: {
+          calls_remaining: number
+          calls_used: number
+          client_id: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          package_id: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          calls_remaining: number
+          calls_used?: number
+          client_id: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          package_id: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          calls_remaining?: number
+          calls_used?: number
+          client_id?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          package_id?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_subscriptions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -704,6 +751,54 @@ export type Database = {
           },
         ]
       }
+      pricing_packages: {
+        Row: {
+          calls_included: number
+          concurrency_level: number
+          created_at: string
+          description: string | null
+          display_order: number
+          features: Json | null
+          id: string
+          includes_inbound: boolean
+          is_active: boolean
+          is_enterprise: boolean
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          calls_included: number
+          concurrency_level?: number
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          features?: Json | null
+          id?: string
+          includes_inbound?: boolean
+          is_active?: boolean
+          is_enterprise?: boolean
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          calls_included?: number
+          concurrency_level?: number
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          features?: Json | null
+          id?: string
+          includes_inbound?: boolean
+          is_active?: boolean
+          is_enterprise?: boolean
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -781,6 +876,57 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_history: {
+        Row: {
+          action: string
+          calls_carried_over: number | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          from_package_id: string | null
+          id: string
+          notes: string | null
+          to_package_id: string
+        }
+        Insert: {
+          action?: string
+          calls_carried_over?: number | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          from_package_id?: string | null
+          id?: string
+          notes?: string | null
+          to_package_id: string
+        }
+        Update: {
+          action?: string
+          calls_carried_over?: number | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          from_package_id?: string | null
+          id?: string
+          notes?: string | null
+          to_package_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_history_from_package_id_fkey"
+            columns: ["from_package_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_history_to_package_id_fkey"
+            columns: ["to_package_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_packages"
             referencedColumns: ["id"]
           },
         ]
