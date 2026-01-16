@@ -14,6 +14,27 @@ import { useToast } from "@/hooks/use-toast";
 
 export type CallStatus = "idle" | "initiating" | "ringing" | "connected" | "ended" | "failed";
 
+interface TelecallerCallLog {
+  id: string;
+  telecaller_id: string;
+  lead_id: string;
+  assignment_id: string | null;
+  client_id: string;
+  phone_number: string;
+  call_type: string;
+  provider: string;
+  status: string;
+  external_call_id?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  duration_seconds?: number | null;
+  recording_url?: string | null;
+  notes?: string | null;
+  call_outcome?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface ClickToCallButtonProps {
   phoneNumber: string;
   leadId: string;
@@ -48,9 +69,9 @@ export function ClickToCallButton({
       setCallStatus("initiating");
       setCallDialogOpen(true);
 
-      // Log call attempt
+      // Log call attempt - using any type since table isn't in generated types yet
       const { data: callLog, error } = await supabase
-        .from("telecaller_call_logs")
+        .from("telecaller_call_logs" as any)
         .insert({
           telecaller_id: subUserId,
           lead_id: leadId,
@@ -60,13 +81,13 @@ export function ClickToCallButton({
           call_type: "outbound",
           status: "initiated",
           provider: "exotel", // Ready for Exotel
-        })
+        } as any)
         .select()
         .single();
 
       if (error) throw error;
       
-      setCurrentCallLogId(callLog.id);
+      setCurrentCallLogId((callLog as any)?.id || null);
 
       // TODO: Replace with Exotel SDK call
       // For now, open tel: link as fallback
@@ -102,11 +123,11 @@ export function ClickToCallButton({
 
     if (currentCallLogId) {
       await supabase
-        .from("telecaller_call_logs")
+        .from("telecaller_call_logs" as any)
         .update({ 
           status: "connected",
           started_at: new Date().toISOString(),
-        })
+        } as any)
         .eq("id", currentCallLogId);
     }
   };
@@ -122,12 +143,12 @@ export function ClickToCallButton({
 
     if (currentCallLogId) {
       await supabase
-        .from("telecaller_call_logs")
+        .from("telecaller_call_logs" as any)
         .update({ 
           status: "completed",
           ended_at: endTime.toISOString(),
           duration_seconds: duration,
-        })
+        } as any)
         .eq("id", currentCallLogId);
     }
 

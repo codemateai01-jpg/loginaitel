@@ -13,18 +13,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { ClickToCallButton } from "@/components/telecaller/ClickToCallButton";
 import { 
-  Phone, 
   PhoneCall,
   Clock,
   CheckCircle,
   AlertCircle,
   User,
-  MessageSquare,
   Calendar,
-  RefreshCw,
-  ExternalLink,
-  Play
+  RefreshCw
 } from "lucide-react";
 
 interface AssignedLead {
@@ -337,14 +334,20 @@ export default function TelecallerDashboard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => handleCallLead(assignment)}
-                          >
-                            <Phone className="h-3 w-3 mr-1" />
-                            Call
-                          </Button>
+                          <ClickToCallButton
+                            phoneNumber={assignment.lead.phone_number}
+                            leadId={assignment.lead.id}
+                            leadName={assignment.lead.name}
+                            assignmentId={assignment.id}
+                            subUserId={subUserInfo!.id}
+                            clientId={subUserInfo!.client_id}
+                            onCallStarted={() => {
+                              queryClient.invalidateQueries({ queryKey: ["telecaller-assignments"] });
+                            }}
+                            onCallEnded={() => {
+                              queryClient.invalidateQueries({ queryKey: ["telecaller-assignments"] });
+                            }}
+                          />
                           <Button
                             size="sm"
                             variant="outline"
