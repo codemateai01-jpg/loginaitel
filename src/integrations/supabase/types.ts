@@ -447,6 +447,54 @@ export type Database = {
         }
         Relationships: []
       }
+      client_sub_users: {
+        Row: {
+          activated_at: string | null
+          client_id: string
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          invite_expires_at: string | null
+          invite_token: string | null
+          invited_at: string | null
+          role: Database["public"]["Enums"]["client_sub_user_role"]
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          client_id: string
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id?: string
+          invite_expires_at?: string | null
+          invite_token?: string | null
+          invited_at?: string | null
+          role: Database["public"]["Enums"]["client_sub_user_role"]
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          client_id?: string
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          invite_expires_at?: string | null
+          invite_token?: string | null
+          invited_at?: string | null
+          role?: Database["public"]["Enums"]["client_sub_user_role"]
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       client_subscriptions: {
         Row: {
           calls_remaining: number
@@ -654,6 +702,79 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      lead_assignments: {
+        Row: {
+          assigned_by: string | null
+          assigned_to: string | null
+          assignment_type: string
+          campaign_id: string
+          client_id: string
+          created_at: string
+          follow_up_at: string | null
+          id: string
+          last_action_at: string | null
+          lead_id: string
+          notes: string | null
+          priority: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_to?: string | null
+          assignment_type?: string
+          campaign_id: string
+          client_id: string
+          created_at?: string
+          follow_up_at?: string | null
+          id?: string
+          last_action_at?: string | null
+          lead_id: string
+          notes?: string | null
+          priority?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_to?: string | null
+          assignment_type?: string
+          campaign_id?: string
+          client_id?: string
+          created_at?: string
+          follow_up_at?: string | null
+          id?: string
+          last_action_at?: string | null
+          lead_id?: string
+          notes?: string | null
+          priority?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_assignments_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "client_sub_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_assignments_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_assignments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "campaign_leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
@@ -1056,6 +1177,35 @@ export type Database = {
           },
         ]
       }
+      telecaller_assignment_queue: {
+        Row: {
+          client_id: string
+          id: string
+          last_assigned_telecaller_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          id?: string
+          last_assigned_telecaller_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          id?: string
+          last_assigned_telecaller_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telecaller_assignment_queue_last_assigned_telecaller_id_fkey"
+            columns: ["last_assigned_telecaller_id"]
+            isOneToOne: false
+            referencedRelation: "client_sub_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_entries: {
         Row: {
           break_end_time: string | null
@@ -1130,6 +1280,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_assign_lead_to_telecaller: {
+        Args: { p_campaign_id: string; p_client_id: string; p_lead_id: string }
+        Returns: string
+      }
       calculate_productive_hours: {
         Args: { p_date?: string; p_engineer_id: string }
         Returns: Json
@@ -1152,6 +1306,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "engineer" | "client"
+      client_sub_user_role: "monitoring" | "telecaller" | "lead_manager"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1280,6 +1435,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "engineer", "client"],
+      client_sub_user_role: ["monitoring", "telecaller", "lead_manager"],
     },
   },
 } as const
