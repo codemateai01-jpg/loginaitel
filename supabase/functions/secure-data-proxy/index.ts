@@ -42,11 +42,10 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Verify user token using getClaims
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: authError } = await userClient.auth.getClaims(token);
+    // Verify user token using getUser
+    const { data: userData, error: authError } = await userClient.auth.getUser();
     
-    if (authError || !claimsData?.claims) {
+    if (authError || !userData?.user) {
       console.error("Auth error:", authError);
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
@@ -54,7 +53,7 @@ serve(async (req) => {
       });
     }
 
-    const userId = claimsData.claims.sub as string;
+    const userId = userData.user.id;
 
     // Create service client for data queries
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
