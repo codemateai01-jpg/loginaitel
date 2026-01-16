@@ -424,10 +424,14 @@ export default function EngineerTasks() {
   });
 
   // Filter tasks by status
-  const promptPhaseTasks = myTasks.filter((t) => ["in_progress", "prompt_submitted"].includes(t.status));
-  const demoPhaseTasks = myTasks.filter((t) => ["prompt_approved", "demo_submitted"].includes(t.status));
+  // Rejected tasks are those with a rejection_reason that need revision (not completed)
+  const rejectedTasks = myTasks.filter((t) => t.rejection_reason && t.status !== "completed");
+  const rejectedTaskIds = new Set(rejectedTasks.map(t => t.id));
+  
+  // Active tasks exclude rejected ones (they appear in their own tab)
+  const promptPhaseTasks = myTasks.filter((t) => ["in_progress", "prompt_submitted"].includes(t.status) && !rejectedTaskIds.has(t.id));
+  const demoPhaseTasks = myTasks.filter((t) => ["prompt_approved", "demo_submitted"].includes(t.status) && !rejectedTaskIds.has(t.id));
   const completedTasks = myTasks.filter((t) => t.status === "completed");
-  const rejectedTasks = myTasks.filter((t) => t.status === "rejected");
   const activeTasks = [...promptPhaseTasks, ...demoPhaseTasks];
 
   const handlePickTask = (task: Task) => {
