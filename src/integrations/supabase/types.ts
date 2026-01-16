@@ -709,6 +709,33 @@ export type Database = {
         }
         Relationships: []
       }
+      phone_otps: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          id: string
+          otp_code: string
+          phone: string
+          verified: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          otp_code: string
+          phone: string
+          verified?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          otp_code?: string
+          phone?: string
+          verified?: boolean | null
+        }
+        Relationships: []
+      }
       point_transactions: {
         Row: {
           created_at: string
@@ -1110,6 +1137,7 @@ export type Database = {
       calculate_task_score: { Args: { p_task_id: string }; Returns: Json }
       calculate_task_score_v2: { Args: { p_task_id: string }; Returns: Json }
       cleanup_expired_otps: { Args: never; Returns: undefined }
+      cleanup_expired_phone_otps: { Args: never; Returns: undefined }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
