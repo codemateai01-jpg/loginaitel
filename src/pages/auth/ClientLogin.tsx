@@ -94,6 +94,14 @@ export default function ClientLogin() {
         // Set remember me preference
         setRememberMe(rememberMe);
 
+        // Check if user is a sub-user and get their role for redirect
+        const { data: subUserData } = await supabase
+          .from("client_sub_users")
+          .select("role, status")
+          .eq("user_id", session.user.id)
+          .eq("status", "active")
+          .maybeSingle();
+
         toast({
           title: isNewUser ? "Account Created!" : "Welcome back!",
           description: isNewUser 
@@ -101,7 +109,24 @@ export default function ClientLogin() {
             : "You have been logged in successfully.",
         });
         
-        navigate("/client");
+        // Redirect based on sub-user role
+        if (subUserData) {
+          switch (subUserData.role) {
+            case "telecaller":
+              navigate("/client/telecaller");
+              break;
+            case "lead_manager":
+              navigate("/client/lead-manager");
+              break;
+            case "monitoring":
+              navigate("/client/monitoring");
+              break;
+            default:
+              navigate("/client");
+          }
+        } else {
+          navigate("/client");
+        }
       } else {
         throw new Error("Session not created. Please try again.");
       }
