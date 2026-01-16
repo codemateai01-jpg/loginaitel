@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.decrypt-content]
 verify_jwt = false
+
+[functions.start-seat-trial]
+verify_jwt = false
+
+[functions.setup-seat-autopay]
+verify_jwt = false

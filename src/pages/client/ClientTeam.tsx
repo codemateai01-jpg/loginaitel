@@ -29,12 +29,11 @@ import {
   RefreshCw,
   Activity,
   BarChart3,
-  Lock,
-  IndianRupee,
-  Mail
+  Lock
 } from "lucide-react";
 import { SubUserActivityLog } from "@/components/admin/SubUserActivityLog";
 import { ActivitySummaryDashboard } from "@/components/admin/ActivitySummaryDashboard";
+import { SubUserPaywall, TRIAL_SEATS } from "@/components/client/SubUserPaywall";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -133,41 +132,51 @@ export default function ClientTeam() {
     return "+" + cleaned;
   };
 
-  // Fetch client credits to check if they have any balance
-  const { data: creditData } = useQuery({
-    queryKey: ["client-credits-team", user?.id],
+  // Fetch seat subscription
+  const { data: seatSubscription, refetch: refetchSubscription } = useQuery({
+    queryKey: ["seat-subscription-team", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("client_credits")
-        .select("balance")
+        .from("seat_subscriptions" as any)
+        .select("*")
         .eq("client_id", user!.id)
         .maybeSingle();
-      if (error) throw error;
-      return { balance: data?.balance || 0 };
+      if (error && error.code !== "PGRST116") throw error;
+      return data as any;
     },
   });
 
-  // Fetch paid seats info from payments
-  const { data: paidSeatsData } = useQuery({
-    queryKey: ["client-paid-seats", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      // Check if client has made any seat payments
-      const { data, error } = await supabase
-        .from("payments")
-        .select("credits, status")
-        .eq("client_id", user!.id)
-        .eq("status", "completed");
-      
-      if (error) throw error;
-      
-      // If client has purchased credits, allow sub-users
-      const totalCredits = (data || []).reduce((sum, p) => sum + (p.credits || 0), 0);
-      return { hasPaidCredits: totalCredits > 0, totalCredits };
-    },
-  });
+  // Compute if client can add members based on trial/autopay status
+  const computeCanAddMembers = () => {
+    if (!seatSubscription) return false; // No subscription = need to start trial
+    
+    const isOnTrial = seatSubscription.is_trial === true;
+    const trialEndsAt = seatSubscription.trial_ends_at ? new Date(seatSubscription.trial_ends_at) : null;
+    const now = new Date();
+    const trialExpired = trialEndsAt ? now >= trialEndsAt : false;
+    const autopayEnabled = seatSubscription.autopay_enabled === true;
+    const paidSeats = seatSubscription.seats_count || 0;
+    
+    // Active trial
+    if (isOnTrial && !trialExpired) {
+      return (subUsers?.length || 0) < TRIAL_SEATS;
+    }
+    
+    // Autopay enabled with paid seats
+    if (autopayEnabled && paidSeats > 0) {
+      return (subUsers?.length || 0) < paidSeats;
+    }
+    
+    return false;
+  };
 
+  const canAddMembers = computeCanAddMembers();
+  const needsSubscription = !seatSubscription;
+  const trialExpired = seatSubscription?.is_trial && seatSubscription?.trial_ends_at 
+    ? new Date() >= new Date(seatSubscription.trial_ends_at) 
+    : false;
+  const needsAutopay = (seatSubscription?.is_trial || trialExpired) && !seatSubscription?.autopay_enabled;
   // Fetch sub-users
   const { data: subUsers, isLoading } = useQuery({
     queryKey: ["client-sub-users", user?.id],
@@ -184,8 +193,10 @@ export default function ClientTeam() {
     enabled: !!user,
   });
 
-  // Check if can add more members
-  const canAddMembers = (creditData?.balance || 0) > 0 || paidSeatsData?.hasPaidCredits;
+  const handleSubscriptionChange = () => {
+    refetchSubscription();
+    queryClient.invalidateQueries({ queryKey: ["client-sub-users"] });
+  };
 
   // Add sub-user mutation
   const addSubUser = useMutation({
@@ -306,42 +317,13 @@ export default function ClientTeam() {
   return (
     <DashboardLayout role="client">
       <div className="space-y-6">
-        {/* Paywall Alert */}
-        {!canAddMembers && (
-          <Card className="border-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-                <Lock className="h-5 w-5" />
-                Purchase Credits to Add Team Members
-              </CardTitle>
-              <CardDescription className="text-amber-600 dark:text-amber-400">
-                You need to purchase credits before adding team members. Each team member costs ₹{SEAT_PRICE}/month.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-3 gap-4 mb-4">
-                <div className="p-3 bg-background border-2 border-border text-center">
-                  <IndianRupee className="h-5 w-5 mx-auto mb-1 text-primary" />
-                  <p className="text-2xl font-bold">₹{SEAT_PRICE}</p>
-                  <p className="text-xs text-muted-foreground">Per Seat/Month</p>
-                </div>
-                <div className="p-3 bg-background border-2 border-border text-center">
-                  <Users className="h-5 w-5 mx-auto mb-1 text-primary" />
-                  <p className="text-sm font-medium">All Roles Included</p>
-                  <p className="text-xs text-muted-foreground">Telecaller, Lead Manager, Monitoring</p>
-                </div>
-                <div className="p-3 bg-background border-2 border-border text-center">
-                  <CheckCircle className="h-5 w-5 mx-auto mb-1 text-green-500" />
-                  <p className="text-sm font-medium">Cancel Anytime</p>
-                  <p className="text-xs text-muted-foreground">Monthly billing</p>
-                </div>
-              </div>
-              <Button onClick={() => window.location.href = "mailto:sales@aitel.io?subject=Team Seat Subscription"} className="w-full">
-                <Mail className="h-4 w-4 mr-2" />
-                Contact Sales for Team Seats
-              </Button>
-            </CardContent>
-          </Card>
+        {/* Subscription/Trial Status */}
+        {(needsSubscription || needsAutopay) && (
+          <SubUserPaywall 
+            currentSeats={subUsers?.length || 0}
+            onPurchaseComplete={handleSubscriptionChange}
+            onTrialStart={handleSubscriptionChange}
+          />
         )}
 
         {/* Header */}
@@ -355,22 +337,41 @@ export default function ClientTeam() {
               Add sub-users with their phone numbers. They can login using OTP.
               {stats.total > 0 && (
                 <span className="ml-2 text-primary font-medium">
-                  (₹{stats.total * SEAT_PRICE}/month)
-                </span>
-              )}
-            </p>
-          </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-            if (open && !canAddMembers) {
+              (₹{(seatSubscription?.seats_count || 0) * SEAT_PRICE}/month)
+            </span>
+          )}
+          {seatSubscription?.is_trial && !trialExpired && (
+            <Badge variant="outline" className="ml-2 border-primary text-primary">
+              Trial Active
+            </Badge>
+          )}
+        </p>
+      </div>
+        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+          if (open && !canAddMembers) {
+            if (needsSubscription) {
               toast({
-                title: "Credits Required",
-                description: "Please purchase credits first to add team members.",
+                title: "Start Free Trial",
+                description: "Start your 7-day free trial to add team members.",
                 variant: "destructive",
               });
-              return;
+            } else if (needsAutopay) {
+              toast({
+                title: "Autopay Required",
+                description: "Please set up autopay to continue adding team members.",
+                variant: "destructive",
+              });
+            } else {
+              toast({
+                title: "Seat Limit Reached",
+                description: "Purchase more seats to add team members.",
+                variant: "destructive",
+              });
             }
-            setIsAddDialogOpen(open);
-          }}>
+            return;
+          }
+          setIsAddDialogOpen(open);
+        }}>
             <DialogTrigger asChild>
               <Button disabled={!canAddMembers}>
                 <UserPlus className="h-4 w-4 mr-2" />

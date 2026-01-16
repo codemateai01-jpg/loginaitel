@@ -11,6 +11,7 @@ interface VerifyRequest {
   razorpay_payment_id: string;
   razorpay_signature: string;
   seats: number;
+  isAutopaySetup?: boolean;
 }
 
 serve(async (req) => {
@@ -50,9 +51,9 @@ serve(async (req) => {
       userId = claimsData.claims.sub as string;
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, seats }: VerifyRequest = await req.json();
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, seats, isAutopaySetup }: VerifyRequest = await req.json();
 
-    console.log("Verifying seat payment:", { razorpay_order_id, razorpay_payment_id, seats });
+    console.log("Verifying seat payment:", { razorpay_order_id, razorpay_payment_id, seats, isAutopaySetup });
 
     // Verify signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -123,17 +124,31 @@ serve(async (req) => {
       .eq("client_id", userId)
       .single();
 
+    const now = new Date();
+    
     if (existingSub) {
-      // Update existing subscription - add seats
-      const newSeatsCount = existingSub.seats_count + seats;
+      // Update existing subscription
+      const updateData: any = {
+        status: "active",
+        last_payment_date: now.toISOString(),
+        next_billing_date: nextBillingDate.toISOString(),
+        is_trial: false, // No longer on trial after payment
+        updated_at: now.toISOString(),
+      };
+      
+      if (isAutopaySetup) {
+        // Autopay setup - set autopay flag and use the seats count from payment
+        updateData.autopay_enabled = true;
+        updateData.autopay_setup_at = now.toISOString();
+        updateData.seats_count = seats;
+      } else {
+        // Regular seat purchase - add to existing seats
+        updateData.seats_count = existingSub.seats_count + seats;
+      }
+      
       const { error: updateError } = await supabaseAdmin
         .from("seat_subscriptions")
-        .update({
-          seats_count: newSeatsCount,
-          status: "active",
-          last_payment_date: new Date().toISOString(),
-          next_billing_date: nextBillingDate.toISOString(),
-        })
+        .update(updateData)
         .eq("client_id", userId);
 
       if (updateError) {
@@ -141,18 +156,26 @@ serve(async (req) => {
         throw new Error("Failed to update subscription");
       }
 
-      console.log(`Updated subscription: ${newSeatsCount} total seats`);
+      console.log(`Updated subscription: ${updateData.seats_count} total seats, autopay: ${isAutopaySetup}`);
     } else {
       // Create new subscription
+      const insertData: any = {
+        client_id: userId,
+        seats_count: seats,
+        status: "active",
+        last_payment_date: now.toISOString(),
+        next_billing_date: nextBillingDate.toISOString(),
+        is_trial: false,
+      };
+      
+      if (isAutopaySetup) {
+        insertData.autopay_enabled = true;
+        insertData.autopay_setup_at = now.toISOString();
+      }
+      
       const { error: insertError } = await supabaseAdmin
         .from("seat_subscriptions")
-        .insert({
-          client_id: userId,
-          seats_count: seats,
-          status: "active",
-          last_payment_date: new Date().toISOString(),
-          next_billing_date: nextBillingDate.toISOString(),
-        });
+        .insert(insertData);
 
       if (insertError) {
         console.error("Error creating subscription:", insertError);
