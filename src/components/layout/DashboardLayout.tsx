@@ -17,6 +17,7 @@ import {
   Clock,
   Megaphone,
   TrendingUp,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,6 +39,7 @@ const adminNavItems = [
   { icon: Phone, label: "Make Call", href: "/admin/make-call" },
   { icon: Phone, label: "Calls", href: "/admin/calls" },
   { icon: Phone, label: "Phone Numbers", href: "/admin/phone-numbers" },
+  { icon: Package, label: "Packages", href: "/admin/packages" },
   { icon: CreditCard, label: "Credits", href: "/admin/credits" },
   { icon: CreditCard, label: "Payments", href: "/admin/payments" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },
