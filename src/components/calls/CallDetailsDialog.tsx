@@ -76,9 +76,15 @@ export function CallDetailsDialog({
     enabled: !!call?.external_call_id && open,
     queryFn: async () => {
       const response = await getExecution(call!.external_call_id!);
-      if (response.error) throw new Error(response.error);
+      // If 404 or error, return null gracefully (execution may not exist anymore)
+      if (response.error) {
+        console.warn("Execution not found:", call!.external_call_id, response.error);
+        return null;
+      }
       return response.data;
     },
+    // Don't throw on error - just return null
+    retry: false,
   });
 
   // Reset audio state when dialog opens/closes
