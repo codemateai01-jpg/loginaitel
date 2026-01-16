@@ -28,7 +28,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { fetchClientsWithStats, type ClientWithStats } from "@/lib/secure-proxy";
 import {
   Search,
@@ -41,6 +41,7 @@ import {
   Loader2,
   ArrowLeft,
   CheckCircle,
+  Pencil,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -56,6 +57,9 @@ export default function AdminClients() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<ClientWithStats | null>(null);
+  const [editForm, setEditForm] = useState({ full_name: "", phone: "" });
   const [createStep, setCreateStep] = useState<CreateStep>("details");
   const [otp, setOtp] = useState("");
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -193,6 +197,74 @@ export default function AdminClients() {
         setOtp("");
       }, 200);
     }
+  };
+
+  // Update client mutation
+  const updateClientMutation = useMutation({
+    mutationFn: async (data: { client_id: string; full_name?: string; phone?: string }) => {
+      const { data: result, error } = await supabase.functions.invoke("update-client", {
+        body: data,
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Client Updated",
+        description: "Client details have been updated successfully",
+      });
+      setIsEditDialogOpen(false);
+      setEditingClient(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-clients-secure"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update client",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Open edit dialog
+  const handleEditClient = (client: ClientWithStats) => {
+    setEditingClient(client);
+    // Extract phone digits from masked display (last 4 digits)
+    // For editing, we start with empty phone since we don't have the full number
+    setEditForm({
+      full_name: client.display_name === "Unnamed Client" ? "" : client.display_name,
+      phone: "",
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  // Handle edit form submit
+  const handleEditSubmit = () => {
+    if (!editingClient) return;
+    
+    const updates: { client_id: string; full_name?: string; phone?: string } = {
+      client_id: editingClient.user_id,
+    };
+
+    // Only include fields that have values
+    if (editForm.full_name.trim()) {
+      updates.full_name = editForm.full_name.trim();
+    }
+    if (editForm.phone.trim()) {
+      updates.phone = editForm.phone.trim();
+    }
+
+    if (!updates.full_name && !updates.phone) {
+      toast({
+        title: "No Changes",
+        description: "Please enter at least one field to update",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateClientMutation.mutate(updates);
   };
 
   const filteredClients = clients.filter((client) =>
@@ -488,6 +560,10 @@ export default function AdminClients() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditClient(client)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit Details
+                          </DropdownMenuItem>
                           <DropdownMenuItem>View Details</DropdownMenuItem>
                           <DropdownMenuItem>Manage Credits</DropdownMenuItem>
                           <DropdownMenuItem>View Agents</DropdownMenuItem>
@@ -504,6 +580,71 @@ export default function AdminClients() {
             </Table>
           )}
         </div>
+
+        {/* Edit Client Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="border-2">
+            <DialogHeader>
+              <DialogTitle>Edit Client Details</DialogTitle>
+              <DialogDescription>
+                Update client name or phone number. Leave fields empty to keep current values.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  className="border-2"
+                  placeholder={editingClient?.display_name || "Enter new name"}
+                  maxLength={100}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 px-3 py-2 border-2 border-border bg-muted text-muted-foreground">
+                    <span>+91</span>
+                  </div>
+                  <Input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: formatPhoneInput(e.target.value) })}
+                    className="border-2 flex-1"
+                    placeholder="Enter new 10-digit number"
+                    maxLength={10}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Current: {editingClient?.display_phone || "Not set"}
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleEditSubmit} 
+                  disabled={updateClientMutation.isPending}
+                >
+                  {updateClientMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
