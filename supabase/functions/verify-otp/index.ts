@@ -159,12 +159,21 @@ serve(async (req) => {
       .delete()
       .eq("phone", formattedPhone);
 
+    const session = signInData.session;
+    // Return a minimal session payload (avoid exposing user/email/phone in response)
+    const safeSession = {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      token_type: session.token_type,
+      expires_in: session.expires_in,
+      expires_at: session.expires_at,
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
         isNewUser,
-        userId,
-        session: signInData.session,
+        session: safeSession,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

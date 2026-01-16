@@ -98,7 +98,7 @@ serve(async (req) => {
       throw new Error(errorData.message || "Failed to send SMS");
     }
 
-    console.log("OTP sent successfully to:", formattedPhone);
+     console.log("OTP sent successfully");
 
     return new Response(
       JSON.stringify({ success: true }),
