@@ -102,6 +102,19 @@ function maskExecutionData(execution: Record<string, unknown>, includeRealRecord
     masked.summary = encodeSummary(execution.summary as string);
   }
   
+  // Encode extracted_data if present
+  if (execution.extracted_data) {
+    const extractedStr = typeof execution.extracted_data === 'string' 
+      ? execution.extracted_data 
+      : JSON.stringify(execution.extracted_data);
+    masked.extracted_data = encodeForTransport(extractedStr);
+  }
+  
+  // Encode notes if present
+  if (execution.notes) {
+    masked.notes = encodeForTransport(execution.notes as string);
+  }
+  
   // Remove sensitive execution-level fields
   delete masked.agent_id; // External Bolna agent ID - sensitive
   delete masked.batch_id; // Internal batch reference

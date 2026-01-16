@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { decodeTranscript, decodeSummary } from "@/lib/decode-utils";
+import { decodeTranscript, decodeSummary, decodeExtractedData, decodeNotes } from "@/lib/decode-utils";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -20,7 +20,7 @@ function decodeCallData<T>(data: T): T {
     return data.map((item) => decodeCallData(item)) as T;
   }
   
-  // Handle objects with transcript/summary fields
+  // Handle objects with encoded fields
   if (typeof data === "object" && data !== null) {
     const obj = data as Record<string, unknown>;
     const decoded = { ...obj };
@@ -30,6 +30,18 @@ function decodeCallData<T>(data: T): T {
     }
     if (typeof decoded.summary === "string") {
       decoded.summary = decodeSummary(decoded.summary) || decoded.summary;
+    }
+    if (typeof decoded.notes === "string") {
+      decoded.notes = decodeNotes(decoded.notes) || decoded.notes;
+    }
+    
+    // Handle metadata.extracted_data
+    if (decoded.metadata && typeof decoded.metadata === "object") {
+      const metadata = decoded.metadata as Record<string, unknown>;
+      if (typeof metadata.extracted_data === "string") {
+        metadata.extracted_data = decodeExtractedData(metadata.extracted_data);
+        decoded.metadata = metadata;
+      }
     }
     
     return decoded as T;

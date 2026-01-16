@@ -1,7 +1,7 @@
 /**
  * Utilities for decoding encoded data from the secure proxies.
- * The proxies encode sensitive data (transcript, summary) so it's not
- * readable in browser DevTools network tab, but can be decoded here for display.
+ * The proxies encode sensitive data (transcript, summary, extracted_data, notes) 
+ * so it's not readable in browser DevTools network tab, but can be decoded here for display.
  */
 
 /**
@@ -43,6 +43,29 @@ export function decodeTranscript(transcript: string | null | undefined): string 
  */
 export function decodeSummary(summary: string | null | undefined): string | null {
   return decodeEncodedValue(summary);
+}
+
+/**
+ * Decode extracted_data from proxy response
+ * Returns parsed JSON if the decoded value is valid JSON, otherwise the string
+ */
+export function decodeExtractedData(extractedData: string | null | undefined): unknown | null {
+  const decoded = decodeEncodedValue(extractedData);
+  if (!decoded) return null;
+  
+  try {
+    return JSON.parse(decoded);
+  } catch {
+    // Not JSON, return as string
+    return decoded;
+  }
+}
+
+/**
+ * Decode notes from proxy response
+ */
+export function decodeNotes(notes: string | null | undefined): string | null {
+  return decodeEncodedValue(notes);
 }
 
 /**
