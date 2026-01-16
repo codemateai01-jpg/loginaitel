@@ -47,7 +47,9 @@ import {
   Database,
   DollarSign,
   FileSpreadsheet,
+  DownloadCloud,
 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 import {
   HoverCard,
   HoverCardContent,
@@ -164,6 +166,7 @@ export default function ClientCalls() {
   const [selectedCall, setSelectedCall] = useState<CallDisplay | null>(null);
   const [dateRange, setDateRange] = useState("7");
   const [currentPage, setCurrentPage] = useState(1);
+  const [downloadingRecording, setDownloadingRecording] = useState<string | null>(null);
 
   // Fetch agents for this client (to get external agent IDs)
   const { data: agents } = useQuery({
@@ -381,6 +384,47 @@ export default function ClientCalls() {
     }));
 
     exportCalls(exportData, exportFormat);
+  };
+
+  const handleDownloadRecording = async (call: CallDisplay) => {
+    if (!call.recording_url) {
+      toast({
+        title: "No recording",
+        description: "This call does not have a recording.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDownloadingRecording(call.id);
+    try {
+      const response = await fetch(call.recording_url);
+      if (!response.ok) throw new Error("Failed to fetch recording");
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `recording-${call.id}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Download started",
+        description: "Recording download has started.",
+      });
+    } catch (error) {
+      console.error("Error downloading recording:", error);
+      toast({
+        title: "Download failed",
+        description: "Failed to download recording. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingRecording(null);
+    }
   };
 
   return (
@@ -634,14 +678,29 @@ export default function ClientCalls() {
                                 <FileText className="h-4 w-4" />
                               </Button>
                               {call.recording_url && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Play Recording"
-                                  onClick={() => setSelectedCall(call)}
-                                >
-                                  <Play className="h-4 w-4" />
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Play Recording"
+                                    onClick={() => setSelectedCall(call)}
+                                  >
+                                    <Play className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Download Recording"
+                                    onClick={() => handleDownloadRecording(call)}
+                                    disabled={downloadingRecording === call.id}
+                                  >
+                                    {downloadingRecording === call.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <DownloadCloud className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </TableCell>
