@@ -123,17 +123,26 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Verify user token
-    const { data: userData, error: authError } = await userClient.auth.getUser();
+    // Verify user token using getClaims (works with signing-keys)
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
     
-    if (authError || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (claimsError || !claimsData?.claims) {
+      debugLog("getClaims failed, trying getUser fallback", { error: claimsError?.message });
+      // Fallback to getUser for backward compatibility
+      const { data: userData, error: authError } = await userClient.auth.getUser();
+      
+      if (authError || !userData?.user) {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      var userId = userData.user.id;
+    } else {
+      var userId = claimsData.claims.sub as string;
     }
-
-    const userId = userData.user.id;
 
     // Create service client for data queries
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
