@@ -235,179 +235,181 @@ export function DemoCallPreviewModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 flex-1 overflow-hidden">
-          {/* Call Info */}
-          <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 border-2 border-border">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="text-muted-foreground">Phone:</span>{" "}
-                <span className="font-mono">{call.phone_number}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="text-muted-foreground">Agent:</span>{" "}
-                {call.aitel_agents?.agent_name || "Unknown"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="text-muted-foreground">Duration:</span>{" "}
-                <span className="font-mono">
-                  {call.duration_seconds ? `${call.duration_seconds}s` : "—"}
+        <ScrollArea className="flex-1 max-h-[60vh] pr-4">
+          <div className="space-y-4">
+            {/* Call Info */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 border-2 border-border">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="text-muted-foreground">Phone:</span>{" "}
+                  <span className="font-mono">{call.phone_number}</span>
                 </span>
-              </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="text-muted-foreground">Agent:</span>{" "}
+                  {call.aitel_agents?.agent_name || "Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="text-muted-foreground">Duration:</span>{" "}
+                  <span className="font-mono">
+                    {call.duration_seconds ? `${call.duration_seconds}s` : "—"}
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  <span className="text-muted-foreground">Task:</span>{" "}
+                  {call.tasks?.title || "Unknown"}
+                </span>
+              </div>
             </div>
+
+            {/* Status Badge */}
             <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="text-muted-foreground">Task:</span>{" "}
-                {call.tasks?.title || "Unknown"}
+              <Badge
+                className={
+                  call.status === "completed"
+                    ? "bg-chart-2/20 text-chart-2 border-chart-2"
+                    : "bg-muted text-muted-foreground"
+                }
+              >
+                {call.status === "completed" && <CheckCircle className="h-3 w-3 mr-1" />}
+                {call.status}
+              </Badge>
+              {isSelected && (
+                <Badge variant="outline" className="bg-chart-2/20 text-chart-2 border-chart-2">
+                  Already Submitted
+                </Badge>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">
+                {formatDistanceToNow(new Date(call.created_at), { addSuffix: true })}
               </span>
             </div>
-          </div>
 
-          {/* Status Badge */}
-          <div className="flex items-center gap-2">
-            <Badge
-              className={
-                call.status === "completed"
-                  ? "bg-chart-2/20 text-chart-2 border-chart-2"
-                  : "bg-muted text-muted-foreground"
-              }
-            >
-              {call.status === "completed" && <CheckCircle className="h-3 w-3 mr-1" />}
-              {call.status}
-            </Badge>
-            {isSelected && (
-              <Badge variant="outline" className="bg-chart-2/20 text-chart-2 border-chart-2">
-                Already Submitted
-              </Badge>
-            )}
-            <span className="text-xs text-muted-foreground ml-auto">
-              {formatDistanceToNow(new Date(call.created_at), { addSuffix: true })}
-            </span>
-          </div>
+            <Separator />
 
-          <Separator />
-
-          {/* Audio Player */}
-          {audioUrl ? (
-            <div className="space-y-3">
-              <h4 className="font-medium flex items-center gap-2">
-                {call.uploaded_audio_url ? (
-                  <>
-                    <Music className="h-4 w-4" />
-                    Uploaded Audio
-                  </>
-                ) : (
-                  <>
-                    <Headphones className="h-4 w-4" />
-                    Call Recording
-                  </>
-                )}
-              </h4>
-              <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border">
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={togglePlayPause}
-                  className="h-10 w-10 shrink-0"
-                >
-                  {isPlaying ? (
-                    <Pause className="h-4 w-4" />
+            {/* Audio Player */}
+            {audioUrl ? (
+              <div className="space-y-3">
+                <h4 className="font-medium flex items-center gap-2">
+                  {call.uploaded_audio_url ? (
+                    <>
+                      <Music className="h-4 w-4" />
+                      Uploaded Audio
+                    </>
                   ) : (
-                    <Play className="h-4 w-4" />
+                    <>
+                      <Headphones className="h-4 w-4" />
+                      Call Recording
+                    </>
                   )}
-                </Button>
-                <div className="flex-1 space-y-1">
-                  <input
-                    type="range"
-                    min={0}
-                    max={duration || 100}
-                    value={currentTime}
-                    onChange={handleSeek}
-                    className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
-                  </div>
-                </div>
-                <audio
-                  ref={audioRef}
-                  src={audioUrl}
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onEnded={handleEnded}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <h4 className="font-medium flex items-center gap-2">
-                <Upload className="h-4 w-4" />
-                Upload Demo Audio
-              </h4>
-              <div className="p-4 bg-muted/30 border-2 border-dashed border-border text-center">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="audio/*"
-                  onChange={handleUploadAudio}
-                  className="hidden"
-                  id="audio-upload"
-                />
-                <Label
-                  htmlFor="audio-upload"
-                  className="cursor-pointer block"
-                >
-                  <div className="space-y-2">
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
-                        <p className="text-sm">Uploading...</p>
-                      </>
+                </h4>
+                <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border">
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={togglePlayPause}
+                    className="h-10 w-10 shrink-0"
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-4 w-4" />
                     ) : (
-                      <>
-                        <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                        <p className="text-sm">No recording synced. Click to upload audio</p>
-                        <p className="text-xs text-muted-foreground">
-                          Supports MP3, WAV, M4A (max 50MB)
-                        </p>
-                      </>
+                      <Play className="h-4 w-4" />
                     )}
+                  </Button>
+                  <div className="flex-1 space-y-1">
+                    <input
+                      type="range"
+                      min={0}
+                      max={duration || 100}
+                      value={currentTime}
+                      onChange={handleSeek}
+                      className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
                   </div>
-                </Label>
+                  <audio
+                    ref={audioRef}
+                    src={audioUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onEnded={handleEnded}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Transcript */}
-          <div className="space-y-2 flex-1 min-h-0">
-            <h4 className="font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Transcript
-            </h4>
-            {call.transcript ? (
-              <ScrollArea className="h-48 border-2 border-border bg-muted/30 p-3">
-                <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
-                  {call.transcript}
-                </pre>
-              </ScrollArea>
             ) : (
-              <div className="h-32 border-2 border-border bg-muted/30 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No transcript available</p>
+              <div className="space-y-3">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Upload Demo Audio
+                </h4>
+                <div className="p-4 bg-muted/30 border-2 border-dashed border-border text-center">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleUploadAudio}
+                    className="hidden"
+                    id="audio-upload"
+                  />
+                  <Label
+                    htmlFor="audio-upload"
+                    className="cursor-pointer block"
+                  >
+                    <div className="space-y-2">
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
+                          <p className="text-sm">Uploading...</p>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                          <p className="text-sm">No recording synced. Click to upload audio</p>
+                          <p className="text-xs text-muted-foreground">
+                            Supports MP3, WAV, M4A (max 50MB)
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </Label>
                 </div>
               </div>
             )}
+
+            {/* Transcript */}
+            <div className="space-y-2">
+              <h4 className="font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Transcript
+              </h4>
+              {call.transcript ? (
+                <div className="border-2 border-border bg-muted/30 p-3 max-h-48 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+                    {call.transcript}
+                  </pre>
+                </div>
+              ) : (
+                <div className="h-32 border-2 border-border bg-muted/30 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No transcript available</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </ScrollArea>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
