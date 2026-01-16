@@ -39,15 +39,23 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace("Bearer ", "");
     
-    const { data: claimsData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !claimsData?.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Verify user using getClaims (works with signing-keys)
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    
+    let userId: string;
+    if (claimsError || !claimsData?.claims) {
+      // Fallback to getUser for backward compatibility
+      const { data: userData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !userData?.user) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      userId = userData.user.id;
+    } else {
+      userId = claimsData.claims.sub as string;
     }
-
-    const userId = claimsData.user.id;
     const body: SyncRequest = await req.json();
     const { campaign_id, sheet_url } = body;
 
