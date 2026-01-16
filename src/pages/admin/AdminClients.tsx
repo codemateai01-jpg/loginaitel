@@ -25,13 +25,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,8 +38,15 @@ import {
   Bot,
   CreditCard,
   Loader2,
+  ArrowLeft,
+  CheckCircle,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 interface Client {
   id: string;
@@ -60,16 +60,20 @@ interface Client {
   calls_count: number;
 }
 
+type CreateStep = "details" | "otp" | "success";
+
 export default function AdminClients() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [createStep, setCreateStep] = useState<CreateStep>("details");
+  const [otp, setOtp] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [newClient, setNewClient] = useState({
-    email: "",
     full_name: "",
     phone: "",
-    password: "",
   });
 
   // Fetch clients with stats
@@ -142,41 +146,134 @@ export default function AdminClients() {
     },
   });
 
-  // Add client mutation
-  const addClientMutation = useMutation({
-    mutationFn: async (clientData: typeof newClient) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
+  // Format phone for display (10 digits only)
+  const formatPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits.slice(0, 10);
+  };
 
-      const response = await supabase.functions.invoke("create-user", {
-        body: {
-          email: clientData.email,
-          password: clientData.password,
-          full_name: clientData.full_name || null,
-          phone: clientData.phone || null,
-          role: "client",
+  // Send OTP to client's phone
+  const handleSendOtp = async () => {
+    if (newClient.phone.length !== 10) {
+      toast({
+        title: "Invalid Phone",
+        description: "Please enter a valid 10-digit phone number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingOtp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-otp", {
+        body: { phone: newClient.phone },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "OTP Sent",
+        description: `Verification code sent to +91 ${newClient.phone}`,
+      });
+      setCreateStep("otp");
+    } catch (error: any) {
+      toast({
+        title: "Failed to Send OTP",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  // Verify OTP and create client account
+  const handleVerifyAndCreate = async () => {
+    if (otp.length !== 6) {
+      toast({
+        title: "Invalid OTP",
+        description: "Please enter the 6-digit verification code",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setVerifyingOtp(true);
+    try {
+      // First verify the OTP
+      const { data: verifyData, error: verifyError } = await supabase.functions.invoke("verify-otp-admin", {
+        body: { 
+          phone: newClient.phone, 
+          otp,
+          full_name: newClient.full_name,
         },
       });
 
-      if (response.error) throw new Error(response.error.message);
-      if (response.data?.error) throw new Error(response.data.error);
-      return response.data;
-    },
-    onSuccess: () => {
-      toast({ title: "Client Created", description: "New client account has been created." });
-      setIsAddDialogOpen(false);
-      setNewClient({ email: "", full_name: "", phone: "", password: "" });
-      queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
-    },
-    onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
+      if (verifyError) throw verifyError;
+      if (verifyData?.error) throw new Error(verifyData.error);
 
+      toast({
+        title: "Client Created",
+        description: "Client account has been verified and created successfully",
+      });
+      
+      setCreateStep("success");
+      queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
+    } catch (error: any) {
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid or expired OTP",
+        variant: "destructive",
+      });
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResendOtp = async () => {
+    setSendingOtp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-otp", {
+        body: { phone: newClient.phone },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "OTP Resent",
+        description: `New verification code sent to +91 ${newClient.phone}`,
+      });
+      setOtp("");
+    } catch (error: any) {
+      toast({
+        title: "Failed to Resend",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  // Reset dialog state
+  const handleDialogClose = (open: boolean) => {
+    setIsAddDialogOpen(open);
+    if (!open) {
+      setTimeout(() => {
+        setCreateStep("details");
+        setNewClient({ full_name: "", phone: "" });
+        setOtp("");
+      }, 200);
+    }
+  };
 
   const filteredClients = clients.filter((client) =>
     client.email.toLowerCase().includes(search.toLowerCase()) ||
-    client.full_name?.toLowerCase().includes(search.toLowerCase())
+    client.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    client.phone?.includes(search)
   );
 
   const totalCredits = clients.reduce((sum, c) => sum + c.credits, 0);
@@ -194,7 +291,7 @@ export default function AdminClients() {
               Manage client accounts and monitor their usage
             </p>
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <Dialog open={isAddDialogOpen} onOpenChange={handleDialogClose}>
             <DialogTrigger asChild>
               <Button className="gap-2">
                 <UserPlus className="h-4 w-4" />
@@ -202,63 +299,165 @@ export default function AdminClients() {
               </Button>
             </DialogTrigger>
             <DialogContent className="border-2">
-              <DialogHeader>
-                <DialogTitle>Add New Client</DialogTitle>
-                <DialogDescription>Create a new client account</DialogDescription>
-              </DialogHeader>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  addClientMutation.mutate(newClient);
-                }}
-                className="space-y-4"
-              >
-                <div className="space-y-2">
-                  <Label>Email *</Label>
-                  <Input
-                    type="email"
-                    required
-                    value={newClient.email}
-                    onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
-                    className="border-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input
-                    value={newClient.full_name}
-                    onChange={(e) => setNewClient({ ...newClient, full_name: e.target.value })}
-                    className="border-2"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Password *</Label>
-                  <Input
-                    type="password"
-                    required
-                    value={newClient.password}
-                    onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
-                    className="border-2"
-                    placeholder="Minimum 6 characters"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input
-                    value={newClient.phone}
-                    onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
-                    className="border-2"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={addClientMutation.isPending}>
-                    {addClientMutation.isPending ? "Creating..." : "Create Client"}
-                  </Button>
-                </div>
-              </form>
+              {createStep === "details" && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Add New Client</DialogTitle>
+                    <DialogDescription>
+                      Enter client details. An OTP will be sent to verify the phone number.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label>Full Name</Label>
+                      <Input
+                        value={newClient.full_name}
+                        onChange={(e) => setNewClient({ ...newClient, full_name: e.target.value })}
+                        className="border-2"
+                        placeholder="Enter client name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone Number *</Label>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 px-3 py-2 border-2 border-border bg-muted text-muted-foreground">
+                          <span>+91</span>
+                        </div>
+                        <Input
+                          type="tel"
+                          required
+                          value={newClient.phone}
+                          onChange={(e) => setNewClient({ ...newClient, phone: formatPhoneInput(e.target.value) })}
+                          className="border-2 flex-1"
+                          placeholder="10-digit mobile number"
+                          maxLength={10}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Client will use this number to login via OTP
+                      </p>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                      <Button type="button" variant="outline" onClick={() => handleDialogClose(false)}>
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleSendOtp} 
+                        disabled={sendingOtp || newClient.phone.length !== 10}
+                      >
+                        {sendingOtp ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Sending OTP...
+                          </>
+                        ) : (
+                          "Send OTP & Verify"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {createStep === "otp" && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Verify Phone Number</DialogTitle>
+                    <DialogDescription>
+                      Enter the 6-digit OTP sent to +91 {newClient.phone}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-6 pt-2">
+                    <div className="flex justify-center">
+                      <InputOTP
+                        maxLength={6}
+                        value={otp}
+                        onChange={setOtp}
+                      >
+                        <InputOTPGroup>
+                          <InputOTPSlot index={0} />
+                          <InputOTPSlot index={1} />
+                          <InputOTPSlot index={2} />
+                          <InputOTPSlot index={3} />
+                          <InputOTPSlot index={4} />
+                          <InputOTPSlot index={5} />
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
+                    
+                    <div className="flex justify-center gap-4 text-sm">
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={sendingOtp}
+                        className="text-primary hover:underline disabled:opacity-50"
+                      >
+                        {sendingOtp ? "Sending..." : "Resend OTP"}
+                      </button>
+                      <span className="text-muted-foreground">|</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateStep("details");
+                          setOtp("");
+                        }}
+                        className="text-muted-foreground hover:underline"
+                      >
+                        Change Number
+                      </button>
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setCreateStep("details");
+                          setOtp("");
+                        }}
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Back
+                      </Button>
+                      <Button 
+                        onClick={handleVerifyAndCreate} 
+                        disabled={verifyingOtp || otp.length !== 6}
+                      >
+                        {verifyingOtp ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          "Verify & Create Client"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {createStep === "success" && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Client Created Successfully</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col items-center py-6 space-y-4">
+                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <CheckCircle className="h-8 w-8 text-primary" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-medium">{newClient.full_name || "New Client"}</p>
+                      <p className="text-muted-foreground">+91 {newClient.phone}</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center">
+                      The client can now login using their phone number with OTP verification.
+                    </p>
+                    <Button onClick={() => handleDialogClose(false)} className="mt-4">
+                      Done
+                    </Button>
+                  </div>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -325,7 +524,7 @@ export default function AdminClients() {
               <TableHeader>
                 <TableRow className="border-b-2 border-border hover:bg-transparent">
                   <TableHead className="font-bold">Client</TableHead>
-                  <TableHead className="font-bold">Email</TableHead>
+                  <TableHead className="font-bold">Phone</TableHead>
                   <TableHead className="font-bold">Credits</TableHead>
                   <TableHead className="font-bold">Agents</TableHead>
                   <TableHead className="font-bold">Calls</TableHead>
@@ -339,7 +538,13 @@ export default function AdminClients() {
                     <TableCell className="font-medium">
                       {client.full_name || "—"}
                     </TableCell>
-                    <TableCell>{client.email}</TableCell>
+                    <TableCell>
+                      {client.phone ? (
+                        <span className="font-mono text-sm">{client.phone}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono">
                         {client.credits.toLocaleString()}
