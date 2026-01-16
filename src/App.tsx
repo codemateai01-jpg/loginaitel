@@ -18,6 +18,7 @@ import ClientAgents from "./pages/client/ClientAgents";
 import ClientBilling from "./pages/client/ClientBilling";
 import ClientPricing from "./pages/client/ClientPricing";
 import ClientSettings from "./pages/client/ClientSettings";
+import ClientDataSecurity from "./pages/client/ClientDataSecurity";
 import ClientCampaigns from "./pages/client/ClientCampaigns";
 import CampaignDetail from "./pages/client/CampaignDetail";
 import CampaignAnalytics from "./pages/client/CampaignAnalytics";
@@ -348,6 +349,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
                   <ClientSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/security"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientDataSecurity />
                 </ProtectedRoute>
               }
             />

@@ -19,6 +19,7 @@ import {
   Megaphone,
   TrendingUp,
   Package,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -66,6 +67,7 @@ const clientNavItems = [
   { icon: Phone, label: "Phone Numbers", href: "/client/phone-numbers" },
   { icon: Tag, label: "Pricing Plans", href: "/client/pricing" },
   { icon: CreditCard, label: "Credits & Billing", href: "/client/billing" },
+  { icon: Shield, label: "Data Security", href: "/client/security" },
   { icon: Settings, label: "Settings", href: "/client/settings" },
 ];
 
