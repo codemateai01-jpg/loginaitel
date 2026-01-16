@@ -462,7 +462,19 @@ export interface ListExecutionsParams {
 }
 
 export async function getExecution(executionId: string): Promise<AitelResponse<CallExecution>> {
-  return callAitelProxy<CallExecution>("get-execution", { execution_id: executionId });
+  const res = await callAitelProxy<any>("get-execution", { execution_id: executionId });
+
+  if (res.error) return res as AitelResponse<CallExecution>;
+
+  // aitel-proxy normalizes a missing execution into a 200 with a sentinel payload
+  if (res.data && typeof res.data === "object" && (res.data as any).is_not_found) {
+    return {
+      data: null,
+      error: (res.data as any).error || "Agent execution not found",
+    };
+  }
+
+  return res as AitelResponse<CallExecution>;
 }
 
 export interface SyncCallStatusResponse {

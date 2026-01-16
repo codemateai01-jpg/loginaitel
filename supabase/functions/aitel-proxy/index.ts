@@ -995,10 +995,25 @@ serve(async (req) => {
       );
     }
     
+    // Normalize "execution not found" into a 200 so clients don't crash on 404s
+    // (Bolna returns a 404 with { message: "Agent execution not found" } for some executions.)
+    if (action === "get-execution" && response.status === 404) {
+      const notFoundMessage =
+        (data && (data.error || data.message)) || "Agent execution not found";
+
+      return new Response(
+        JSON.stringify({ is_not_found: true, error: notFoundMessage }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Apply data masking based on action type
     // Admin and engineers can see more data for specific workflows
     const isPrivilegedUser = userRole === "admin" || userRole === "engineer";
-    
+
     if (action === "get-agent" && data && !isPrivilegedUser) {
       // Mask system prompts for non-privileged users
       data = maskAgentData(data);
