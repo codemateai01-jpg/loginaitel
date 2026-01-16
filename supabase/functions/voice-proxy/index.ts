@@ -3,8 +3,8 @@
  * 
  * Architecture Goals:
  * - Frontend NEVER receives raw provider responses
- * - All third-party APIs (Bolna, LLM, TTS, STT, Telephony) accessed only from backend
- * - Strict response sanitization
+ * - All third-party APIs accessed only from backend
+ * - AES-256-GCM encryption for transcripts and summaries
  * - Secure recording access with server streaming
  * - Environment-based secrets only
  * - No console logging in production
@@ -13,6 +13,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptData, type EncryptedPayload } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,12 +36,11 @@ function debugLog(message: string, data?: unknown) {
   }
 }
 
-function errorLog(message: string, error?: unknown) {
-  // Always log errors but sanitize in production
+function errorLog(message: string, _error?: unknown) {
   if (IS_PRODUCTION) {
     console.error(`[voice-proxy] ${message}`);
   } else {
-    console.error(`[voice-proxy] ${message}`, error);
+    console.error(`[voice-proxy] ${message}`, _error);
   }
 }
 
@@ -51,7 +51,7 @@ interface SanitizedCallResponse {
   call_id: string;
   status: string;
   duration: number | null;
-  summary: string | null;
+  summary: EncryptedPayload | null;
   outcome: string | null;
   display_cost: string | null;
   timestamps: {
@@ -59,7 +59,6 @@ interface SanitizedCallResponse {
     ended_at: string | null;
     created_at: string;
   };
-  // Only these fields are exposed to frontend
   sentiment?: string | null;
   connected?: boolean;
   has_recording?: boolean;
@@ -70,44 +69,24 @@ interface SanitizedExecutionResponse {
   execution_id: string;
   status: string;
   duration: number | null;
-  summary: string | null;
+  summary: EncryptedPayload | null;
   outcome: string | null;
   display_cost: string | null;
   timestamps: {
     started_at: string | null;
     ended_at: string | null;
   };
-  transcript?: string | null;
+  transcript?: EncryptedPayload | null;
   has_recording?: boolean;
 }
 
 // ==========================================
-// ENCODING & SANITIZATION UTILITIES
+// SANITIZATION UTILITIES
 // ==========================================
-
-// Base64 encode for transport (decoded in frontend for display only)
-function encodeForTransport(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    return "enc:" + btoa(unescape(encodeURIComponent(value)));
-  } catch {
-    try {
-      return "enc:" + btoa(value);
-    } catch {
-      return null;
-    }
-  }
-}
-
-// Check if already encoded
-function isAlreadyEncoded(value: string | null | undefined): boolean {
-  return typeof value === "string" && value.startsWith("enc:");
-}
 
 // Calculate display cost (hides actual cost breakdown)
 function calculateDisplayCost(durationSeconds: number | null): string | null {
   if (!durationSeconds || durationSeconds <= 0) return null;
-  // Simple per-minute display calculation (actual billing is internal)
   const minutes = Math.ceil(durationSeconds / 60);
   return `${minutes} min`;
 }
@@ -126,26 +105,25 @@ function determineOutcome(status: string, sentiment?: string | null, connected?:
 }
 
 // ==========================================
-// CALL DATA SANITIZATION
+// CALL DATA SANITIZATION WITH ENCRYPTION
 // ==========================================
-function sanitizeCallData(call: Record<string, unknown>, tenantId?: string): SanitizedCallResponse {
+async function sanitizeCallData(call: Record<string, unknown>, _tenantId?: string): Promise<SanitizedCallResponse> {
   const durationSeconds = call.duration_seconds as number | null;
   const status = call.status as string;
   const sentiment = call.sentiment as string | null;
   const connected = call.connected as boolean;
   
-  // Encode summary if present
-  let sanitizedSummary: string | null = null;
-  if (call.summary) {
-    const summaryStr = call.summary as string;
-    sanitizedSummary = isAlreadyEncoded(summaryStr) ? summaryStr : encodeForTransport(summaryStr);
+  // Encrypt summary if present
+  let encryptedSummary: EncryptedPayload | null = null;
+  if (call.summary && typeof call.summary === "string") {
+    encryptedSummary = await encryptData(call.summary as string);
   }
   
   return {
     call_id: call.id as string,
     status,
     duration: durationSeconds,
-    summary: sanitizedSummary,
+    summary: encryptedSummary,
     outcome: determineOutcome(status, sentiment, connected),
     display_cost: calculateDisplayCost(durationSeconds),
     timestamps: {
@@ -161,9 +139,9 @@ function sanitizeCallData(call: Record<string, unknown>, tenantId?: string): San
 }
 
 // ==========================================
-// EXECUTION DATA SANITIZATION (from Bolna API)
+// EXECUTION DATA SANITIZATION WITH ENCRYPTION
 // ==========================================
-function sanitizeExecutionData(execution: Record<string, unknown>): SanitizedExecutionResponse & { recording_url?: string | null } {
+async function sanitizeExecutionData(execution: Record<string, unknown>): Promise<SanitizedExecutionResponse & { recording_url?: string | null }> {
   const telephonyData = (execution.telephony_data || {}) as Record<string, unknown>;
   const conversationTime = (execution.conversation_time ?? execution.conversation_duration) as number | undefined;
   
@@ -174,18 +152,16 @@ function sanitizeExecutionData(execution: Record<string, unknown>): SanitizedExe
     durationSeconds = Math.round(conversationTime);
   }
   
-  // Encode transcript and summary
-  let sanitizedTranscript: string | null = null;
-  let sanitizedSummary: string | null = null;
+  // Encrypt transcript and summary
+  let encryptedTranscript: EncryptedPayload | null = null;
+  let encryptedSummary: EncryptedPayload | null = null;
   
-  if (execution.transcript) {
-    const transcriptStr = execution.transcript as string;
-    sanitizedTranscript = isAlreadyEncoded(transcriptStr) ? transcriptStr : encodeForTransport(transcriptStr);
+  if (execution.transcript && typeof execution.transcript === "string") {
+    encryptedTranscript = await encryptData(execution.transcript as string);
   }
   
-  if (execution.summary) {
-    const summaryStr = execution.summary as string;
-    sanitizedSummary = isAlreadyEncoded(summaryStr) ? summaryStr : encodeForTransport(summaryStr);
+  if (execution.summary && typeof execution.summary === "string") {
+    encryptedSummary = await encryptData(execution.summary as string);
   }
   
   const status = execution.status as string;
@@ -194,14 +170,14 @@ function sanitizeExecutionData(execution: Record<string, unknown>): SanitizedExe
     execution_id: execution.id as string,
     status,
     duration: durationSeconds,
-    summary: sanitizedSummary,
+    summary: encryptedSummary,
     outcome: determineOutcome(status, null, durationSeconds ? durationSeconds >= 45 : false),
     display_cost: calculateDisplayCost(durationSeconds),
     timestamps: {
       started_at: execution.started_at as string | null,
       ended_at: execution.ended_at as string | null,
     },
-    transcript: sanitizedTranscript,
+    transcript: encryptedTranscript,
     has_recording: !!(telephonyData.recording_url),
   };
 }
@@ -213,7 +189,6 @@ async function streamRecording(
   recordingUrl: string,
   headers: Record<string, string>
 ): Promise<Response> {
-  // Fetch recording from provider
   const recordingResponse = await fetch(recordingUrl);
   
   if (!recordingResponse.ok) {
@@ -223,7 +198,6 @@ async function streamRecording(
     );
   }
   
-  // Stream the audio content through our proxy
   const audioBlob = await recordingResponse.arrayBuffer();
   
   return new Response(audioBlob, {
@@ -231,8 +205,8 @@ async function streamRecording(
     headers: {
       ...headers,
       "Content-Type": recordingResponse.headers.get("Content-Type") || "audio/mpeg",
-      "Cache-Control": "private, max-age=300", // 5 min cache for playback
-      "Content-Disposition": "inline", // Allow playback, not force download
+      "Cache-Control": "private, max-age=300",
+      "Content-Disposition": "inline",
     },
   });
 }
@@ -241,16 +215,12 @@ async function streamRecording(
 // GENERATE SHORT-LIVED SIGNED RECORDING URL
 // ==========================================
 function generateSignedRecordingUrl(callId: string, expiresInSeconds = 300): string {
-  // Generate a token that expires
   const expiresAt = Date.now() + (expiresInSeconds * 1000);
   const payload = { callId, exp: expiresAt };
   const token = btoa(JSON.stringify(payload));
-  
-  // Return URL pointing to our secure streaming endpoint
   return `${SUPABASE_URL}/functions/v1/voice-proxy?action=stream-recording&token=${token}`;
 }
 
-// Verify signed URL token
 function verifyRecordingToken(token: string): { callId: string; valid: boolean } {
   try {
     const decoded = JSON.parse(atob(token));
@@ -266,12 +236,6 @@ function verifyRecordingToken(token: string): { callId: string; valid: boolean }
 // ==========================================
 // TENANT ISOLATION
 // ==========================================
-interface TenantContext {
-  tenantId: string;
-  userId: string;
-  role: string;
-}
-
 // deno-lint-ignore no-explicit-any
 async function validateTenantAccess(
   _supabase: any,
@@ -279,21 +243,15 @@ async function validateTenantAccess(
   role: string,
   resourceTenantId?: string
 ): Promise<boolean> {
-  // Admins can access all tenants
   if (role === "admin") return true;
   
-  // Get user's tenant (client_id)
   if (role === "client") {
-    // User can only access their own data
     if (resourceTenantId && resourceTenantId !== userId) {
       return false;
     }
   }
   
-  // Engineers can access assigned resources
   if (role === "engineer") {
-    // Check if engineer is assigned to this tenant/resource
-    // For now, allow engineers to access demo calls and assigned tasks
     return true;
   }
   
@@ -304,13 +262,11 @@ async function validateTenantAccess(
 // MAIN REQUEST HANDLER
 // ==========================================
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Validate API key exists
     if (!BOLNA_API_KEY) {
       errorLog("BOLNA_API_KEY not configured");
       return new Response(
@@ -342,7 +298,6 @@ serve(async (req) => {
         );
       }
 
-      // Fetch the actual recording URL from database
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       
       // Try calls table first
@@ -376,7 +331,6 @@ serve(async (req) => {
         
         recordingUrl = demoCall?.recording_url || demoCall?.uploaded_audio_url;
         
-        // Try Bolna for demo calls too
         if (!recordingUrl && demoCall?.external_call_id) {
           const execResponse = await fetch(`${BOLNA_API_BASE}/executions/${demoCall.external_call_id}`, {
             headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
@@ -396,7 +350,6 @@ serve(async (req) => {
         );
       }
 
-      // Stream the recording through our proxy
       return streamRecording(recordingUrl, corsHeaders);
     }
 
@@ -414,7 +367,6 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace("Bearer ", "");
     
-    // Validate token
     const { data: claimsData, error: authError } = await supabase.auth.getClaims(token);
     if (authError || !claimsData?.claims) {
       return new Response(
@@ -425,7 +377,6 @@ serve(async (req) => {
     
     const userId = claimsData.claims.sub as string;
 
-    // Get user role
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
@@ -433,26 +384,20 @@ serve(async (req) => {
       .maybeSingle();
 
     const userRole = roleData?.role || "client";
-    
-    // Tenant context from header or default to userId for clients
     const tenantId = req.headers.get("x-tenant-id") || (userRole === "client" ? userId : undefined);
-
-    // Parse body for POST/PUT requests
-    const body = req.method !== "GET" ? await req.json() : null;
 
     // ==========================================
     // ACTION HANDLERS
     // ==========================================
     switch (action) {
       // ==========================================
-      // GET CALLS (sanitized response)
+      // GET CALLS (sanitized + encrypted response)
       // ==========================================
       case "get-calls": {
         const clientId = url.searchParams.get("client_id");
         const startDate = url.searchParams.get("start_date");
         const statusFilter = url.searchParams.get("status");
         
-        // Validate tenant access
         if (clientId && !(await validateTenantAccess(supabase, userId, userRole, clientId))) {
           return new Response(
             JSON.stringify({ error: "Forbidden" }),
@@ -484,8 +429,10 @@ serve(async (req) => {
           );
         }
 
-        // Sanitize all call data
-        const sanitizedCalls = data?.map((call) => sanitizeCallData(call, tenantId)) || [];
+        // Sanitize and encrypt all call data
+        const sanitizedCalls = await Promise.all(
+          (data || []).map((call) => sanitizeCallData(call, tenantId))
+        );
 
         return new Response(JSON.stringify(sanitizedCalls), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -493,7 +440,7 @@ serve(async (req) => {
       }
 
       // ==========================================
-      // GET SINGLE CALL DETAILS (sanitized)
+      // GET SINGLE CALL DETAILS (sanitized + encrypted)
       // ==========================================
       case "get-call": {
         const callId = url.searchParams.get("call_id");
@@ -507,9 +454,9 @@ serve(async (req) => {
         const { data: call, error } = await supabase
           .from("calls")
           .select(`
-            id, client_id, status, connected, duration_seconds,
+            id, status, connected, duration_seconds,
             started_at, ended_at, created_at, sentiment,
-            summary, recording_url, transcript, external_call_id
+            summary, recording_url, transcript, client_id
           `)
           .eq("id", callId)
           .maybeSingle();
@@ -529,34 +476,15 @@ serve(async (req) => {
           );
         }
 
-        // Build sanitized response with transcript
-        const sanitized = sanitizeCallData(call, tenantId);
-        
-        // Add encoded transcript if available
-        let encodedTranscript: string | null = null;
-        if (call.transcript) {
-          encodedTranscript = isAlreadyEncoded(call.transcript) 
-            ? call.transcript 
-            : encodeForTransport(call.transcript);
-        }
+        const sanitizedCall = await sanitizeCallData(call, tenantId);
 
-        // Generate signed recording URL if recording exists
-        let recordingUrl: string | null = null;
-        if (call.recording_url || call.external_call_id) {
-          recordingUrl = generateSignedRecordingUrl(callId);
-        }
-
-        return new Response(JSON.stringify({
-          ...sanitized,
-          transcript: encodedTranscript,
-          recording_url: recordingUrl,
-        }), {
+        return new Response(JSON.stringify(sanitizedCall), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       // ==========================================
-      // GET EXECUTION DETAILS (from Bolna, sanitized)
+      // GET EXECUTION DETAILS (from Bolna, sanitized + encrypted)
       // ==========================================
       case "get-execution": {
         const executionId = url.searchParams.get("execution_id");
@@ -567,51 +495,27 @@ serve(async (req) => {
           );
         }
 
-        // Fetch from Bolna
-        const response = await fetch(`${BOLNA_API_BASE}/executions/${executionId}`, {
+        const execResponse = await fetch(`${BOLNA_API_BASE}/executions/${executionId}`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            return new Response(
-              JSON.stringify({ error: "Execution not found" }),
-              { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
+        if (!execResponse.ok) {
           return new Response(
-            JSON.stringify({ error: "Failed to fetch execution" }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "Execution not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        const rawExecution = await response.json();
-        
-        // Strictly sanitize the response - remove ALL provider metadata
-        const sanitized = sanitizeExecutionData(rawExecution);
-        
-        // Generate signed recording URL if available
-        const telephonyData = (rawExecution.telephony_data || {}) as Record<string, unknown>;
-        if (telephonyData.recording_url) {
-          // Find internal call_id from our database using execution_id
-          const { data: callData } = await supabase
-            .from("calls")
-            .select("id")
-            .eq("external_call_id", executionId)
-            .maybeSingle();
-          
-          if (callData?.id) {
-            sanitized.recording_url = generateSignedRecordingUrl(callData.id);
-          }
-        }
+        const rawExecution = await execResponse.json();
+        const sanitizedExecution = await sanitizeExecutionData(rawExecution);
 
-        return new Response(JSON.stringify(sanitized), {
+        return new Response(JSON.stringify(sanitizedExecution), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       // ==========================================
-      // GET RECORDING URL (generates signed URL)
+      // GET RECORDING URL (short-lived signed URL)
       // ==========================================
       case "get-recording-url": {
         const callId = url.searchParams.get("call_id");
@@ -622,46 +526,58 @@ serve(async (req) => {
           );
         }
 
-        // Verify call exists and user has access
+        // Verify user has access to this call
         const { data: call } = await supabase
           .from("calls")
-          .select("id, client_id, recording_url, external_call_id")
+          .select("client_id, recording_url")
           .eq("id", callId)
           .maybeSingle();
 
         if (!call) {
-          return new Response(
-            JSON.stringify({ error: "Call not found" }),
-            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          // Try demo_calls
+          const { data: demoCall } = await supabase
+            .from("demo_calls")
+            .select("engineer_id, recording_url")
+            .eq("id", callId)
+            .maybeSingle();
+
+          if (!demoCall) {
+            return new Response(
+              JSON.stringify({ error: "Call not found" }),
+              { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // Check engineer access
+          if (userRole === "engineer" && demoCall.engineer_id !== userId) {
+            return new Response(
+              JSON.stringify({ error: "Forbidden" }),
+              { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          // Check client access
+          if (!(await validateTenantAccess(supabase, userId, userRole, call.client_id))) {
+            return new Response(
+              JSON.stringify({ error: "Forbidden" }),
+              { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
 
-        // Validate tenant access
-        if (!(await validateTenantAccess(supabase, userId, userRole, call.client_id))) {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Check if recording exists
-        if (!call.recording_url && !call.external_call_id) {
-          return new Response(
-            JSON.stringify({ error: "No recording available" }),
-            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Generate short-lived signed URL (5 minutes)
+        // Generate short-lived signed URL
         const signedUrl = generateSignedRecordingUrl(callId, 300);
 
-        return new Response(JSON.stringify({ url: signedUrl, expires_in: 300 }), {
+        return new Response(JSON.stringify({ 
+          url: signedUrl,
+          expires_in: 300,
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       // ==========================================
-      // TODAY'S STATS (aggregated, no raw data)
+      // GET TODAY'S STATS (admin only)
       // ==========================================
       case "get-today-stats": {
         if (userRole !== "admin") {
@@ -674,7 +590,7 @@ serve(async (req) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const { data: calls, error } = await supabase
+        const { data: todayCalls, error } = await supabase
           .from("calls")
           .select("status, connected, duration_seconds")
           .gte("created_at", today.toISOString());
@@ -686,21 +602,21 @@ serve(async (req) => {
           );
         }
 
-        const total = calls?.length || 0;
-        const completed = calls?.filter((c) => c.status === "completed").length || 0;
-        const connected = calls?.filter((c) => c.connected).length || 0;
-        const failed = calls?.filter((c) => c.status === "failed").length || 0;
-        const inProgress = calls?.filter((c) => ["initiated", "in_progress"].includes(c.status)).length || 0;
-        const totalDuration = calls?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0;
+        const total = todayCalls?.length || 0;
+        const completed = todayCalls?.filter((c) => c.status === "completed").length || 0;
+        const connected = todayCalls?.filter((c) => c.connected).length || 0;
+        const failed = todayCalls?.filter((c) => c.status === "failed").length || 0;
+        const inProgress = todayCalls?.filter((c) => ["initiated", "in_progress"].includes(c.status)).length || 0;
+        const totalDuration = todayCalls?.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) || 0;
 
         return new Response(JSON.stringify({
           total,
           completed,
           connected,
           failed,
-          in_progress: inProgress,
-          connection_rate: total > 0 ? Math.round((connected / total) * 100) : 0,
-          avg_duration: total > 0 ? Math.round(totalDuration / total) : 0,
+          inProgress,
+          connectionRate: total > 0 ? Math.round((connected / total) * 100) : 0,
+          avgDuration: completed > 0 ? Math.round(totalDuration / completed) : 0,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -712,10 +628,9 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
+
   } catch (error) {
-    errorLog("Request error", error);
-    
-    // Never expose stack traces to frontend
+    errorLog("Unhandled error");
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

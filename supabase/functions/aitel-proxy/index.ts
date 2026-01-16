@@ -3,6 +3,7 @@
  * 
  * Security Features:
  * - All provider responses sanitized before reaching frontend
+ * - AES-256-GCM encryption for transcripts and summaries
  * - No raw S3/provider URLs exposed
  * - Environment-based secrets only
  * - No console logging of sensitive data in production
@@ -11,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptData, type EncryptedPayload } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,56 +34,24 @@ function debugLog(message: string, data?: unknown) {
   }
 }
 
-function errorLog(message: string, error?: unknown) {
+function errorLog(message: string, _error?: unknown) {
   // Log errors but sanitize in production
   if (IS_PRODUCTION) {
     console.error(`[aitel-proxy] ${message}`);
   } else {
-    console.error(`[aitel-proxy] ${message}`, error);
+    console.error(`[aitel-proxy] ${message}`, _error);
   }
 }
 
 // ==========================================
-// ENCODING & MASKING UTILITIES
-// Encode sensitive data so it's not readable in DevTools but can be decoded in frontend
+// MASKING UTILITIES
 // ==========================================
-
-// Base64 encode a string (for network obfuscation)
-function encodeForTransport(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    return "enc:" + btoa(unescape(encodeURIComponent(value)));
-  } catch {
-    return "enc:" + btoa(value);
-  }
-}
 
 // Mask phone number to show only last 4 digits (truly masked, not recoverable)
 function maskPhone(phone: string | null | undefined): string {
   if (!phone) return "****";
   if (phone.length <= 4) return "****";
   return "*".repeat(phone.length - 4) + phone.slice(-4);
-}
-
-// Check if value is already encoded (starts with "enc:")
-function isAlreadyEncoded(value: string | null | undefined): boolean {
-  return typeof value === 'string' && value.startsWith('enc:');
-}
-
-// Encode transcript for transport - will be decoded in frontend for display
-// Skip if already encoded (Bolna API may return encoded data)
-function encodeTranscript(transcript: string | null | undefined): string | null {
-  if (!transcript) return null;
-  if (isAlreadyEncoded(transcript)) return transcript;
-  return encodeForTransport(transcript);
-}
-
-// Encode summary for transport
-// Skip if already encoded
-function encodeSummary(summary: string | null | undefined): string | null {
-  if (!summary) return null;
-  if (isAlreadyEncoded(summary)) return summary;
-  return encodeForTransport(summary);
 }
 
 // Mask system prompt - never expose (keep truly masked)
@@ -94,23 +64,6 @@ function maskSystemPrompt(prompt: string | null | undefined): string | null {
 function proxyRecordingUrl(url: string | null | undefined, executionId: string): string | null {
   if (!url) return null;
   return `proxy:recording:${executionId}`;
-}
-
-// Sanitize telephony_data to remove sensitive provider info
-function sanitizeTelephonyData(telephonyData: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!telephonyData) return null;
-  
-  const sanitized: Record<string, unknown> = {};
-  
-  // Keep only essential UI fields, mask phone numbers
-  if (telephonyData.to_number) sanitized.to_number = maskPhone(telephonyData.to_number as string);
-  if (telephonyData.from_number) sanitized.from_number = maskPhone(telephonyData.from_number as string);
-  if (telephonyData.duration) sanitized.duration = telephonyData.duration;
-  if (telephonyData.call_status) sanitized.call_status = telephonyData.call_status;
-  if (telephonyData.recording_url) sanitized.recording_url = telephonyData.recording_url; // Will be proxied later
-  
-  // Remove: provider, provider_id, sip_*, call_sid, trunk info, etc.
-  return sanitized;
 }
 
 // Calculate display cost (hides actual cost breakdown)
@@ -129,9 +82,9 @@ function determineOutcome(status: string, connected: boolean): string {
   return "pending";
 }
 
-// STRICT: Whitelist-based execution data sanitization
+// STRICT: Whitelist-based execution data sanitization with AES-256-GCM encryption
 // ONLY expose these fields - everything else is removed
-function maskExecutionData(execution: Record<string, unknown>, _includeRealRecordingUrl = false): Record<string, unknown> {
+async function maskExecutionData(execution: Record<string, unknown>): Promise<Record<string, unknown>> {
   const rawTelephonyData = (execution.telephony_data || {}) as Record<string, unknown>;
   
   // Calculate duration from various sources
@@ -144,6 +97,18 @@ function maskExecutionData(execution: Record<string, unknown>, _includeRealRecor
   
   const connected = durationSeconds ? durationSeconds >= 45 : false;
   const status = execution.status as string || "initiated";
+  
+  // Encrypt transcript and summary with AES-256-GCM
+  let encryptedTranscript: EncryptedPayload | null = null;
+  let encryptedSummary: EncryptedPayload | null = null;
+  
+  if (execution.transcript && typeof execution.transcript === "string") {
+    encryptedTranscript = await encryptData(execution.transcript as string);
+  }
+  
+  if (execution.summary && typeof execution.summary === "string") {
+    encryptedSummary = await encryptData(execution.summary as string);
+  }
   
   // Build STRICTLY sanitized response - WHITELIST ONLY
   const sanitized: Record<string, unknown> = {
@@ -163,20 +128,15 @@ function maskExecutionData(execution: Record<string, unknown>, _includeRealRecor
       ended_at: execution.updated_at,
     },
     
-    // Encoded sensitive content (decoded in frontend for display only)
-    transcript: execution.transcript ? (
-      isAlreadyEncoded(execution.transcript as string) 
-        ? execution.transcript 
-        : encodeTranscript(execution.transcript as string)
-    ) : null,
-    summary: execution.summary ? (
-      isAlreadyEncoded(execution.summary as string) 
-        ? execution.summary 
-        : encodeSummary(execution.summary as string)
-    ) : null,
+    // AES-256-GCM encrypted sensitive content
+    // Frontend must call decrypt-content endpoint to get readable content
+    transcript: encryptedTranscript,
+    summary: encryptedSummary,
     
     // Flags only (no raw data)
     has_recording: !!rawTelephonyData.recording_url,
+    has_transcript: !!execution.transcript,
+    has_summary: !!execution.summary,
     connected,
     
     // Sanitized telephony (masked phones, proxied recording)
@@ -190,13 +150,13 @@ function maskExecutionData(execution: Record<string, unknown>, _includeRealRecor
     },
   };
   
-  // Encode extracted_data if present
+  // Encrypt extracted_data if present
   if (execution.extracted_data && execution.extracted_data !== "{}") {
     const extractedStr = typeof execution.extracted_data === 'string' 
       ? execution.extracted_data 
       : JSON.stringify(execution.extracted_data);
     if (extractedStr !== "{}" && extractedStr !== "null") {
-      sanitized.extracted_data = isAlreadyEncoded(extractedStr) ? extractedStr : encodeForTransport(extractedStr);
+      sanitized.extracted_data = await encryptData(extractedStr);
     }
   }
   
@@ -483,473 +443,161 @@ serve(async (req) => {
           .eq("is_active", true)
           .maybeSingle();
 
-        if (!clientPhone?.phone_number) {
-          return new Response(
-            JSON.stringify({ error: "No phone number allocated. Please contact admin to allocate a phone number." }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+        const fromNumber = clientPhone?.phone_number;
+        debugLog("Making call", { hasFromNumber: !!fromNumber });
 
-        // Make outbound call via Bolna - POST /call using the actual Bolna agent ID
-        response = await fetch(`${BOLNA_API_BASE}/call`, {
+        // Make call via Bolna
+        const callPayload = {
+          agent_id: agentRecord.external_agent_id,
+          recipient_phone_number: body.phone_number,
+          from_phone_number: fromNumber,
+          retry_if_busy: true,
+          recipient_data: body.recipient_data || {},
+        };
+
+        response = await fetch(`${BOLNA_API_BASE}/v2/call`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            agent_id: agentRecord.external_agent_id,
-            recipient_phone_number: body.phone_number,
-            from_phone_number: clientPhone.phone_number,
-            user_data: body.user_data,
-          }),
-        });
-
-        if (response.ok) {
-          const callResult = await response.json();
-          
-          // Create call record in database - execution_id is the call identifier
-          await supabase.from("calls").insert({
-            lead_id: body.phone_number, // Store phone number as lead_id for reference
-            agent_id: body.agent_id,
-            client_id: body.client_id,
-            external_call_id: callResult.execution_id,
-            status: "initiated",
-            started_at: new Date().toISOString(),
-          });
-
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              execution_id: callResult.execution_id,
-              status: callResult.status,
-              message: callResult.message 
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        break;
-
-      case "make-demo-call":
-        // Demo calls for engineers - no credit check, phone number passed directly
-        if (userRole !== "admin" && userRole !== "engineer") {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const demoAgentId = body.agent_id; // This is the external Bolna agent ID
-        const recipientPhone = body.recipient_phone_number;
-
-        if (!demoAgentId || !recipientPhone) {
-          return new Response(
-            JSON.stringify({ error: "agent_id and recipient_phone_number are required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Make outbound demo call via Bolna
-        debugLog("Making demo call");
-        
-        const demoCallResponse = await fetch(`${BOLNA_API_BASE}/call`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${BOLNA_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            agent_id: demoAgentId,
-            recipient_phone_number: recipientPhone,
-            from_phone_number: body.from_phone_number,
-            user_data: body.user_data,
-          }),
-        });
-
-        if (demoCallResponse.ok) {
-          const demoCallResult = await demoCallResponse.json();
-          debugLog("Demo call initiated");
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              execution_id: demoCallResult.execution_id,
-              status: demoCallResult.status,
-              message: demoCallResult.message 
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } else {
-          errorLog("Demo call failed");
-          return new Response(
-            JSON.stringify({ error: "Call failed - please try again" }),
-            { status: demoCallResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-      case "get-call-status":
-        const callId = url.searchParams.get("call_id");
-        if (!callId) {
-          return new Response(
-            JSON.stringify({ error: "call_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        response = await fetch(`${BOLNA_API_BASE}/call/${callId}`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+          body: JSON.stringify(callPayload),
         });
         break;
 
       case "stop-call":
-        // Stop a queued or scheduled call - POST /call/{execution_id}/stop
-        const stopCallId = url.searchParams.get("execution_id");
-        if (!stopCallId) {
+        const stopExecutionId = url.searchParams.get("execution_id");
+        if (!stopExecutionId) {
           return new Response(
             JSON.stringify({ error: "execution_id is required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
-        response = await fetch(`${BOLNA_API_BASE}/call/${stopCallId}/stop`, {
+
+        response = await fetch(`${BOLNA_API_BASE}/executions/${stopExecutionId}/stop`, {
           method: "POST",
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+
+      case "get-execution":
+        const execId = url.searchParams.get("execution_id");
+        if (!execId) {
+          return new Response(
+            JSON.stringify({ error: "execution_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        debugLog("Fetching execution", { execId });
+        response = await fetch(`${BOLNA_API_BASE}/executions/${execId}`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
 
         if (response.ok) {
-          // Update call record status
-          await supabase
-            .from("calls")
-            .update({ status: "stopped" })
-            .eq("external_call_id", stopCallId);
-        }
-        break;
-
-      // ==========================================
-      // EXECUTION / CALL HISTORY
-      // ==========================================
-      case "get-execution":
-        const executionId = url.searchParams.get("execution_id");
-        if (!executionId) {
-          return new Response(
-            JSON.stringify({ error: "execution_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        // GET /executions/{execution_id}
-        response = await fetch(`${BOLNA_API_BASE}/executions/${executionId}`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-        break;
-
-      case "sync-call-status": {
-        // Sync call status from Bolna to our database
-        const syncExecutionId = url.searchParams.get("execution_id");
-        const internalCallId = url.searchParams.get("call_id");
-        
-        if (!syncExecutionId || !internalCallId) {
-          return new Response(
-            JSON.stringify({ error: "execution_id and call_id are required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Fetch execution data from Bolna
-        const execResponse = await fetch(`${BOLNA_API_BASE}/executions/${syncExecutionId}`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-
-        if (!execResponse.ok) {
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch execution from Bolna" }),
-            { status: execResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const executionData = await execResponse.json();
-        debugLog("Execution data fetched");
-
-        // Map Bolna status to our DB status (Bolna uses hyphens, we use underscores)
-        const bolnaStatus = executionData.status || "initiated";
-        const telephonyData = executionData.telephony_data || {};
-        const conversationTime = executionData.conversation_time || executionData.conversation_duration;
-        
-        // Duration in seconds from telephony_data.duration (string) or conversation_time (number)
-        let durationSeconds = 0;
-        if (telephonyData.duration) {
-          durationSeconds = Math.round(parseFloat(telephonyData.duration)) || 0;
-        } else if (conversationTime !== undefined) {
-          durationSeconds = Math.round(conversationTime);
-        }
-        
-        // Terminal statuses - these indicate the call has ended
-        const terminalBolnaStatuses = ["completed", "call-disconnected", "no-answer", "busy", "failed", "canceled", "stopped"];
-        const isTerminal = terminalBolnaStatuses.includes(bolnaStatus);
-        
-        // Determine if connected (45+ seconds) - only for terminal calls
-        const isConnected = isTerminal && durationSeconds >= 45;
-        
-        // Map Bolna statuses to our DB constraint-valid statuses
-        const statusMap: Record<string, string> = {
-          "initiated": "initiated",
-          "queued": "initiated",
-          "ringing": "ringing",
-          "in-progress": "in_progress",
-          "in_progress": "in_progress",
-          "completed": "completed",
-          "call-disconnected": "completed",
-          "no-answer": "no_answer",
-          "no_answer": "no_answer",
-          "busy": "failed",
-          "failed": "failed",
-          "canceled": "failed",
-          "stopped": "failed",
-          "balance-low": "failed",
-        };
-        
-        const finalStatus = statusMap[bolnaStatus] || "initiated";
-        
-        // Build update object - always update status
-        const updateData: Record<string, unknown> = {
-          status: finalStatus,
-        };
-        
-        // For terminal statuses, update all completion data
-        if (isTerminal) {
-          updateData.duration_seconds = durationSeconds;
-          updateData.connected = isConnected;
-          updateData.ended_at = new Date().toISOString();
+          const rawExecution = await response.json();
+          // Strictly sanitize and encrypt execution data
+          const maskedExecution = await maskExecutionData(rawExecution);
           
-          // Get recording URL and transcript if available
-          if (telephonyData.recording_url) {
-            updateData.recording_url = telephonyData.recording_url;
-          }
-          if (executionData.transcript) {
-            updateData.transcript = executionData.transcript;
-          }
+          return new Response(JSON.stringify(maskedExecution), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
-
-        debugLog("Updating call with status", { status: finalStatus });
-
-        // Update call in database
-        const { error: updateError } = await supabase
-          .from("calls")
-          .update(updateData)
-          .eq("id", internalCallId);
-
-        if (updateError) {
-          errorLog("Failed to update call");
-          return new Response(
-            JSON.stringify({ error: "Failed to update call record" }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Update lead status for terminal statuses
-        if (isTerminal) {
-          const { data: callData } = await supabase
-            .from("calls")
-            .select("lead_id")
-            .eq("id", internalCallId)
-            .single();
-            
-          if (callData?.lead_id) {
-            await supabase
-              .from("leads")
-              .update({ status: isConnected ? "connected" : "completed" })
-              .eq("id", callData.lead_id);
-          }
-        }
-
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            status: finalStatus,
-            duration_seconds: durationSeconds,
-            connected: isConnected,
-            aitel_status: bolnaStatus,
-            is_terminal: isTerminal
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      case "get-execution-logs":
-        const logsExecutionId = url.searchParams.get("execution_id");
-        if (!logsExecutionId) {
-          return new Response(
-            JSON.stringify({ error: "execution_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        // GET /executions/{execution_id}/log
-        response = await fetch(`${BOLNA_API_BASE}/executions/${logsExecutionId}/log`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
         break;
 
       case "list-agent-executions":
-        // GET /v2/agent/{agent_id}/executions with pagination and filters
-        const listExecAgentId = url.searchParams.get("agent_id");
-        if (!listExecAgentId) {
+        const listAgentId = url.searchParams.get("agent_id");
+        const page = url.searchParams.get("page") || "1";
+        const limit = url.searchParams.get("limit") || "50";
+
+        if (!listAgentId) {
           return new Response(
             JSON.stringify({ error: "agent_id is required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        const execQueryParams = new URLSearchParams();
-        
-        // Pagination
-        const pageNumber = url.searchParams.get("page_number");
-        const pageSize = url.searchParams.get("page_size");
-        if (pageNumber) execQueryParams.set("page_number", pageNumber);
-        if (pageSize) execQueryParams.set("page_size", pageSize);
-        
-        // Filters
-        const status = url.searchParams.get("status");
-        const callType = url.searchParams.get("call_type");
-        const provider = url.searchParams.get("provider");
-        const answeredByVoicemail = url.searchParams.get("answered_by_voice_mail");
-        const batchId = url.searchParams.get("batch_id");
-        const fromDate = url.searchParams.get("from");
-        const toDate = url.searchParams.get("to");
-        
-        if (status) execQueryParams.set("status", status);
-        if (callType) execQueryParams.set("call_type", callType);
-        if (provider) execQueryParams.set("provider", provider);
-        if (answeredByVoicemail) execQueryParams.set("answered_by_voice_mail", answeredByVoicemail);
-        if (batchId) execQueryParams.set("batch_id", batchId);
-        if (fromDate) execQueryParams.set("from", fromDate);
-        if (toDate) execQueryParams.set("to", toDate);
-        
         response = await fetch(
-          `${BOLNA_API_BASE}/v2/agent/${listExecAgentId}/executions?${execQueryParams}`,
-          { headers: { Authorization: `Bearer ${BOLNA_API_KEY}` } }
+          `${BOLNA_API_BASE}/v2/agent/${listAgentId}/executions?page=${page}&limit=${limit}`,
+          {
+            headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+          }
         );
-        break;
 
-      // ==========================================
-      // VOICES
-      // ==========================================
-      case "list-voices":
-        response = await fetch(`${BOLNA_API_BASE}/voice/all`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
+        if (response.ok) {
+          const rawData = await response.json();
+          // Encrypt all execution data
+          const maskedData = await Promise.all(
+            (rawData.data || rawData).map((exec: Record<string, unknown>) => 
+              maskExecutionData(exec)
+            )
+          );
+          
+          return new Response(JSON.stringify({
+            data: maskedData,
+            pagination: rawData.pagination || { page: parseInt(page), limit: parseInt(limit) }
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         break;
 
       // ==========================================
       // BATCH MANAGEMENT
       // ==========================================
-      case "create-batch": {
-        // Create batch for agent - requires multipart/form-data with CSV
-        if (userRole !== "admin" && userRole !== "client") {
+      case "create-batch":
+        if (!body.agent_id || !body.leads) {
           return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const createBatchAgentId = body?.agent_id;
-        const csvContent = body?.csv_content;
-        const fromPhoneNumber = body?.from_phone_number;
-
-        if (!createBatchAgentId || !csvContent) {
-          return new Response(
-            JSON.stringify({ error: "agent_id and csv_content are required" }),
+            JSON.stringify({ error: "agent_id and leads are required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // Create FormData for multipart upload
-        const formData = new FormData();
-        formData.append("agent_id", createBatchAgentId);
-        formData.append("file", new Blob([csvContent], { type: "text/csv" }), "batch.csv");
-        if (fromPhoneNumber) {
-          formData.append("from_phone_number", fromPhoneNumber);
+        // Get external agent ID
+        const { data: batchAgentRecord } = await supabase
+          .from("aitel_agents")
+          .select("external_agent_id")
+          .eq("id", body.agent_id)
+          .maybeSingle();
+
+        if (!batchAgentRecord?.external_agent_id) {
+          return new Response(
+            JSON.stringify({ error: "Agent not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
-        response = await fetch(`${BOLNA_API_BASE}/batches`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/batch`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
+            "Content-Type": "application/json",
           },
-          body: formData,
+          body: JSON.stringify({
+            agent_id: batchAgentRecord.external_agent_id,
+            leads: body.leads,
+            batch_name: body.batch_name,
+          }),
         });
         break;
-      }
 
-      case "get-batch": {
-        const getBatchId = url.searchParams.get("batch_id");
-        if (!getBatchId) {
+      case "get-batch":
+        const batchId = url.searchParams.get("batch_id");
+        if (!batchId) {
           return new Response(
             JSON.stringify({ error: "batch_id is required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
-        response = await fetch(`${BOLNA_API_BASE}/batches/${getBatchId}`, {
+
+        response = await fetch(`${BOLNA_API_BASE}/v2/batch/${batchId}`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
         break;
-      }
 
-      case "list-batches": {
-        const listBatchesAgentId = url.searchParams.get("agent_id");
-        if (!listBatchesAgentId) {
-          return new Response(
-            JSON.stringify({ error: "agent_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        response = await fetch(`${BOLNA_API_BASE}/batches/${listBatchesAgentId}/all`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-        break;
-      }
-
-      case "schedule-batch": {
-        if (userRole !== "admin" && userRole !== "client") {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const scheduleBatchId = url.searchParams.get("batch_id");
-        const scheduledAt = body?.scheduled_at;
-
-        if (!scheduleBatchId || !scheduledAt) {
-          return new Response(
-            JSON.stringify({ error: "batch_id and scheduled_at are required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Schedule batch - uses multipart/form-data
-        const scheduleFormData = new FormData();
-        scheduleFormData.append("scheduled_at", scheduledAt);
-
-        response = await fetch(`${BOLNA_API_BASE}/batches/${scheduleBatchId}/schedule`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${BOLNA_API_KEY}`,
-          },
-          body: scheduleFormData,
-        });
-        break;
-      }
-
-      case "stop-batch": {
-        if (userRole !== "admin" && userRole !== "client") {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
+      case "stop-batch":
         const stopBatchId = url.searchParams.get("batch_id");
         if (!stopBatchId) {
           return new Response(
@@ -957,226 +605,139 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
-        response = await fetch(`${BOLNA_API_BASE}/batches/${stopBatchId}/stop`, {
+
+        response = await fetch(`${BOLNA_API_BASE}/v2/batch/${stopBatchId}/stop`, {
           method: "POST",
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
         break;
-      }
-
-      case "list-batch-executions": {
-        const batchExecId = url.searchParams.get("batch_id");
-        if (!batchExecId) {
-          return new Response(
-            JSON.stringify({ error: "batch_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        response = await fetch(`${BOLNA_API_BASE}/batches/${batchExecId}/executions`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-        break;
-      }
-
-      case "delete-batch": {
-        if (userRole !== "admin") {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const deleteBatchId = url.searchParams.get("batch_id");
-        if (!deleteBatchId) {
-          return new Response(
-            JSON.stringify({ error: "batch_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        response = await fetch(`${BOLNA_API_BASE}/batches/${deleteBatchId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-        break;
-      }
 
       // ==========================================
-      // PHONE NUMBERS
+      // VOICE & PHONE MANAGEMENT
       // ==========================================
-      case "search-phone-numbers": {
-        const country = url.searchParams.get("country");
-        if (!country) {
+      case "list-voices":
+        response = await fetch(`${BOLNA_API_BASE}/voices/all`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+
+      case "list-phone-numbers":
+        response = await fetch(`${BOLNA_API_BASE}/phone-numbers`, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+
+      case "search-phone-numbers":
+        const country = url.searchParams.get("country_iso") || "IN";
+        const type = url.searchParams.get("phone_number_type") || "local";
+        const state = url.searchParams.get("region");
+
+        let searchUrl = `${BOLNA_API_BASE}/phone-numbers/search?country_iso=${country}&phone_number_type=${type}`;
+        if (state) searchUrl += `&region=${state}`;
+
+        response = await fetch(searchUrl, {
+          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
+        });
+        break;
+
+      case "assign-phone-number":
+        const assignAgentId = url.searchParams.get("agent_id");
+        if (!assignAgentId || !body.phone_number) {
           return new Response(
-            JSON.stringify({ error: "country is required" }),
+            JSON.stringify({ error: "agent_id and phone_number are required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        const phoneSearchParams = new URLSearchParams();
-        phoneSearchParams.set("country", country);
-        
-        const pattern = url.searchParams.get("pattern");
-        if (pattern) {
-          phoneSearchParams.set("pattern", pattern);
-        }
-        
-        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/search?${phoneSearchParams}`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-        break;
-      }
-
-      case "list-phone-numbers": {
-        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/all`, {
-          headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
-        });
-        break;
-      }
-
-      case "assign-phone-number": {
-        // Admin only - assign phone number to an agent
-        if (userRole !== "admin") {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const phoneNumberId = body?.phone_number_id;
-        const assignAgentId = body?.agent_id; // null to unassign
-
-        if (!phoneNumberId) {
-          return new Response(
-            JSON.stringify({ error: "phone_number_id is required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Use PATCH /phone-numbers/{phone_number_id} to assign/unassign
-        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/${phoneNumberId}`, {
-          method: "PATCH",
+        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/agents/${assignAgentId}`, {
+          method: "PUT",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            agent_id: assignAgentId,
-          }),
+          body: JSON.stringify({ phone_number: body.phone_number }),
         });
-
-        if (response.ok) {
-          return new Response(
-            JSON.stringify({ message: assignAgentId ? "Phone number assigned successfully" : "Phone number unassigned successfully" }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
         break;
-      }
 
-      case "download-recording": {
-        // Proxy recording download to hide Bolna URL from clients
+      // ==========================================
+      // RECORDING DOWNLOAD (PROXY)
+      // ==========================================
+      case "download-recording":
         const recordingUrl = url.searchParams.get("url");
         if (!recordingUrl) {
           return new Response(
-            JSON.stringify({ error: "Recording URL is required" }),
+            JSON.stringify({ error: "url is required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // Fetch the recording from the external URL
-        const recordingResponse = await fetch(recordingUrl);
-        if (!recordingResponse.ok) {
+        try {
+          const audioResponse = await fetch(recordingUrl);
+          if (!audioResponse.ok) {
+            throw new Error("Failed to fetch recording");
+          }
+
+          const audioBuffer = await audioResponse.arrayBuffer();
+          return new Response(audioBuffer, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": audioResponse.headers.get("Content-Type") || "audio/mpeg",
+              "Cache-Control": "private, max-age=300",
+            },
+          });
+        } catch (err) {
+          errorLog("Recording download failed");
           return new Response(
-            JSON.stringify({ error: "Failed to fetch recording" }),
-            { status: recordingResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "Recording not available" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // Get the audio content
-        const audioBlob = await recordingResponse.arrayBuffer();
-        
-        // Return the audio with proper headers for download
-        return new Response(audioBlob, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "audio/mpeg",
-            "Content-Disposition": `attachment; filename="call-recording.mp3"`,
-          },
-        });
-      }
-
       default:
         return new Response(
-          JSON.stringify({ error: `Unknown action: ${action}` }),
+          JSON.stringify({ error: "Unknown action" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
 
-    // Forward Bolna response - handle non-JSON responses gracefully
-    const responseText = await response.text();
-    
-    // Try to parse as JSON, but handle HTML error pages gracefully
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      errorLog("Bolna API returned non-JSON response");
+    // Handle response from Bolna API
+    if (!response) {
       return new Response(
-        JSON.stringify({ 
-          error: `API returned non-JSON response (status ${response.status})`,
-          details: responseText.substring(0, 500)
-        }),
-        { status: response.status >= 400 ? response.status : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "No response from provider" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
-    // Normalize "execution not found" into a 200 so clients don't crash on 404s
-    // (Bolna returns a 404 with { message: "Agent execution not found" } for some executions.)
-    if (action === "get-execution" && response.status === 404) {
-      const notFoundMessage =
-        (data && (data.error || data.message)) || "Agent execution not found";
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      errorLog("Provider error", { status: response.status });
       return new Response(
-        JSON.stringify({ is_not_found: true, error: notFoundMessage }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Provider request failed" }),
+        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Apply data masking based on action type
-    // Admin and engineers can see more data for specific workflows
-    const isPrivilegedUser = userRole === "admin" || userRole === "engineer";
+    // Parse and potentially mask the response
+    const data = await response.json();
+    
+    // Mask agent data if it contains sensitive prompts
+    let sanitizedData = data;
+    if (action === "get-agent" && data) {
+      sanitizedData = maskAgentData(data);
+    }
+    if (action === "list-agents" && Array.isArray(data)) {
+      sanitizedData = data.map((agent: Record<string, unknown>) => maskAgentData(agent));
+    }
 
-    if (action === "get-agent" && data && !isPrivilegedUser) {
-      // Mask system prompts for non-privileged users
-      data = maskAgentData(data);
-    }
-    
-    if (action === "get-execution" && data) {
-      // Mask execution data - include real URL for playback for privileged users
-      data = maskExecutionData(data, isPrivilegedUser);
-    }
-    
-    if (action === "list-agent-executions" && data?.data && Array.isArray(data.data)) {
-      // Mask all executions in the list
-      data.data = data.data.map((exec: Record<string, unknown>) => 
-        maskExecutionData(exec, isPrivilegedUser)
-      );
-    }
-    
-    return new Response(JSON.stringify(data), {
-      status: response.status,
+    return new Response(JSON.stringify(sanitizedData), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error: unknown) {
-    errorLog("Proxy error", error);
+  } catch (error) {
+    errorLog("Unhandled error");
+    // Never expose raw errors in production
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
