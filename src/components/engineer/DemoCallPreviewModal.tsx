@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Play,
   Pause,
@@ -20,11 +23,15 @@ import {
   FileText,
   Headphones,
   CheckCircle,
+  Upload,
+  Loader2,
+  Music,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
-interface DemoCall {
+export interface DemoCall {
   id: string;
   task_id: string;
   agent_id: string;
@@ -36,6 +43,7 @@ interface DemoCall {
   created_at: string;
   external_call_id: string | null;
   recording_url: string | null;
+  uploaded_audio_url: string | null;
   transcript: string | null;
   tasks?: {
     title: string;
@@ -52,6 +60,7 @@ interface DemoCallPreviewModalProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (callId: string) => void;
   isSubmitting: boolean;
+  onRefresh?: () => void;
 }
 
 export function DemoCallPreviewModal({
@@ -60,7 +69,11 @@ export function DemoCallPreviewModal({
   onOpenChange,
   onSubmit,
   isSubmitting,
+  onRefresh,
 }: DemoCallPreviewModalProps) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -119,10 +132,89 @@ export function DemoCallPreviewModal({
     }
   };
 
+  const handleUploadAudio = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !call) return;
+
+    // Validate file type
+    if (!file.type.startsWith("audio/")) {
+      toast({
+        variant: "destructive",
+        title: "Invalid File",
+        description: "Please upload an audio file (MP3, WAV, etc.)",
+      });
+      return;
+    }
+
+    // Validate file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Please upload an audio file smaller than 50MB",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // Upload to storage
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${call.id}_${Date.now()}.${fileExt}`;
+      const filePath = `${call.task_id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("demo-audio")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("demo-audio")
+        .getPublicUrl(filePath);
+
+      // Update demo call with uploaded audio URL
+      const { error: updateError } = await supabase
+        .from("demo_calls")
+        .update({
+          uploaded_audio_url: urlData.publicUrl,
+          status: "completed",
+        })
+        .eq("id", call.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Audio Uploaded",
+        description: "Demo call audio has been uploaded successfully!",
+      });
+
+      onRefresh?.();
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: error.message || "Failed to upload audio file",
+      });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   if (!call) return null;
 
+  const audioUrl = call.uploaded_audio_url || call.recording_url;
   const isSelected = call.tasks?.selected_demo_call_id === call.id;
-  const canSubmit = call.status === "completed" && call.recording_url && !isSelected;
+  const canSubmit = call.status === "completed" && audioUrl && !isSelected;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -197,11 +289,20 @@ export function DemoCallPreviewModal({
           <Separator />
 
           {/* Audio Player */}
-          {call.recording_url ? (
+          {audioUrl ? (
             <div className="space-y-3">
               <h4 className="font-medium flex items-center gap-2">
-                <Headphones className="h-4 w-4" />
-                Recording
+                {call.uploaded_audio_url ? (
+                  <>
+                    <Music className="h-4 w-4" />
+                    Uploaded Audio
+                  </>
+                ) : (
+                  <>
+                    <Headphones className="h-4 w-4" />
+                    Call Recording
+                  </>
+                )}
               </h4>
               <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border">
                 <Button
@@ -232,7 +333,7 @@ export function DemoCallPreviewModal({
                 </div>
                 <audio
                   ref={audioRef}
-                  src={call.recording_url}
+                  src={audioUrl}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   onEnded={handleEnded}
@@ -240,10 +341,42 @@ export function DemoCallPreviewModal({
               </div>
             </div>
           ) : (
-            <div className="p-4 bg-muted/30 border-2 border-border text-center text-muted-foreground">
-              <Headphones className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No recording available</p>
-              <p className="text-xs">Sync the recording first to preview</p>
+            <div className="space-y-3">
+              <h4 className="font-medium flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Upload Demo Audio
+              </h4>
+              <div className="p-4 bg-muted/30 border-2 border-dashed border-border text-center">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleUploadAudio}
+                  className="hidden"
+                  id="audio-upload"
+                />
+                <Label
+                  htmlFor="audio-upload"
+                  className="cursor-pointer block"
+                >
+                  <div className="space-y-2">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
+                        <p className="text-sm">Uploading...</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                        <p className="text-sm">No recording synced. Click to upload audio</p>
+                        <p className="text-xs text-muted-foreground">
+                          Supports MP3, WAV, M4A (max 50MB)
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </Label>
+              </div>
             </div>
           )}
 

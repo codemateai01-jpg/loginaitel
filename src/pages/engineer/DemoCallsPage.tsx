@@ -24,7 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { getExecution } from "@/lib/aitel";
-import { DemoCallPreviewModal } from "@/components/engineer/DemoCallPreviewModal";
+import { DemoCallPreviewModal, DemoCall } from "@/components/engineer/DemoCallPreviewModal";
 import {
   Phone,
   Search,
@@ -38,28 +38,6 @@ import {
   Eye,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-
-interface DemoCall {
-  id: string;
-  task_id: string;
-  agent_id: string;
-  phone_number: string;
-  status: string;
-  duration_seconds: number | null;
-  started_at: string | null;
-  ended_at: string | null;
-  created_at: string;
-  external_call_id: string | null;
-  recording_url: string | null;
-  transcript: string | null;
-  tasks?: {
-    title: string;
-    selected_demo_call_id?: string;
-  };
-  aitel_agents?: {
-    agent_name: string;
-  };
-}
 
 export default function DemoCallsPage() {
   const { user } = useAuth();
@@ -277,9 +255,9 @@ export default function DemoCallsPage() {
       const call = demoCalls.find((c) => c.id === callId);
       if (!call) throw new Error("Call not found");
 
-      // Ensure recording is available
-      if (!call.recording_url) {
-        throw new Error("Please sync recording first before submitting");
+      // Ensure audio is available (either synced or uploaded)
+      if (!call.recording_url && !call.uploaded_audio_url) {
+        throw new Error("Please sync recording or upload audio before submitting");
       }
 
       // Update task with selected demo call and change status
@@ -461,13 +439,13 @@ export default function DemoCallsPage() {
                         {call.duration_seconds ? `${call.duration_seconds}s` : "—"}
                       </TableCell>
                       <TableCell>
-                        {call.recording_url ? (
+                        {call.recording_url || call.uploaded_audio_url ? (
                           <Badge variant="outline" className="bg-chart-2/20 text-chart-2 border-chart-2">
                             <CheckCircle className="h-3 w-3 mr-1" />
-                            Ready
+                            {call.uploaded_audio_url ? "Uploaded" : "Synced"}
                           </Badge>
                         ) : (
-                          <span className="text-muted-foreground text-sm">Not synced</span>
+                          <span className="text-muted-foreground text-sm">Not available</span>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
@@ -495,8 +473,8 @@ export default function DemoCallsPage() {
                               )}
                             </Button>
                           )}
-                          {/* Preview Button */}
-                          {call.recording_url && (
+                          {/* Preview Button - show if any audio available */}
+                          {(call.recording_url || call.uploaded_audio_url) ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -504,6 +482,15 @@ export default function DemoCallsPage() {
                             >
                               <Eye className="h-3 w-3 mr-1" />
                               Preview
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPreviewCall(call)}
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              Upload Audio
                             </Button>
                           )}
                         </div>
@@ -526,6 +513,10 @@ export default function DemoCallsPage() {
             setPreviewCall(null);
           }}
           isSubmitting={submitDemoMutation.isPending}
+          onRefresh={() => {
+            refetch();
+            setPreviewCall(null);
+          }}
         />
       </div>
     </DashboardLayout>
