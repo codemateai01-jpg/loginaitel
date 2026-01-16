@@ -8,6 +8,21 @@ export interface SecureProxyOptions {
   params?: Record<string, string>;
 }
 
+export interface MaskedProfile {
+  user_id: string;
+  display_id: string;
+  display_name: string;
+  display_email: string;
+  display_phone?: string;
+  avatar_url?: string | null;
+  created_at?: string;
+  role?: string;
+  // Only for own profile
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
 /**
  * Decode encoded fields in call/demo_call objects from the secure proxy.
  * These are base64-encoded for network obfuscation but need to be decoded for UI display.
@@ -81,7 +96,97 @@ export async function fetchSecureData<T>(options: SecureProxyOptions): Promise<T
   return decodeCallData(rawData);
 }
 
-// Specific typed fetch functions
+// ==========================================
+// PROFILE FETCHING (SECURE, MASKED)
+// ==========================================
+
+/**
+ * Fetch all profiles (admin only) - returns masked data
+ */
+export async function fetchProfiles(): Promise<MaskedProfile[]> {
+  return fetchSecureData<MaskedProfile[]>({
+    action: "profiles",
+  });
+}
+
+/**
+ * Fetch single profile - own profile returns full data, others masked
+ */
+export async function fetchProfile(userId?: string): Promise<MaskedProfile> {
+  return fetchSecureData<MaskedProfile>({
+    action: "get-profile",
+    params: userId ? { user_id: userId } : undefined,
+  });
+}
+
+/**
+ * Fetch all clients (admin only) - returns masked data
+ */
+export async function fetchClients(): Promise<MaskedProfile[]> {
+  return fetchSecureData<MaskedProfile[]>({
+    action: "clients",
+  });
+}
+
+/**
+ * Fetch all engineers (admin only) - returns masked data
+ */
+export async function fetchEngineers(): Promise<MaskedProfile[]> {
+  return fetchSecureData<MaskedProfile[]>({
+    action: "engineers",
+  });
+}
+
+// ==========================================
+// CLIENTS/ENGINEERS WITH STATS (ADMIN DASHBOARDS)
+// ==========================================
+
+export interface ClientWithStats {
+  user_id: string;
+  display_id: string;
+  display_name: string;
+  display_email: string;
+  display_phone?: string;
+  created_at: string;
+  credits: number;
+  agents_count: number;
+  calls_count: number;
+}
+
+export interface EngineerWithStats {
+  user_id: string;
+  display_id: string;
+  display_name: string;
+  display_email: string;
+  created_at: string;
+  total_points: number;
+  tasks_completed: number;
+  tasks_in_progress: number;
+  hours_this_month: number;
+}
+
+/**
+ * Fetch all clients with stats (admin only) - returns masked data with credits/agents/calls
+ */
+export async function fetchClientsWithStats(): Promise<ClientWithStats[]> {
+  return fetchSecureData<ClientWithStats[]>({
+    action: "clients-with-stats",
+  });
+}
+
+/**
+ * Fetch all engineers with stats (admin only) - returns masked data with points/tasks/hours
+ */
+export async function fetchEngineersWithStats(): Promise<EngineerWithStats[]> {
+  return fetchSecureData<EngineerWithStats[]>({
+    action: "engineers-with-stats",
+  });
+}
+
+// ==========================================
+// DEMO CALLS (ENCRYPTED TRANSCRIPTS)
+// ==========================================
+
 export async function fetchDemoCalls(engineerId?: string) {
   return fetchSecureData<any[]>({
     action: "demo_calls",
@@ -94,6 +199,10 @@ export async function fetchAdminDemoCalls() {
     action: "admin_demo_calls",
   });
 }
+
+// ==========================================
+// CALLS (ADMIN VIEW)
+// ==========================================
 
 export async function fetchCalls(options?: { startDate?: string; clientId?: string; status?: string }) {
   const params: Record<string, string> = {};
@@ -126,6 +235,10 @@ export async function fetchTodayStats() {
     action: "today_stats",
   });
 }
+
+// ==========================================
+// TASKS
+// ==========================================
 
 export async function fetchTasks(options?: { assignedTo?: string; status?: string }) {
   const params: Record<string, string> = {};

@@ -351,6 +351,147 @@ serve(async (req) => {
     }
 
     // ==========================================
+    // CLIENTS WITH STATS - Full admin dashboard view
+    // ==========================================
+    if (action === "clients-with-stats") {
+      if (userRole !== "admin") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get client roles
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "client");
+
+      const clientIds = (roles || []).map((r: Record<string, unknown>) => r.user_id as string);
+      if (clientIds.length === 0) {
+        return new Response(JSON.stringify([]), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get profiles, credits, agents, and calls
+      const [profilesRes, creditsRes, agentsRes, callsRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, full_name, email, phone, created_at").in("user_id", clientIds),
+        supabase.from("client_credits").select("client_id, balance").in("client_id", clientIds),
+        supabase.from("aitel_agents").select("client_id").in("client_id", clientIds),
+        supabase.from("calls").select("client_id").in("client_id", clientIds),
+      ]);
+
+      const profiles = profilesRes.data || [];
+      const credits = creditsRes.data || [];
+      const agents = agentsRes.data || [];
+      const calls = callsRes.data || [];
+
+      const clientsData = profiles.map((profile: Record<string, unknown>) => {
+        const credit = credits.find((c: Record<string, unknown>) => c.client_id === profile.user_id);
+        const agentCount = agents.filter((a: Record<string, unknown>) => a.client_id === profile.user_id).length;
+        const callCount = calls.filter((c: Record<string, unknown>) => c.client_id === profile.user_id).length;
+
+        return {
+          user_id: profile.user_id,
+          display_id: maskUuid(profile.user_id as string),
+          display_name: maskFullName(profile.full_name as string),
+          display_email: maskEmail(profile.email as string),
+          display_phone: maskPhone(profile.phone as string),
+          created_at: profile.created_at,
+          credits: (credit as Record<string, unknown>)?.balance || 0,
+          agents_count: agentCount,
+          calls_count: callCount,
+        };
+      });
+
+      return new Response(JSON.stringify(clientsData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
+    // ENGINEERS WITH STATS - Full admin dashboard view
+    // ==========================================
+    if (action === "engineers-with-stats") {
+      if (userRole !== "admin") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get engineer roles
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "engineer");
+
+      const engineerIds = (roles || []).map((r: Record<string, unknown>) => r.user_id as string);
+      if (engineerIds.length === 0) {
+        return new Response(JSON.stringify([]), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get month range for time entries
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+      // Get profiles, points, tasks, and time entries
+      const [profilesRes, pointsRes, tasksRes, timeRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, full_name, email, created_at").in("user_id", engineerIds),
+        supabase.from("engineer_points").select("engineer_id, total_points").in("engineer_id", engineerIds),
+        supabase.from("tasks").select("assigned_to, status").in("assigned_to", engineerIds),
+        supabase.from("time_entries").select("engineer_id, check_in_time, check_out_time, total_break_minutes").in("engineer_id", engineerIds).gte("check_in_time", monthStart).lte("check_in_time", monthEnd),
+      ]);
+
+      const profiles = profilesRes.data || [];
+      const points = pointsRes.data || [];
+      const tasks = tasksRes.data || [];
+      const timeEntries = timeRes.data || [];
+
+      const engineersData = profiles.map((profile: Record<string, unknown>) => {
+        const pointsRecord = points.find((p: Record<string, unknown>) => p.engineer_id === profile.user_id);
+        const userTasks = tasks.filter((t: Record<string, unknown>) => t.assigned_to === profile.user_id);
+        const completedTasks = userTasks.filter((t: Record<string, unknown>) => t.status === "completed" || t.status === "approved").length;
+        const inProgressTasks = userTasks.filter((t: Record<string, unknown>) => t.status === "in_progress").length;
+
+        // Calculate hours
+        const userTimeEntries = timeEntries.filter((te: Record<string, unknown>) => te.engineer_id === profile.user_id);
+        let totalMinutes = 0;
+        userTimeEntries.forEach((entry: Record<string, unknown>) => {
+          const checkIn = new Date(entry.check_in_time as string);
+          const checkOut = entry.check_out_time ? new Date(entry.check_out_time as string) : new Date();
+          const workMinutes = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000) - ((entry.total_break_minutes as number) || 0);
+          if (workMinutes > 0) totalMinutes += workMinutes;
+        });
+
+        return {
+          user_id: profile.user_id,
+          display_id: maskUuid(profile.user_id as string),
+          display_name: maskFullName(profile.full_name as string),
+          display_email: maskEmail(profile.email as string),
+          created_at: profile.created_at,
+          total_points: (pointsRecord as Record<string, unknown>)?.total_points || 0,
+          tasks_completed: completedTasks,
+          tasks_in_progress: inProgressTasks,
+          hours_this_month: Math.round(totalMinutes / 60 * 10) / 10,
+        };
+      });
+
+      // Sort by points
+      engineersData.sort((a: Record<string, unknown>, b: Record<string, unknown>) => 
+        ((b.total_points as number) || 0) - ((a.total_points as number) || 0)
+      );
+
+      return new Response(JSON.stringify(engineersData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
     // DEMO CALLS (ENGINEERS)
     // ==========================================
     if (action === "demo_calls") {

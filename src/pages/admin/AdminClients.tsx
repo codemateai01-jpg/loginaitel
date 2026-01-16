@@ -28,7 +28,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchClientsWithStats, type ClientWithStats } from "@/lib/secure-proxy";
 import {
   Search,
   UserPlus,
@@ -48,18 +49,6 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 
-interface Client {
-  id: string;
-  user_id: string;
-  email: string;
-  full_name: string | null;
-  phone: string | null;
-  created_at: string;
-  credits: number;
-  agents_count: number;
-  calls_count: number;
-}
-
 type CreateStep = "details" | "otp" | "success";
 
 export default function AdminClients() {
@@ -76,74 +65,10 @@ export default function AdminClients() {
     phone: "",
   });
 
-  // Fetch clients with stats
+  // Fetch clients with stats via secure proxy (masked data)
   const { data: clients = [], isLoading } = useQuery({
-    queryKey: ["admin-clients"],
-    queryFn: async () => {
-      // Get all users with client role
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "client");
-
-      if (rolesError) throw rolesError;
-      const clientIds = roles?.map((r) => r.user_id) || [];
-
-      if (clientIds.length === 0) return [];
-
-      // Get profiles
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .in("user_id", clientIds);
-
-      if (profilesError) throw profilesError;
-
-      // Get credits
-      const { data: credits, error: creditsError } = await supabase
-        .from("client_credits")
-        .select("client_id, balance")
-        .in("client_id", clientIds);
-
-      if (creditsError) throw creditsError;
-
-      // Get agent counts
-      const { data: agents, error: agentsError } = await supabase
-        .from("aitel_agents" as any)
-        .select("client_id")
-        .in("client_id", clientIds);
-
-      if (agentsError) throw agentsError;
-
-      // Get call counts
-      const { data: calls, error: callsError } = await supabase
-        .from("calls")
-        .select("client_id")
-        .in("client_id", clientIds);
-
-      if (callsError) throw callsError;
-
-      // Combine data
-      const clientsData: Client[] = (profiles || []).map((profile) => {
-        const credit = credits?.find((c) => c.client_id === profile.user_id);
-        const agentCount = (agents as any[] || []).filter((a: any) => a.client_id === profile.user_id).length || 0;
-        const callCount = calls?.filter((c) => c.client_id === profile.user_id).length || 0;
-
-        return {
-          id: profile.id,
-          user_id: profile.user_id,
-          email: profile.email,
-          full_name: profile.full_name,
-          phone: profile.phone,
-          created_at: profile.created_at,
-          credits: credit?.balance || 0,
-          agents_count: agentCount,
-          calls_count: callCount,
-        };
-      });
-
-      return clientsData;
-    },
+    queryKey: ["admin-clients-secure"],
+    queryFn: fetchClientsWithStats,
   });
 
   // Format phone for display (10 digits only)
@@ -271,9 +196,9 @@ export default function AdminClients() {
   };
 
   const filteredClients = clients.filter((client) =>
-    client.email.toLowerCase().includes(search.toLowerCase()) ||
-    client.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    client.phone?.includes(search)
+    client.display_email.toLowerCase().includes(search.toLowerCase()) ||
+    client.display_name.toLowerCase().includes(search.toLowerCase()) ||
+    client.display_phone?.includes(search)
   );
 
   const totalCredits = clients.reduce((sum, c) => sum + c.credits, 0);
@@ -534,13 +459,13 @@ export default function AdminClients() {
               </TableHeader>
               <TableBody>
                 {filteredClients.map((client) => (
-                  <TableRow key={client.id} className="border-b-2 border-border">
+                  <TableRow key={client.user_id} className="border-b-2 border-border">
                     <TableCell className="font-medium">
-                      {client.full_name || "—"}
+                      {client.display_name || "—"}
                     </TableCell>
                     <TableCell>
-                      {client.phone ? (
-                        <span className="font-mono text-sm">{client.phone}</span>
+                      {client.display_phone ? (
+                        <span className="font-mono text-sm">{client.display_phone}</span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

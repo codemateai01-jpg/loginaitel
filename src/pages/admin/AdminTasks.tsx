@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchEngineers, type MaskedProfile } from "@/lib/secure-proxy";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,22 +132,16 @@ export default function AdminTasks() {
     };
   }, [queryClient]);
 
-  // Fetch profiles for assigned engineers
+  // Fetch profiles for assigned engineers via secure proxy (masked)
   const { data: profiles } = useQuery({
-    queryKey: ["engineer-profiles"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email");
-      if (error) throw error;
-      return data;
-    },
+    queryKey: ["engineer-profiles-secure"],
+    queryFn: fetchEngineers,
   });
 
   const getEngineerName = (userId: string | null) => {
     if (!userId || !profiles) return "Unassigned";
     const profile = profiles.find((p) => p.user_id === userId);
-    return profile?.full_name || profile?.email || "Unknown";
+    return profile?.display_name || "Unknown";
   };
 
   const deleteMutation = useMutation({

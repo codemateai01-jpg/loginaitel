@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchEngineersWithStats, type EngineerWithStats } from "@/lib/secure-proxy";
 import {
   Search,
   UserPlus,
@@ -40,20 +41,7 @@ import {
   Loader2,
   TrendingUp,
 } from "lucide-react";
-import { format, differenceInMinutes, startOfMonth, endOfMonth } from "date-fns";
-
-interface Engineer {
-  id: string;
-  user_id: string;
-  email: string;
-  full_name: string | null;
-  phone: string | null;
-  created_at: string;
-  total_points: number;
-  tasks_completed: number;
-  tasks_in_progress: number;
-  hours_this_month: number;
-}
+import { format } from "date-fns";
 
 export default function AdminEngineers() {
   const { toast } = useToast();
@@ -67,92 +55,10 @@ export default function AdminEngineers() {
     password: "",
   });
 
-  // Fetch engineers with stats
+  // Fetch engineers with stats via secure proxy (masked data)
   const { data: engineers = [], isLoading } = useQuery({
-    queryKey: ["admin-engineers"],
-    queryFn: async () => {
-      // Get all users with engineer role
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "engineer");
-
-      if (rolesError) throw rolesError;
-      const engineerIds = roles?.map((r) => r.user_id) || [];
-
-      if (engineerIds.length === 0) return [];
-
-      // Get profiles
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .in("user_id", engineerIds);
-
-      if (profilesError) throw profilesError;
-
-      // Get points
-      const { data: points, error: pointsError } = await supabase
-        .from("engineer_points")
-        .select("engineer_id, total_points")
-        .in("engineer_id", engineerIds);
-
-      if (pointsError) throw pointsError;
-
-      // Get tasks
-      const { data: tasks, error: tasksError } = await supabase
-        .from("tasks")
-        .select("assigned_to, status")
-        .in("assigned_to", engineerIds);
-
-      if (tasksError) throw tasksError;
-
-      // Get time entries for this month
-      const monthStart = startOfMonth(new Date());
-      const monthEnd = endOfMonth(new Date());
-      
-      const { data: timeEntries, error: timeError } = await supabase
-        .from("time_entries")
-        .select("*")
-        .in("engineer_id", engineerIds)
-        .gte("check_in_time", monthStart.toISOString())
-        .lte("check_in_time", monthEnd.toISOString());
-
-      if (timeError) throw timeError;
-
-      // Combine data
-      const engineersData: Engineer[] = (profiles || []).map((profile) => {
-        const pointsRecord = points?.find((p) => p.engineer_id === profile.user_id);
-        const userTasks = tasks?.filter((t) => t.assigned_to === profile.user_id) || [];
-        const completedTasks = userTasks.filter((t) => t.status === "completed" || t.status === "approved").length;
-        const inProgressTasks = userTasks.filter((t) => t.status === "in_progress").length;
-        
-        // Calculate hours
-        const userTimeEntries = timeEntries?.filter((te) => te.engineer_id === profile.user_id) || [];
-        let totalMinutes = 0;
-        userTimeEntries.forEach((entry) => {
-          const checkIn = new Date(entry.check_in_time);
-          const checkOut = entry.check_out_time ? new Date(entry.check_out_time) : new Date();
-          const workMinutes = differenceInMinutes(checkOut, checkIn) - (entry.total_break_minutes || 0);
-          if (workMinutes > 0) totalMinutes += workMinutes;
-        });
-
-        return {
-          id: profile.id,
-          user_id: profile.user_id,
-          email: profile.email,
-          full_name: profile.full_name,
-          phone: profile.phone,
-          created_at: profile.created_at,
-          total_points: pointsRecord?.total_points || 0,
-          tasks_completed: completedTasks,
-          tasks_in_progress: inProgressTasks,
-          hours_this_month: Math.round(totalMinutes / 60 * 10) / 10,
-        };
-      });
-
-      // Sort by points
-      return engineersData.sort((a, b) => b.total_points - a.total_points);
-    },
+    queryKey: ["admin-engineers-secure"],
+    queryFn: fetchEngineersWithStats,
   });
 
   // Add engineer mutation
@@ -187,8 +93,8 @@ export default function AdminEngineers() {
   });
 
   const filteredEngineers = engineers.filter((engineer) =>
-    engineer.email.toLowerCase().includes(search.toLowerCase()) ||
-    engineer.full_name?.toLowerCase().includes(search.toLowerCase())
+    engineer.display_email.toLowerCase().includes(search.toLowerCase()) ||
+    engineer.display_name.toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPoints = engineers.reduce((sum, e) => sum + e.total_points, 0);
@@ -348,7 +254,7 @@ export default function AdminEngineers() {
               </TableHeader>
               <TableBody>
                 {filteredEngineers.map((engineer, index) => (
-                  <TableRow key={engineer.id} className="border-b-2 border-border">
+                  <TableRow key={engineer.user_id} className="border-b-2 border-border">
                     <TableCell>
                       <span
                         className={`inline-flex items-center justify-center w-8 h-8 font-bold border-2 ${
@@ -365,9 +271,9 @@ export default function AdminEngineers() {
                       </span>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {engineer.full_name || "—"}
+                      {engineer.display_name || "—"}
                     </TableCell>
-                    <TableCell>{engineer.email}</TableCell>
+                    <TableCell>{engineer.display_email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono gap-1">
                         <Trophy className="h-3 w-3" />
