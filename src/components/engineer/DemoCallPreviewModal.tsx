@@ -224,8 +224,8 @@ export function DemoCallPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Headphones className="h-5 w-5" />
             Demo Call Preview
@@ -235,7 +235,7 @@ export function DemoCallPreviewModal({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 max-h-[60vh] pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           <div className="space-y-4">
             {/* Call Info */}
             <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 border-2 border-border">
