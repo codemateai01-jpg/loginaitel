@@ -238,6 +238,27 @@ serve(async (req) => {
       .delete()
       .eq("phone", formattedPhone);
 
+    // Log sub-user login activity
+    if (isSubUser && subUserData) {
+      try {
+        await supabaseAdmin.from("sub_user_activity_logs").insert({
+          sub_user_id: subUserData.id,
+          client_id: subUserData.client_id,
+          action_type: isNewUser ? "first_login" : "login",
+          description: isNewUser 
+            ? `${subUserData.full_name || "Sub-user"} completed first login`
+            : `${subUserData.full_name || "Sub-user"} logged in`,
+          metadata: {
+            phone: formattedPhone,
+            role: subUserRole,
+          },
+        });
+      } catch (logError) {
+        console.error("Failed to log activity:", logError);
+        // Don't fail login if logging fails
+      }
+    }
+
     const session = signInData.session;
     // Return a minimal session payload (avoid exposing user/email/phone in response)
     const safeSession = {

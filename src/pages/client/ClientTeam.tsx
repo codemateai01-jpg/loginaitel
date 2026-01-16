@@ -25,8 +25,10 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from "lucide-react";
+import { SubUserActivityLog } from "@/components/admin/SubUserActivityLog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,6 +103,7 @@ export default function ClientTeam() {
   const queryClient = useQueryClient();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [activityLogOpen, setActivityLogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SubUser | null>(null);
   const [formData, setFormData] = useState({
     phone: "",
@@ -534,6 +537,15 @@ export default function ClientTeam() {
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedUser(subUser);
+                                setActivityLogOpen(true);
+                              }}
+                            >
+                              <Activity className="h-4 w-4 mr-2" />
+                              View Activity
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => {
                                 setSelectedUser(subUser);
@@ -588,6 +600,16 @@ export default function ClientTeam() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Activity Log Dialog */}
+      {selectedUser && (
+        <SubUserActivityLog
+          open={activityLogOpen}
+          onOpenChange={setActivityLogOpen}
+          subUserId={selectedUser.id}
+          subUserName={selectedUser.full_name}
+        />
+      )}
     </DashboardLayout>
   );
 }
