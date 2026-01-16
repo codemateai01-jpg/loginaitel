@@ -1,15 +1,45 @@
+/**
+ * AITEL-PROXY: Secure Backend Proxy for Bolna Voice-AI API
+ * 
+ * Security Features:
+ * - All provider responses sanitized before reaching frontend
+ * - No raw S3/provider URLs exposed
+ * - Environment-based secrets only
+ * - No console logging of sensitive data in production
+ * - Multi-tenant isolation support
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-tenant-id",
 };
 
 const BOLNA_API_BASE = "https://api.bolna.ai";
 const BOLNA_API_KEY = Deno.env.get("BOLNA_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const IS_PRODUCTION = Deno.env.get("DENO_DEPLOYMENT_ID") !== undefined;
+
+// ==========================================
+// LOGGING UTILITIES - Sanitized in production
+// ==========================================
+function debugLog(message: string, data?: unknown) {
+  if (!IS_PRODUCTION) {
+    console.log(`[aitel-proxy] ${message}`, data ? JSON.stringify(data) : "");
+  }
+}
+
+function errorLog(message: string, error?: unknown) {
+  // Log errors but sanitize in production
+  if (IS_PRODUCTION) {
+    console.error(`[aitel-proxy] ${message}`);
+  } else {
+    console.error(`[aitel-proxy] ${message}`, error);
+  }
+}
 
 // ==========================================
 // ENCODING & MASKING UTILITIES
@@ -266,7 +296,7 @@ serve(async (req) => {
           );
         }
         
-      console.log("Creating agent with config:", JSON.stringify(body, null, 2));
+      debugLog("Creating agent");
       
       response = await fetch(`${BOLNA_API_BASE}/v2/agent`, {
         method: "POST",
@@ -279,9 +309,9 @@ serve(async (req) => {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Bolna API error:", response.status, errorText);
+        errorLog("Bolna API error", { status: response.status });
         return new Response(
-          JSON.stringify({ error: `Bolna API error: ${errorText}` }),
+          JSON.stringify({ error: "Agent creation failed" }),
           { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -475,7 +505,7 @@ serve(async (req) => {
         }
 
         // Make outbound demo call via Bolna
-        console.log("Making demo call to:", recipientPhone, "with agent:", demoAgentId);
+        debugLog("Making demo call");
         
         const demoCallResponse = await fetch(`${BOLNA_API_BASE}/call`, {
           method: "POST",
@@ -493,7 +523,7 @@ serve(async (req) => {
 
         if (demoCallResponse.ok) {
           const demoCallResult = await demoCallResponse.json();
-          console.log("Demo call initiated successfully:", demoCallResult);
+          debugLog("Demo call initiated");
           return new Response(
             JSON.stringify({ 
               success: true, 
@@ -504,10 +534,9 @@ serve(async (req) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         } else {
-          const errorText = await demoCallResponse.text();
-          console.error("Demo call failed - Bolna API error:", demoCallResponse.status, errorText);
+          errorLog("Demo call failed");
           return new Response(
-            JSON.stringify({ error: `Call failed: ${errorText || 'Unknown error from provider'}` }),
+            JSON.stringify({ error: "Call failed - please try again" }),
             { status: demoCallResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -593,7 +622,7 @@ serve(async (req) => {
         }
 
         const executionData = await execResponse.json();
-        console.log("Execution data from Bolna:", JSON.stringify(executionData));
+        debugLog("Execution data fetched");
 
         // Map Bolna status to our DB status (Bolna uses hyphens, we use underscores)
         const bolnaStatus = executionData.status || "initiated";
@@ -655,7 +684,7 @@ serve(async (req) => {
           }
         }
 
-        console.log("Updating call with data:", JSON.stringify(updateData));
+        debugLog("Updating call with status", { status: finalStatus });
 
         // Update call in database
         const { error: updateError } = await supabase
@@ -664,7 +693,7 @@ serve(async (req) => {
           .eq("id", internalCallId);
 
         if (updateError) {
-          console.error("Failed to update call:", updateError);
+          errorLog("Failed to update call");
           return new Response(
             JSON.stringify({ error: "Failed to update call record" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1050,8 +1079,7 @@ serve(async (req) => {
     try {
       data = JSON.parse(responseText);
     } catch {
-      // If response is not JSON (e.g., HTML error page), return a proper error
-      console.error("Bolna API returned non-JSON response:", response.status, responseText.substring(0, 200));
+      errorLog("Bolna API returned non-JSON response");
       return new Response(
         JSON.stringify({ 
           error: `API returned non-JSON response (status ${response.status})`,
@@ -1103,10 +1131,9 @@ serve(async (req) => {
     });
 
   } catch (error: unknown) {
-    console.error("Bolna proxy error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
+    errorLog("Proxy error", error);
     return new Response(
-      JSON.stringify({ error: message }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

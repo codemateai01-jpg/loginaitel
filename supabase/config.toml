@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.secure-data-proxy]
 verify_jwt = false
+
+[functions.voice-proxy]
+verify_jwt = false
