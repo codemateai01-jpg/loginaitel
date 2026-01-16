@@ -26,8 +26,13 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  Bell,
+  AlertTriangle,
+  Mail,
+  Loader2,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
+import { toast } from "sonner";
 
 const SEAT_PRICE = 300;
 
@@ -62,6 +67,8 @@ interface SeatPayment {
 
 export default function AdminSeatSubscriptions() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [processingRenewals, setProcessingRenewals] = useState(false);
 
   // Fetch all seat subscriptions
   const { data: subscriptions, isLoading: loadingSubscriptions, refetch: refetchSubscriptions } = useQuery({
@@ -126,6 +133,20 @@ export default function AdminSeatSubscriptions() {
   });
 
   // Calculate stats
+  const today = new Date();
+  const dueSoonSubs = subscriptions?.filter(s => {
+    if (s.status !== "active" || !s.next_billing_date) return false;
+    const daysUntil = differenceInDays(new Date(s.next_billing_date), today);
+    return daysUntil >= 0 && daysUntil <= 3;
+  }) || [];
+
+  const overdueSubs = subscriptions?.filter(s => {
+    if (s.status !== "active" || !s.next_billing_date) return false;
+    return new Date(s.next_billing_date) < today;
+  }) || [];
+
+  const expiredSubs = subscriptions?.filter(s => s.status === "expired") || [];
+
   const stats = {
     totalSeats: subscriptions?.reduce((sum, s) => sum + s.seats_count, 0) || 0,
     activeSubscriptions: subscriptions?.filter(s => s.status === "active").length || 0,
@@ -133,6 +154,9 @@ export default function AdminSeatSubscriptions() {
     totalPayments: payments?.filter(p => p.status === "completed").length || 0,
     pendingPayments: payments?.filter(p => p.status === "pending").length || 0,
     monthlyRecurring: (subscriptions?.filter(s => s.status === "active").reduce((sum, s) => sum + s.seats_count, 0) || 0) * SEAT_PRICE,
+    dueSoon: dueSoonSubs.length,
+    overdue: overdueSubs.length,
+    expired: expiredSubs.length,
   };
 
   // Filter subscriptions
@@ -166,6 +190,46 @@ export default function AdminSeatSubscriptions() {
   const handleRefresh = () => {
     refetchSubscriptions();
     refetchPayments();
+  };
+
+  const handleSendReminders = async () => {
+    setSendingReminders(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("seat-renewal-reminder");
+      
+      if (error) throw error;
+      
+      toast.success(`Sent ${data.reminders_sent} renewal reminder(s) to clients due within 3 days`);
+      console.log("Reminder results:", data);
+    } catch (error: any) {
+      console.error("Failed to send reminders:", error);
+      toast.error(error.message || "Failed to send reminders");
+    } finally {
+      setSendingReminders(false);
+    }
+  };
+
+  const handleProcessRenewals = async () => {
+    setProcessingRenewals(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("process-seat-renewals");
+      
+      if (error) throw error;
+      
+      if (data.expired_count > 0) {
+        toast.warning(`${data.expired_count} subscription(s) expired due to non-payment`);
+      } else {
+        toast.success(`Processed ${data.total_overdue} overdue subscription(s)`);
+      }
+      
+      console.log("Process renewals results:", data);
+      refetchSubscriptions();
+    } catch (error: any) {
+      console.error("Failed to process renewals:", error);
+      toast.error(error.message || "Failed to process renewals");
+    } finally {
+      setProcessingRenewals(false);
+    }
   };
 
   return (
@@ -240,6 +304,84 @@ export default function AdminSeatSubscriptions() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Renewal Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Renewal Management
+            </CardTitle>
+            <CardDescription>
+              Send reminders and process overdue subscriptions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Due Soon Alert */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  <span className="font-medium text-blue-800 dark:text-blue-200">Due Within 3 Days</span>
+                </div>
+                <p className="text-2xl font-bold text-blue-600">{stats.dueSoon}</p>
+                <p className="text-sm text-blue-600/70">subscription(s)</p>
+              </div>
+
+              {/* Overdue Alert */}
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="font-medium text-amber-800 dark:text-amber-200">Overdue</span>
+                </div>
+                <p className="text-2xl font-bold text-amber-600">{stats.overdue}</p>
+                <p className="text-sm text-amber-600/70">in grace period</p>
+              </div>
+
+              {/* Expired Alert */}
+              <div className="p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  <span className="font-medium text-red-800 dark:text-red-200">Expired</span>
+                </div>
+                <p className="text-2xl font-bold text-red-600">{stats.expired}</p>
+                <p className="text-sm text-red-600/70">subscription(s)</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <Button
+                onClick={handleSendReminders}
+                disabled={sendingReminders}
+                variant="outline"
+                className="flex-1"
+              >
+                {sendingReminders ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4 mr-2" />
+                )}
+                Send Renewal Reminders
+              </Button>
+              <Button
+                onClick={handleProcessRenewals}
+                disabled={processingRenewals}
+                variant="outline"
+                className="flex-1"
+              >
+                {processingRenewals ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                )}
+                Process Overdue Subscriptions
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              * Reminders are automatically sent daily via cron jobs. Use these buttons for manual triggering.
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Search */}
         <div className="relative max-w-sm">
