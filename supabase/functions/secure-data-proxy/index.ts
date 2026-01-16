@@ -304,9 +304,10 @@ serve(async (req) => {
       }
 
       // Encode sensitive data - for admin (encoded in network, decoded in frontend)
+      // Keep external_call_id intact for admin so they can fetch execution details
       const maskedData = data?.map((call: any) => ({
         ...call,
-        external_call_id: maskUuid(call.external_call_id),
+        // Keep external_call_id full - needed for getExecution calls
         lead_id: maskUuid(call.lead_id),
         transcript: encodeTranscript(call.transcript),
         summary: encodeSummary(call.summary),
@@ -343,9 +344,10 @@ serve(async (req) => {
       }
 
       // Encode sensitive data (for network obfuscation)
+      // Keep external_call_id full for admin - needed for getExecution calls
       const maskedData = data?.map((call: any) => ({
         ...call,
-        external_call_id: maskUuid(call.external_call_id),
+        // Keep external_call_id full - needed for getExecution calls
         lead_id: maskUuid(call.lead_id),
         transcript: encodeTranscript(call.transcript),
         summary: encodeSummary(call.summary),
