@@ -452,12 +452,13 @@ export type Database = {
           activated_at: string | null
           client_id: string
           created_at: string
-          email: string
+          email: string | null
           full_name: string | null
           id: string
           invite_expires_at: string | null
           invite_token: string | null
           invited_at: string | null
+          phone: string | null
           role: Database["public"]["Enums"]["client_sub_user_role"]
           status: string
           updated_at: string
@@ -467,12 +468,13 @@ export type Database = {
           activated_at?: string | null
           client_id: string
           created_at?: string
-          email: string
+          email?: string | null
           full_name?: string | null
           id?: string
           invite_expires_at?: string | null
           invite_token?: string | null
           invited_at?: string | null
+          phone?: string | null
           role: Database["public"]["Enums"]["client_sub_user_role"]
           status?: string
           updated_at?: string
@@ -482,12 +484,13 @@ export type Database = {
           activated_at?: string | null
           client_id?: string
           created_at?: string
-          email?: string
+          email?: string | null
           full_name?: string | null
           id?: string
           invite_expires_at?: string | null
           invite_token?: string | null
           invited_at?: string | null
+          phone?: string | null
           role?: Database["public"]["Enums"]["client_sub_user_role"]
           status?: string
           updated_at?: string
