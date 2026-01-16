@@ -11,6 +11,90 @@ const BOLNA_API_KEY = Deno.env.get("BOLNA_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// ==========================================
+// DATA MASKING UTILITIES
+// ==========================================
+
+// Mask phone number to show only last 4 digits
+function maskPhone(phone: string | null | undefined): string {
+  if (!phone) return "****";
+  if (phone.length <= 4) return "****";
+  return "*".repeat(phone.length - 4) + phone.slice(-4);
+}
+
+// Mask transcript - show only indicator, not full content
+function maskTranscript(transcript: string | null | undefined): string | null {
+  if (!transcript) return null;
+  const length = transcript.length;
+  if (length > 100) {
+    return `[Transcript available - ${Math.round(length / 100) * 100}+ characters]`;
+  }
+  return `[Transcript available]`;
+}
+
+// Mask system prompt - never expose in logs
+function maskSystemPrompt(prompt: string | null | undefined): string | null {
+  if (!prompt) return null;
+  return "[System prompt configured]";
+}
+
+// Generate proxy indicator for recording URL
+function proxyRecordingUrl(url: string | null | undefined, executionId: string): string | null {
+  if (!url) return null;
+  return `proxy:recording:${executionId}`;
+}
+
+// Mask execution data for client/admin views
+function maskExecutionData(execution: Record<string, unknown>, includeRealRecordingUrl = false): Record<string, unknown> {
+  const masked = { ...execution };
+  const telephonyData = (execution.telephony_data || {}) as Record<string, unknown>;
+  
+  // Mask phone numbers
+  if (telephonyData.to_number) {
+    telephonyData.to_number = maskPhone(telephonyData.to_number as string);
+  }
+  if (telephonyData.from_number) {
+    telephonyData.from_number = maskPhone(telephonyData.from_number as string);
+  }
+  
+  // Mask recording URL (keep real URL in a separate field for actual playback)
+  if (telephonyData.recording_url) {
+    if (includeRealRecordingUrl) {
+      masked._real_recording_url = telephonyData.recording_url;
+    }
+    telephonyData.recording_url = proxyRecordingUrl(telephonyData.recording_url as string, execution.id as string);
+  }
+  
+  masked.telephony_data = telephonyData;
+  
+  // Mask transcript
+  if (execution.transcript) {
+    masked.transcript = maskTranscript(execution.transcript as string);
+  }
+  
+  return masked;
+}
+
+// Mask agent data to hide system prompts
+function maskAgentData(agent: Record<string, unknown>): Record<string, unknown> {
+  const masked = { ...agent };
+  
+  // Mask system prompts in agent_prompts
+  if (agent.agent_prompts) {
+    const prompts = agent.agent_prompts as Record<string, { system_prompt?: string }>;
+    const maskedPrompts: Record<string, { system_prompt?: string | null }> = {};
+    for (const [key, value] of Object.entries(prompts)) {
+      maskedPrompts[key] = {
+        ...value,
+        system_prompt: maskSystemPrompt(value.system_prompt),
+      };
+    }
+    masked.agent_prompts = maskedPrompts;
+  }
+  
+  return masked;
+}
+
 interface BolnaAgentConfig {
   agent_name: string;
   agent_type: string;
@@ -908,6 +992,27 @@ serve(async (req) => {
           details: responseText.substring(0, 500)
         }),
         { status: response.status >= 400 ? response.status : 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Apply data masking based on action type
+    // Admin and engineers can see more data for specific workflows
+    const isPrivilegedUser = userRole === "admin" || userRole === "engineer";
+    
+    if (action === "get-agent" && data && !isPrivilegedUser) {
+      // Mask system prompts for non-privileged users
+      data = maskAgentData(data);
+    }
+    
+    if (action === "get-execution" && data) {
+      // Mask execution data - include real URL for playback for privileged users
+      data = maskExecutionData(data, isPrivilegedUser);
+    }
+    
+    if (action === "list-agent-executions" && data?.data && Array.isArray(data.data)) {
+      // Mask all executions in the list
+      data.data = data.data.map((exec: Record<string, unknown>) => 
+        maskExecutionData(exec, isPrivilegedUser)
       );
     }
     
