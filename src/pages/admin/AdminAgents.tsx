@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { listAitelAgents, getAitelAgent } from "@/lib/aitel";
+import { fetchClientsWithStats } from "@/lib/secure-proxy";
 import {
   Bot,
   RefreshCw,
@@ -70,8 +71,8 @@ interface SyncedAgent {
 
 interface Client {
   user_id: string;
-  email: string;
-  full_name: string | null;
+  display_name: string;
+  display_email: string;
 }
 
 export default function AdminAgents() {
@@ -99,24 +100,16 @@ export default function AdminAgents() {
     },
   });
 
-  // Fetch clients for assignment
+  // Fetch clients for assignment via secure proxy
   const { data: clients } = useQuery({
     queryKey: ["clients-for-assignment"],
     queryFn: async () => {
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "client");
-
-      if (!roles?.length) return [];
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, email, full_name")
-        .in("user_id", roles.map((r) => r.user_id));
-
-      if (error) throw error;
-      return data as Client[];
+      const clientsWithStats = await fetchClientsWithStats();
+      return clientsWithStats.map((c) => ({
+        user_id: c.user_id,
+        display_name: c.display_name,
+        display_email: c.display_email,
+      })) as Client[];
     },
   });
 
@@ -232,7 +225,7 @@ export default function AdminAgents() {
   const getClientName = (clientId: string | null) => {
     if (!clientId) return "Unassigned";
     const client = clients?.find((c) => c.user_id === clientId);
-    return client?.full_name || client?.email || "Unknown";
+    return client?.display_name || client?.display_email || "Unknown";
   };
 
   return (
@@ -443,7 +436,7 @@ export default function AdminAgents() {
                     </SelectItem>
                     {clients?.map((client) => (
                       <SelectItem key={client.user_id} value={client.user_id}>
-                        {client.full_name || client.email}
+                        {client.display_name || client.display_email}
                       </SelectItem>
                     ))}
                   </SelectContent>
