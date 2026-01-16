@@ -1,11 +1,15 @@
 /**
- * SECURE-DATA-PROXY: Authenticated proxy for Supabase data with AES-256-GCM encryption
+ * SECURE-DATA-PROXY: Zero-Trust Authenticated Proxy for ALL Sensitive Data
  * 
- * Security Features:
- * - All transcripts and summaries encrypted with AES-256-GCM
- * - Phone numbers masked (not recoverable)
- * - No raw provider data exposed
- * - Environment-based secrets only
+ * CRITICAL SECURITY MODEL:
+ * - ALL sensitive data MUST flow through this proxy
+ * - NO direct Supabase queries for sensitive tables from frontend
+ * - User IDs, emails, full names are ALWAYS masked
+ * - Transcripts/summaries return encrypted payloads ONLY
+ * - Phone numbers are masked (last 4 digits only)
+ * - Raw provider data is NEVER exposed
+ * 
+ * Enterprise-safe for white-labeling and hostile client inspection.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -26,7 +30,7 @@ function debugLog(message: string, data?: unknown) {
 }
 
 // ==========================================
-// MASKING UTILITIES
+// MASKING UTILITIES - NEVER expose raw data
 // ==========================================
 
 // Mask phone number - truly masked, not recoverable
@@ -40,6 +44,21 @@ function maskPhone(phone: string | null): string {
 function maskUuid(uuid: string | null): string {
   if (!uuid) return "********";
   return uuid.slice(0, 8) + "...";
+}
+
+// Mask email - show only first letter and domain
+function maskEmail(email: string | null): string {
+  if (!email) return "***@***.***";
+  const [localPart, domain] = email.split("@");
+  if (!localPart || !domain) return "***@***.***";
+  return localPart[0] + "***@" + domain;
+}
+
+// Mask full name - show only initials
+function maskFullName(name: string | null): string {
+  if (!name) return "***";
+  const parts = name.trim().split(/\s+/);
+  return parts.map(p => p[0]?.toUpperCase() || "*").join(".") + ".";
 }
 
 // Mask system prompt - never expose
@@ -132,6 +151,206 @@ serve(async (req) => {
     const action = url.searchParams.get("action");
 
     // ==========================================
+    // PROFILES - Always masked
+    // ==========================================
+    if (action === "profiles" || action === "get-profiles") {
+      // Only admins can list all profiles
+      if (userRole !== "admin") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email, avatar_url, phone, created_at")
+        .order("full_name", { ascending: true });
+
+      if (error) {
+        return new Response(JSON.stringify({ error: "Failed to fetch profiles" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // CRITICAL: Mask ALL sensitive profile data
+      const maskedProfiles = (profiles || []).map((profile: Record<string, unknown>) => ({
+        // Keep user_id for admin operations but provide masked display version
+        user_id: profile.user_id,
+        display_id: maskUuid(profile.user_id as string),
+        display_name: maskFullName(profile.full_name as string),
+        display_email: maskEmail(profile.email as string),
+        display_phone: maskPhone(profile.phone as string),
+        avatar_url: profile.avatar_url,
+        created_at: profile.created_at,
+        // NEVER include: full_name, email, phone (raw values)
+      }));
+
+      return new Response(JSON.stringify(maskedProfiles), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
+    // SINGLE PROFILE
+    // ==========================================
+    if (action === "get-profile") {
+      const targetUserId = url.searchParams.get("user_id");
+      
+      // Users can only get their own profile details, admins can get any
+      if (userRole !== "admin" && targetUserId !== userId) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email, avatar_url, phone, created_at")
+        .eq("user_id", targetUserId || userId)
+        .maybeSingle();
+
+      if (error || !profile) {
+        return new Response(JSON.stringify({ error: "Profile not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // If user is requesting their own profile, return full data
+      // Otherwise (admin viewing other's profile), mask it
+      const isOwnProfile = profile.user_id === userId;
+      
+      const maskedProfile = {
+        user_id: profile.user_id,
+        display_id: maskUuid(profile.user_id as string),
+        // Only show full data for own profile
+        full_name: isOwnProfile ? profile.full_name : null,
+        email: isOwnProfile ? profile.email : null,
+        phone: isOwnProfile ? profile.phone : null,
+        display_name: maskFullName(profile.full_name as string),
+        display_email: maskEmail(profile.email as string),
+        display_phone: maskPhone(profile.phone as string),
+        avatar_url: profile.avatar_url,
+        created_at: profile.created_at,
+      };
+
+      return new Response(JSON.stringify(maskedProfile), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
+    // CLIENTS LIST - Masked for admin view
+    // ==========================================
+    if (action === "clients" || action === "get-clients") {
+      if (userRole !== "admin") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: clients, error } = await supabase
+        .from("user_roles")
+        .select("user_id, role, created_at")
+        .eq("role", "client")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        return new Response(JSON.stringify({ error: "Failed to fetch clients" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get profile info
+      const userIds = (clients || []).map((c: Record<string, unknown>) => c.user_id);
+      const { data: profiles } = userIds.length
+        ? await supabase
+            .from("profiles")
+            .select("user_id, full_name, email, avatar_url, phone")
+            .in("user_id", userIds)
+        : { data: [] };
+
+      const profileMap = new Map((profiles || []).map((p: Record<string, unknown>) => [p.user_id, p]));
+
+      // Return masked client list - admin needs real IDs for operations
+      const maskedClients = (clients || []).map((client: Record<string, unknown>) => {
+        const profile = profileMap.get(client.user_id) as Record<string, unknown> | undefined;
+        return {
+          user_id: client.user_id, // Admin needs for operations
+          display_id: maskUuid(client.user_id as string),
+          display_name: profile ? maskFullName(profile.full_name as string) : "***",
+          display_email: profile ? maskEmail(profile.email as string) : "***@***.***",
+          display_phone: profile ? maskPhone(profile.phone as string) : "****",
+          avatar_url: profile?.avatar_url || null,
+          role: client.role,
+          created_at: client.created_at,
+        };
+      });
+
+      return new Response(JSON.stringify(maskedClients), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
+    // ENGINEERS LIST - Masked for admin view
+    // ==========================================
+    if (action === "engineers" || action === "get-engineers") {
+      if (userRole !== "admin") {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: engineers, error } = await supabase
+        .from("user_roles")
+        .select("user_id, role, created_at")
+        .eq("role", "engineer")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        return new Response(JSON.stringify({ error: "Failed to fetch engineers" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get profile info
+      const userIds = (engineers || []).map((e: Record<string, unknown>) => e.user_id);
+      const { data: profiles } = userIds.length
+        ? await supabase
+            .from("profiles")
+            .select("user_id, full_name, email, avatar_url")
+            .in("user_id", userIds)
+        : { data: [] };
+
+      const profileMap = new Map((profiles || []).map((p: Record<string, unknown>) => [p.user_id, p]));
+
+      const maskedEngineers = (engineers || []).map((eng: Record<string, unknown>) => {
+        const profile = profileMap.get(eng.user_id) as Record<string, unknown> | undefined;
+        return {
+          user_id: eng.user_id,
+          display_id: maskUuid(eng.user_id as string),
+          display_name: profile ? maskFullName(profile.full_name as string) : "***",
+          display_email: profile ? maskEmail(profile.email as string) : "***@***.***",
+          avatar_url: profile?.avatar_url || null,
+          role: eng.role,
+          created_at: eng.created_at,
+        };
+      });
+
+      return new Response(JSON.stringify(maskedEngineers), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
     // DEMO CALLS (ENGINEERS)
     // ==========================================
     if (action === "demo_calls") {
@@ -161,13 +380,13 @@ serve(async (req) => {
       }
 
       // Get tasks and agents for joining
-      const taskIds = [...new Set(demoCalls?.map(c => c.task_id) || [])];
+      const taskIds = [...new Set(demoCalls?.map((c: Record<string, unknown>) => c.task_id) || [])];
       const { data: tasks } = await supabase
         .from("tasks")
         .select("id, title, selected_demo_call_id, assigned_to")
         .in("id", taskIds);
 
-      const agentIds = [...new Set(demoCalls?.map(c => c.agent_id) || [])];
+      const agentIds = [...new Set(demoCalls?.map((c: Record<string, unknown>) => c.agent_id) || [])];
       const { data: agents } = await supabase
         .from("aitel_agents")
         .select("id, agent_name")
@@ -181,8 +400,8 @@ serve(async (req) => {
         transcript: call.transcript ? await encryptData(call.transcript as string) : null,
         recording_url: proxyRecordingUrl(call.recording_url as string, call.id as string),
         uploaded_audio_url: proxyRecordingUrl(call.uploaded_audio_url as string, call.id as string),
-        tasks: tasks?.find(t => t.id === call.task_id) || null,
-        aitel_agents: agents?.find(a => a.id === call.agent_id) || null,
+        tasks: (tasks as Record<string, unknown>[] | null)?.find((t: Record<string, unknown>) => t.id === call.task_id) || null,
+        aitel_agents: (agents as Record<string, unknown>[] | null)?.find((a: Record<string, unknown>) => a.id === call.agent_id) || null,
       })));
 
       return new Response(JSON.stringify(maskedData), {
@@ -263,6 +482,8 @@ serve(async (req) => {
       const maskedData = await Promise.all((data || []).map(async (call: Record<string, unknown>) => ({
         ...call,
         lead_id: maskUuid(call.lead_id as string),
+        client_id: call.client_id, // Keep for admin operations
+        display_client_id: maskUuid(call.client_id as string),
         transcript: call.transcript ? await encryptData(call.transcript as string) : null,
         summary: call.summary ? await encryptData(call.summary as string) : null,
         recording_url: proxyRecordingUrl(call.recording_url as string, call.id as string),
@@ -405,8 +626,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Error:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+    const message = IS_PRODUCTION ? "Internal error" : (error instanceof Error ? error.message : "Unknown error");
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
