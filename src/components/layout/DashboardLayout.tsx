@@ -20,6 +20,10 @@ import {
   TrendingUp,
   Package,
   Shield,
+  UserPlus,
+  Headphones,
+  UserCheck,
+  Monitor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,6 +69,10 @@ const clientNavItems = [
   { icon: Phone, label: "Make Call", href: "/client/make-call" },
   { icon: Phone, label: "Call History", href: "/client/calls" },
   { icon: Phone, label: "Phone Numbers", href: "/client/phone-numbers" },
+  { icon: UserPlus, label: "Team Management", href: "/client/team" },
+  { icon: Headphones, label: "Telecaller View", href: "/client/telecaller" },
+  { icon: UserCheck, label: "Lead Manager", href: "/client/lead-manager" },
+  { icon: Monitor, label: "Monitoring", href: "/client/monitoring" },
   { icon: Tag, label: "Pricing Plans", href: "/client/pricing" },
   { icon: CreditCard, label: "Credits & Billing", href: "/client/billing" },
   { icon: Shield, label: "Data Security", href: "/client/security" },
