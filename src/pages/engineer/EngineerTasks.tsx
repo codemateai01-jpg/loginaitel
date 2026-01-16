@@ -68,6 +68,8 @@ interface Task {
   demo_completed_at: string | null;
   prompt_edit_count: number | null;
   demo_edit_count: number | null;
+  prompt_rejection_count: number | null;
+  demo_rejection_count: number | null;
   selected_demo_call_id: string | null;
   final_score: number | null;
   score_breakdown: any;
@@ -934,47 +936,138 @@ export default function EngineerTasks() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {rejectedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="border-2 border-destructive bg-card p-4"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg">{task.title}</h3>
+                {rejectedTasks.map((task) => {
+                  const promptRejections = task.prompt_rejection_count || 0;
+                  const demoRejections = task.demo_rejection_count || 0;
+                  const totalRejections = promptRejections + demoRejections;
+                  const isPromptPhase = ["in_progress", "prompt_submitted"].includes(task.status);
+                  const isDemoPhase = ["prompt_approved", "demo_submitted"].includes(task.status);
+                  
+                  return (
+                    <div
+                      key={task.id}
+                      className="border-2 border-destructive bg-card overflow-hidden"
+                    >
+                      {/* Rejection Header */}
+                      <div className="bg-destructive/10 px-4 py-3 border-b border-destructive/20 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5 text-destructive" />
+                          <span className="font-bold text-destructive">Needs Revision</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {promptRejections > 0 && (
+                            <Badge variant="outline" className="border-destructive/50 text-destructive">
+                              Prompt: {promptRejections}x rejected
+                            </Badge>
+                          )}
+                          {demoRejections > 0 && (
+                            <Badge variant="outline" className="border-destructive/50 text-destructive">
+                              Demo: {demoRejections}x rejected
+                            </Badge>
+                          )}
+                          {totalRejections === 0 && (
+                            <Badge variant="outline" className="border-destructive/50 text-destructive">
+                              1x rejected
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg">{task.title}</h3>
+                                {task.description && (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {task.description}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge className={getStatusColor(task.status)}>
+                                {getStatusLabel(task.status)}
+                              </Badge>
+                            </div>
+                            
+                            {/* Prominent Rejection Reason */}
                             {task.rejection_reason && (
-                              <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20">
-                                <p className="text-sm font-medium text-destructive">Rejection Reason:</p>
-                                <p className="text-sm text-muted-foreground mt-1">{task.rejection_reason}</p>
+                              <div className="p-4 bg-destructive/5 border-2 border-destructive/30 rounded-sm">
+                                <div className="flex items-start gap-2">
+                                  <XCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                                  <div>
+                                    <p className="font-bold text-destructive text-sm mb-1">Admin Feedback:</p>
+                                    <p className="text-sm text-foreground">{task.rejection_reason}</p>
+                                  </div>
+                                </div>
                               </div>
                             )}
+                            
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Trophy className="h-4 w-4 text-chart-4" />
+                                {task.points} points
+                              </span>
+                              {task.prompt_edit_count !== null && task.prompt_edit_count > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <FileText className="h-4 w-4" />
+                                  {task.prompt_edit_count} prompt edits
+                                </span>
+                              )}
+                              {task.demo_edit_count !== null && task.demo_edit_count > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <PhoneCall className="h-4 w-4" />
+                                  {task.demo_edit_count} demo edits
+                                </span>
+                              )}
+                              {task.deadline && (
+                                <span className="flex items-center gap-1">
+                                  <Timer className="h-4 w-4" />
+                                  {getTimeRemaining(task.deadline)}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <Badge className={getStatusColor(task.status)}>
-                            {getStatusLabel(task.status)}
-                          </Badge>
+                          
+                          <div className="flex gap-2 shrink-0">
+                            {isPromptPhase && (
+                              <>
+                                <Button variant="outline" onClick={() => handleEditPrompt(task)}>
+                                  <Bot className="h-4 w-4 mr-2" />
+                                  Edit Prompt
+                                </Button>
+                                {task.status === "in_progress" && (
+                                  <Button onClick={() => handleSubmitPrompt(task)}>
+                                    <Send className="h-4 w-4 mr-2" />
+                                    Re-submit Prompt
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                            {isDemoPhase && (
+                              <>
+                                <Button variant="outline" onClick={() => handleEditPrompt(task)}>
+                                  <Bot className="h-4 w-4 mr-2" />
+                                  Edit Prompt
+                                </Button>
+                                <Button variant="outline" onClick={() => handleMakeDemoCall(task)}>
+                                  <Phone className="h-4 w-4 mr-2" />
+                                  Make Demo Call
+                                </Button>
+                                {task.status === "prompt_approved" && (
+                                  <Button onClick={() => handleSubmitDemo(task)}>
+                                    <Send className="h-4 w-4 mr-2" />
+                                    Re-submit Demo
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Trophy className="h-4 w-4 text-chart-4" />
-                            {task.points} points
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <Button variant="outline" onClick={() => handleEditPrompt(task)}>
-                          <Bot className="h-4 w-4 mr-2" />
-                          Edit Prompt
-                        </Button>
-                        <Button onClick={() => handleSubmitPrompt(task)}>
-                          <Send className="h-4 w-4 mr-2" />
-                          Re-submit
-                        </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </TabsContent>
