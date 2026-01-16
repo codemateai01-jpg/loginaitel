@@ -63,6 +63,14 @@ serve(async (req) => {
       .update({ verified: true })
       .eq("id", otpRecord.id);
 
+    // Check if this phone belongs to a sub-user
+    const { data: subUserData, error: subUserError } = await supabaseAdmin
+      .from("client_sub_users")
+      .select("*, profiles:client_id(full_name, email)")
+      .eq("phone", formattedPhone)
+      .eq("status", "active")
+      .maybeSingle();
+
     // Generate a unique email for this phone user (for Supabase auth)
     const phoneEmail = `${formattedPhone.replace("+", "")}@phone.aitel.local`;
     // Use a consistent password based on phone number (hashed internally by Supabase)
@@ -76,6 +84,9 @@ serve(async (req) => {
 
     let userId: string;
     let isNewUser = false;
+    let isSubUser = false;
+    let subUserRole: string | null = null;
+    let clientId: string | null = null;
 
     if (existingUser) {
       userId = existingUser.id;
@@ -101,45 +112,113 @@ serve(async (req) => {
         console.error("Error updating user password:", updateError);
         throw new Error("Failed to authenticate");
       }
-    } else {
-      // Create new user with email/password
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: phoneEmail,
-        password: phonePassword,
-        email_confirm: true,
-        user_metadata: {
-          phone: formattedPhone,
-        },
-      });
 
-      if (createError || !newUser.user) {
-        console.error("Error creating user:", createError);
-        throw new Error("Failed to create account");
+      // Check if this user is a sub-user
+      if (subUserData) {
+        isSubUser = true;
+        subUserRole = subUserData.role;
+        clientId = subUserData.client_id;
+
+        // Update the sub-user record with the user_id if not set
+        if (!subUserData.user_id) {
+          await supabaseAdmin
+            .from("client_sub_users")
+            .update({ user_id: userId, activated_at: new Date().toISOString() })
+            .eq("id", subUserData.id);
+        }
       }
+    } else {
+      // Check if this is a sub-user's first login
+      if (subUserData) {
+        isSubUser = true;
+        subUserRole = subUserData.role;
+        clientId = subUserData.client_id;
 
-      userId = newUser.user.id;
-      isNewUser = true;
+        // Create new user with email/password for sub-user
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: phoneEmail,
+          password: phonePassword,
+          email_confirm: true,
+          user_metadata: {
+            phone: formattedPhone,
+            sub_user: true,
+            client_id: clientId,
+            sub_user_role: subUserRole,
+            full_name: subUserData.full_name,
+          },
+        });
 
-      // Create client role
-      await supabaseAdmin.from("user_roles").insert({
-        user_id: userId,
-        role: "client",
-      });
+        if (createError || !newUser.user) {
+          console.error("Error creating user:", createError);
+          throw new Error("Failed to create account");
+        }
 
-      // Create profile with phone
-      await supabaseAdmin.from("profiles").insert({
-        user_id: userId,
-        email: phoneEmail,
-        phone: formattedPhone,
-        full_name: "",
-      });
+        userId = newUser.user.id;
+        isNewUser = true;
 
-      // Create initial credits record
-      await supabaseAdmin.from("client_credits").insert({
-        client_id: userId,
-        balance: 0,
-        price_per_credit: 5,
-      });
+        // Create client role for sub-user
+        await supabaseAdmin.from("user_roles").insert({
+          user_id: userId,
+          role: "client",
+        });
+
+        // Create profile with phone
+        await supabaseAdmin.from("profiles").insert({
+          user_id: userId,
+          email: phoneEmail,
+          phone: formattedPhone,
+          full_name: subUserData.full_name || "",
+        });
+
+        // Update sub-user record with user_id
+        await supabaseAdmin
+          .from("client_sub_users")
+          .update({ 
+            user_id: userId, 
+            status: "active",
+            activated_at: new Date().toISOString() 
+          })
+          .eq("id", subUserData.id);
+      } else {
+        // Regular client - create new user
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: phoneEmail,
+          password: phonePassword,
+          email_confirm: true,
+          user_metadata: {
+            phone: formattedPhone,
+          },
+        });
+
+        if (createError || !newUser.user) {
+          console.error("Error creating user:", createError);
+          throw new Error("Failed to create account");
+        }
+
+        userId = newUser.user.id;
+        isNewUser = true;
+
+        // Create client role
+        await supabaseAdmin.from("user_roles").insert({
+          user_id: userId,
+          role: "client",
+        });
+
+        // Create profile with phone
+        await supabaseAdmin.from("profiles").insert({
+          user_id: userId,
+          email: phoneEmail,
+          phone: formattedPhone,
+          full_name: "",
+        });
+
+        // Create initial credits record
+        await supabaseAdmin.from("client_credits").insert({
+          client_id: userId,
+          balance: 0,
+          price_per_credit: 5,
+        });
+      }
     }
 
     // Sign in the user and get session
@@ -167,12 +246,18 @@ serve(async (req) => {
       token_type: session.token_type,
       expires_in: session.expires_in,
       expires_at: session.expires_at,
+      user: {
+        id: userId,
+      }
     };
 
     return new Response(
       JSON.stringify({
         success: true,
         isNewUser,
+        isSubUser,
+        subUserRole,
+        clientId,
         session: safeSession,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

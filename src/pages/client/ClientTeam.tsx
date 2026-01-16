@@ -16,19 +16,15 @@ import { format } from "date-fns";
 import { 
   Users, 
   UserPlus, 
-  Mail, 
   Phone, 
   Headphones, 
   ClipboardList, 
   Eye,
   MoreHorizontal,
-  Send,
   Trash2,
-  Edit,
   CheckCircle,
   Clock,
   XCircle,
-  Copy,
   RefreshCw
 } from "lucide-react";
 import {
@@ -50,11 +46,13 @@ import {
 
 interface SubUser {
   id: string;
-  email: string;
+  phone?: string | null;
+  email?: string | null;
   full_name: string | null;
   role: "monitoring" | "telecaller" | "lead_manager";
   status: string;
-  invited_at: string;
+  invited_at: string | null;
+  created_at: string;
   activated_at: string | null;
 }
 
@@ -81,7 +79,7 @@ const roleLabels: Record<string, { label: string; icon: React.ReactNode; descrip
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   pending: { 
-    label: "Invite Pending", 
+    label: "Pending Login", 
     icon: <Clock className="h-3 w-3" />,
     color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
   },
@@ -105,25 +103,23 @@ export default function ClientTeam() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SubUser | null>(null);
   const [formData, setFormData] = useState({
-    email: "",
+    phone: "",
     full_name: "",
     role: "telecaller" as "monitoring" | "telecaller" | "lead_manager",
   });
 
-  // Fetch client profile for name
-  const { data: clientProfile } = useQuery({
-    queryKey: ["client-profile", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("user_id", user!.id)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+  const formatDisplayPhone = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits.slice(0, 10);
+  };
+
+  const formatPhoneNumber = (phone: string): string => {
+    let cleaned = phone.replace(/\D/g, "");
+    if (!cleaned.startsWith("91") && cleaned.length === 10) {
+      cleaned = "91" + cleaned;
+    }
+    return "+" + cleaned;
+  };
 
   // Fetch sub-users
   const { data: subUsers, isLoading } = useQuery({
@@ -135,7 +131,8 @@ export default function ClientTeam() {
         .eq("client_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as SubUser[];
+      // Cast to SubUser array since we added phone column via direct SQL
+      return (data || []) as unknown as SubUser[];
     },
     enabled: !!user,
   });
@@ -143,81 +140,58 @@ export default function ClientTeam() {
   // Add sub-user mutation
   const addSubUser = useMutation({
     mutationFn: async (data: typeof formData) => {
-      // Create sub-user record
+      const cleanPhone = data.phone.replace(/\D/g, "");
+      if (cleanPhone.length !== 10) {
+        throw new Error("Please enter a valid 10-digit phone number");
+      }
+
+      const formattedPhone = formatPhoneNumber(cleanPhone);
+
+      // Check if phone already exists for this client - use raw query to bypass type checking
+      const { data: existingList } = await supabase
+        .from("client_sub_users")
+        .select("id")
+        .eq("client_id", user!.id);
+      
+      const existing = (existingList || []).find((item: any) => item.phone === formattedPhone);
+
+      if (existing) {
+        throw new Error("A team member with this phone number already exists");
+      }
+
+      // Create sub-user record using type assertion for phone field
+      const insertData = {
+        client_id: user!.id,
+        phone: formattedPhone,
+        full_name: data.full_name || null,
+        role: data.role,
+        status: "pending",
+        invited_at: new Date().toISOString(),
+        email: null,
+      };
+
       const { data: subUser, error } = await supabase
         .from("client_sub_users")
-        .insert({
-          client_id: user!.id,
-          email: data.email,
-          full_name: data.full_name || null,
-          role: data.role,
-          status: "pending",
-        })
+        .insert(insertData as any)
         .select()
         .single();
 
       if (error) throw error;
 
-      // Send invite email
-      const { data: result, error: inviteError } = await supabase.functions.invoke(
-        "send-subuser-invite",
-        {
-          body: {
-            subUserId: subUser.id,
-            email: data.email,
-            fullName: data.full_name,
-            role: data.role,
-            clientName: clientProfile?.full_name || clientProfile?.email || "Your organization",
-          },
-        }
-      );
-
-      if (inviteError) throw inviteError;
-
-      return { subUser, inviteResult: result };
+      return subUser as unknown as SubUser;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["client-sub-users"] });
       setIsAddDialogOpen(false);
-      setFormData({ email: "", full_name: "", role: "telecaller" });
+      setFormData({ phone: "", full_name: "", role: "telecaller" });
       toast({
-        title: "Team member invited",
-        description: `Invitation sent to ${data.subUser.email}`,
+        title: "Team member added",
+        description: `${data.full_name || "Team member"} can now login using +91 ${data.phone?.replace("+91", "")}`,
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to invite",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Resend invite mutation
-  const resendInvite = useMutation({
-    mutationFn: async (subUser: SubUser) => {
-      const { data, error } = await supabase.functions.invoke("send-subuser-invite", {
-        body: {
-          subUserId: subUser.id,
-          email: subUser.email,
-          fullName: subUser.full_name,
-          role: subUser.role,
-          clientName: clientProfile?.full_name || clientProfile?.email || "Your organization",
-        },
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (_, subUser) => {
-      toast({
-        title: "Invite resent",
-        description: `New invitation sent to ${subUser.email}`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to resend",
+        title: "Failed to add team member",
         description: error.message,
         variant: "destructive",
       });
@@ -290,33 +264,44 @@ export default function ClientTeam() {
               Team Management
             </h1>
             <p className="text-muted-foreground">
-              Manage your sub-users - monitoring team, telecallers, and lead managers
+              Add sub-users with their phone numbers. They can login using OTP.
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Invite Team Member
+                Add Team Member
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Invite Team Member</DialogTitle>
+                <DialogTitle>Add Team Member</DialogTitle>
                 <DialogDescription>
-                  Send an invitation to join your team. They'll receive an email to set up their account.
+                  Add a team member by their phone number. They can login using the Client Login with OTP.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="member@company.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  />
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-muted-foreground">
+                      <Phone className="h-4 w-4" />
+                      <span className="text-sm">+91</span>
+                    </div>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="9876543210"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: formatDisplayPhone(e.target.value) })}
+                      className="pl-20"
+                      maxLength={10}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    They will use this number to login via OTP
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
@@ -360,17 +345,17 @@ export default function ClientTeam() {
                 </Button>
                 <Button
                   onClick={() => addSubUser.mutate(formData)}
-                  disabled={!formData.email || addSubUser.isPending}
+                  disabled={formData.phone.length !== 10 || addSubUser.isPending}
                 >
                   {addSubUser.isPending ? (
                     <>
                       <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Sending...
+                      Adding...
                     </>
                   ) : (
                     <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Send Invite
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Add Member
                     </>
                   )}
                 </Button>
@@ -464,7 +449,7 @@ export default function ClientTeam() {
           <CardHeader>
             <CardTitle>Team Members</CardTitle>
             <CardDescription>
-              All your team members and their access levels
+              All your team members and their access levels. They login via Client Login using their phone number.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -477,10 +462,11 @@ export default function ClientTeam() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Member</TableHead>
+                    <TableHead>Phone</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Invited</TableHead>
-                    <TableHead>Activated</TableHead>
+                    <TableHead>Added</TableHead>
+                    <TableHead>First Login</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -488,9 +474,12 @@ export default function ClientTeam() {
                   {subUsers.map((subUser) => (
                     <TableRow key={subUser.id}>
                       <TableCell>
-                        <div>
-                          <div className="font-medium">{subUser.full_name || "—"}</div>
-                          <div className="text-sm text-muted-foreground">{subUser.email}</div>
+                        <div className="font-medium">{subUser.full_name || "—"}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Phone className="h-3 w-3 text-muted-foreground" />
+                          {subUser.phone?.replace("+91", "+91 ") || "—"}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -525,15 +514,6 @@ export default function ClientTeam() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {subUser.status === "pending" && (
-                              <DropdownMenuItem
-                                onClick={() => resendInvite.mutate(subUser)}
-                                disabled={resendInvite.isPending}
-                              >
-                                <Send className="h-4 w-4 mr-2" />
-                                Resend Invite
-                              </DropdownMenuItem>
-                            )}
                             {subUser.status !== "pending" && (
                               <DropdownMenuItem
                                 onClick={() =>
@@ -575,11 +555,11 @@ export default function ClientTeam() {
                 <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium">No team members yet</h3>
                 <p className="text-muted-foreground mb-4">
-                  Invite your first team member to get started
+                  Add team members with their phone numbers
                 </p>
                 <Button onClick={() => setIsAddDialogOpen(true)}>
                   <UserPlus className="h-4 w-4 mr-2" />
-                  Invite Team Member
+                  Add Team Member
                 </Button>
               </div>
             )}
@@ -593,7 +573,7 @@ export default function ClientTeam() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove {selectedUser?.full_name || selectedUser?.email} from
+              Are you sure you want to remove {selectedUser?.full_name || selectedUser?.phone} from
               your team? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

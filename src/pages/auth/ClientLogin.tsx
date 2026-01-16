@@ -82,7 +82,7 @@ export default function ClientLogin() {
         throw new Error(response.data.error);
       }
 
-      const { isNewUser, session } = response.data;
+      const { isNewUser, isSubUser, subUserRole, session } = response.data;
 
       if (session) {
         // Set the session directly from the edge function response
@@ -94,24 +94,16 @@ export default function ClientLogin() {
         // Set remember me preference
         setRememberMe(rememberMe);
 
-        // Check if user is a sub-user and get their role for redirect
-        const { data: subUserData } = await supabase
-          .from("client_sub_users")
-          .select("role, status")
-          .eq("user_id", session.user.id)
-          .eq("status", "active")
-          .maybeSingle();
-
         toast({
           title: isNewUser ? "Account Created!" : "Welcome back!",
           description: isNewUser 
-            ? "Welcome to Aitel! Your client account has been created."
+            ? "Welcome to Aitel! Your account has been created."
             : "You have been logged in successfully.",
         });
         
-        // Redirect based on sub-user role
-        if (subUserData) {
-          switch (subUserData.role) {
+        // Redirect based on sub-user role (from edge function response)
+        if (isSubUser && subUserRole) {
+          switch (subUserRole) {
             case "telecaller":
               navigate("/client/telecaller");
               break;
@@ -303,7 +295,7 @@ export default function ClientLogin() {
           )}
 
           <p className="text-sm text-muted-foreground text-center mt-6">
-            New users will be automatically registered as clients.
+            Clients and team members can login using their registered phone number.
           </p>
         </div>
       </main>
