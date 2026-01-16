@@ -622,7 +622,7 @@ serve(async (req) => {
         break;
 
       case "list-phone-numbers":
-        response = await fetch(`${BOLNA_API_BASE}/phone-numbers`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/phone-numbers`, {
           headers: { Authorization: `Bearer ${BOLNA_API_KEY}` },
         });
         break;
@@ -632,7 +632,7 @@ serve(async (req) => {
         const type = url.searchParams.get("phone_number_type") || "local";
         const state = url.searchParams.get("region");
 
-        let searchUrl = `${BOLNA_API_BASE}/phone-numbers/search?country_iso=${country}&phone_number_type=${type}`;
+        let searchUrl = `${BOLNA_API_BASE}/v2/phone-numbers/search?country_iso=${country}&phone_number_type=${type}`;
         if (state) searchUrl += `&region=${state}`;
 
         response = await fetch(searchUrl, {
@@ -649,7 +649,7 @@ serve(async (req) => {
           );
         }
 
-        response = await fetch(`${BOLNA_API_BASE}/phone-numbers/agents/${assignAgentId}`, {
+        response = await fetch(`${BOLNA_API_BASE}/v2/phone-numbers/agents/${assignAgentId}`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${BOLNA_API_KEY}`,
