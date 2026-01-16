@@ -44,6 +44,7 @@ import { GoogleSheetSync } from "@/components/campaigns/GoogleSheetSync";
 import { LeadDetailsDialog } from "@/components/campaigns/LeadDetailsDialog";
 import { RetrySettingsDialog } from "@/components/campaigns/RetrySettingsDialog";
 import { RetryTimelineDialog } from "@/components/campaigns/RetryTimelineDialog";
+import { CampaignProgressDashboard } from "@/components/campaigns/CampaignProgressDashboard";
 import { exportLeads, type LeadExportData } from "@/lib/export-utils";
 import {
   DropdownMenu,
@@ -494,6 +495,14 @@ export default function CampaignDetail() {
             <p className="text-xs text-muted-foreground">Not Interested</p>
           </div>
         </div>
+
+        {/* Real-time Progress Dashboard */}
+        {campaignId && (
+          <CampaignProgressDashboard 
+            campaignId={campaignId} 
+            totalLeads={leads?.length || 0} 
+          />
+        )}
 
         {/* Actions Bar */}
         <div className="flex flex-wrap gap-3">
