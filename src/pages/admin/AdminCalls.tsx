@@ -1,9 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchCalls } from "@/lib/secure-proxy";
+import { fetchCalls, isProxyRecordingUrl, getCallRecordingUrl } from "@/lib/secure-proxy";
+import { downloadRecording } from "@/lib/aitel";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useRealtimeCalls } from "@/hooks/useRealtimeCalls";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -289,6 +291,27 @@ export default function AdminCalls() {
     a.click();
   };
 
+  // Download recording with proxy URL resolution
+  const handleDownloadRecording = async (call: Call) => {
+    if (!call.recording_url) return;
+    
+    try {
+      let recordingUrl = call.recording_url;
+      
+      // Resolve proxy URL if needed
+      if (isProxyRecordingUrl(call.recording_url)) {
+        const result = await getCallRecordingUrl(call.id);
+        recordingUrl = result.url;
+      }
+      
+      await downloadRecording(recordingUrl, `call-${call.id.slice(0, 8)}.mp3`);
+      toast.success("Recording download started");
+    } catch (error) {
+      console.error("Failed to download recording:", error);
+      toast.error("Failed to download recording");
+    }
+  };
+
   // Transform for dialog
   const getCallForDialog = (call: Call) => ({
     ...call,
@@ -495,10 +518,10 @@ export default function AdminCalls() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  title="Play Recording"
-                                  onClick={() => setSelectedCall(call)}
+                                  title="Download Recording"
+                                  onClick={() => handleDownloadRecording(call)}
                                 >
-                                  <Play className="h-4 w-4" />
+                                  <Download className="h-4 w-4" />
                                 </Button>
                               )}
                             </div>
