@@ -148,11 +148,15 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get user role
-    const { data: roleData } = await supabase
+    const { data: roleData, error: roleError } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
       .single();
+
+    if (roleError) {
+      debugLog("Role lookup error", { userId, error: roleError.message });
+    }
 
     const userRole = roleData?.role;
 
@@ -811,8 +815,22 @@ serve(async (req) => {
         });
       }
 
-      // Authorization: only the client who owns the call or admin can access
-      if (userRole !== "admin" && call.client_id !== userId) {
+      // Authorization: admin, client who owns the call, or engineer with task access
+      let hasAccess = userRole === "admin" || call.client_id === userId;
+      
+      // Check if engineer has task-based access
+      if (!hasAccess && userRole === "engineer") {
+        const { data: taskAccess } = await supabase
+          .from("tasks")
+          .select("id")
+          .eq("assigned_to", userId)
+          .limit(1);
+        
+        hasAccess = (taskAccess?.length || 0) > 0;
+      }
+      
+      if (!hasAccess) {
+        debugLog("Recording access denied", { userId, userRole, callClientId: call.client_id });
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
