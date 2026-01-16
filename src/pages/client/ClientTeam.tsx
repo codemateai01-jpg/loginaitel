@@ -147,6 +147,21 @@ export default function ClientTeam() {
     },
   });
 
+  // Fetch sub-users (must be before computeCanAddMembers)
+  const { data: subUsers, isLoading } = useQuery({
+    queryKey: ["client-sub-users", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_sub_users")
+        .select("*")
+        .eq("client_id", user!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as SubUser[];
+    },
+    enabled: !!user,
+  });
+
   // Compute if client can add members based on trial/autopay status
   const computeCanAddMembers = () => {
     if (!seatSubscription) return false; // No subscription = need to start trial
@@ -177,21 +192,6 @@ export default function ClientTeam() {
     ? new Date() >= new Date(seatSubscription.trial_ends_at) 
     : false;
   const needsAutopay = (seatSubscription?.is_trial || trialExpired) && !seatSubscription?.autopay_enabled;
-  // Fetch sub-users
-  const { data: subUsers, isLoading } = useQuery({
-    queryKey: ["client-sub-users", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("client_sub_users")
-        .select("*")
-        .eq("client_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      // Cast to SubUser array since we added phone column via direct SQL
-      return (data || []) as unknown as SubUser[];
-    },
-    enabled: !!user,
-  });
 
   const handleSubscriptionChange = () => {
     refetchSubscription();

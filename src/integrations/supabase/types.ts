@@ -1111,36 +1111,51 @@ export type Database = {
       }
       seat_subscriptions: {
         Row: {
+          autopay_enabled: boolean | null
+          autopay_setup_at: string | null
           client_id: string
           created_at: string
           id: string
+          is_trial: boolean | null
           last_payment_date: string | null
           next_billing_date: string | null
           razorpay_subscription_id: string | null
           seats_count: number
           status: string
+          trial_ends_at: string | null
+          trial_started_at: string | null
           updated_at: string
         }
         Insert: {
+          autopay_enabled?: boolean | null
+          autopay_setup_at?: string | null
           client_id: string
           created_at?: string
           id?: string
+          is_trial?: boolean | null
           last_payment_date?: string | null
           next_billing_date?: string | null
           razorpay_subscription_id?: string | null
           seats_count?: number
           status?: string
+          trial_ends_at?: string | null
+          trial_started_at?: string | null
           updated_at?: string
         }
         Update: {
+          autopay_enabled?: boolean | null
+          autopay_setup_at?: string | null
           client_id?: string
           created_at?: string
           id?: string
+          is_trial?: boolean | null
           last_payment_date?: string | null
           next_billing_date?: string | null
           razorpay_subscription_id?: string | null
           seats_count?: number
           status?: string
+          trial_ends_at?: string | null
+          trial_started_at?: string | null
           updated_at?: string
         }
         Relationships: []
