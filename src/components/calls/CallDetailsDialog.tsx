@@ -34,6 +34,7 @@ import {
 import { format } from "date-fns";
 import { Slider } from "@/components/ui/slider";
 import { getExecution, downloadRecording } from "@/lib/aitel";
+import { getRecordingUrl } from "@/lib/voice-proxy";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useDecryptedContent } from "@/hooks/useDecryptedContent";
@@ -108,10 +109,26 @@ export function CallDetailsDialog({
   const rawTranscript = execution?.transcript || call?.transcript;
   const rawSummary = execution?.summary || call?.summary;
 
+  // Recording URL may be proxied (secure-data-proxy returns proxy:recording:CALL_ID)
+  const rawRecordingUrl = execution?.telephony_data?.recording_url || call?.recording_url;
+  const isProxyRecordingUrl =
+    typeof rawRecordingUrl === "string" && rawRecordingUrl.startsWith("proxy:recording:");
+
+  const { data: recordingUrlData, isLoading: isLoadingRecordingUrl } = useQuery({
+    queryKey: ["recording-url", call?.id],
+    enabled: open && !!call?.id && isProxyRecordingUrl,
+    queryFn: async () => getRecordingUrl(call!.id),
+    staleTime: 60 * 1000,
+  });
+
+  const playbackRecordingUrl = isProxyRecordingUrl
+    ? (recordingUrlData?.url ?? null)
+    : (rawRecordingUrl ?? null);
+
   // Use secure decryption for transcript - hooks must be called unconditionally
-  const { 
-    data: decryptedTranscript, 
-    isLoading: isDecryptingTranscript 
+  const {
+    data: decryptedTranscript,
+    isLoading: isDecryptingTranscript,
   } = useDecryptedContent({
     field: rawTranscript,
     resourceId: call?.id || "",
@@ -121,9 +138,9 @@ export function CallDetailsDialog({
   });
 
   // Use secure decryption for summary
-  const { 
-    data: decryptedSummary, 
-    isLoading: isDecryptingSummary 
+  const {
+    data: decryptedSummary,
+    isLoading: isDecryptingSummary,
   } = useDecryptedContent({
     field: rawSummary,
     resourceId: call?.id || "",
@@ -195,8 +212,8 @@ export function CallDetailsDialog({
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  // Get recording URL from execution or call
-  const recordingUrl = execution?.telephony_data?.recording_url || call.recording_url;
+  // Get recording URL for playback (resolved from proxy if needed)
+  const recordingUrl = playbackRecordingUrl;
 
   // Parse transcript into messages
   const parseTranscript = (transcript: string | null) => {
@@ -359,7 +376,7 @@ export function CallDetailsDialog({
             <TabsTrigger
               value="recording"
               className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              disabled={!recordingUrl}
+              disabled={!recordingUrl && !isProxyRecordingUrl}
             >
               <Volume2 className="h-4 w-4" />
               Recording
@@ -449,12 +466,13 @@ export function CallDetailsDialog({
                     onLoadedMetadata={handleLoadedMetadata}
                     onEnded={() => setIsPlaying(false)}
                   />
-                  
+
                   <div className="flex items-center justify-center gap-4">
                     <Button
                       size="lg"
                       onClick={handlePlayPause}
                       className="w-14 h-14 rounded-full"
+                      disabled={isLoadingRecordingUrl}
                     >
                       {isPlaying ? (
                         <Pause className="h-6 w-6" />
@@ -462,7 +480,12 @@ export function CallDetailsDialog({
                         <Play className="h-6 w-6 ml-1" />
                       )}
                     </Button>
-                    <Button variant="outline" size="icon" onClick={handleDownloadRecording}>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleDownloadRecording}
+                      disabled={isLoadingRecordingUrl}
+                    >
                       <Download className="h-4 w-4" />
                     </Button>
                   </div>
@@ -498,6 +521,11 @@ export function CallDetailsDialog({
                     ))}
                   </div>
                 </>
+              ) : isProxyRecordingUrl && isLoadingRecordingUrl ? (
+                <div className="h-[200px] flex flex-col items-center justify-center text-muted-foreground">
+                  <Loader2 className="h-8 w-8 mb-2 animate-spin" />
+                  <p>Loading recording...</p>
+                </div>
               ) : (
                 <div className="h-[200px] flex flex-col items-center justify-center text-muted-foreground">
                   <Volume2 className="h-8 w-8 mb-2" />

@@ -52,7 +52,7 @@ export async function fetchDecryptedContent(
   }
 
   const result = await response.json();
-  return result.decrypted_content;
+  return result.decrypted_content ?? result.content ?? null;
 }
 
 /**
