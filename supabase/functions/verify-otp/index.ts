@@ -90,6 +90,17 @@ serve(async (req) => {
       if (roleData && roleData.role !== "client") {
         throw new Error("You don't have client access. Please use the correct login portal.");
       }
+
+      // Update password for existing user so we can sign them in
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        userId,
+        { password: phonePassword }
+      );
+
+      if (updateError) {
+        console.error("Error updating user password:", updateError);
+        throw new Error("Failed to authenticate");
+      }
     } else {
       // Create new user with email/password
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
