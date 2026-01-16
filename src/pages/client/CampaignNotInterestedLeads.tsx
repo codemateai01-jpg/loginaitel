@@ -29,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { ObjectionAnalyzer } from "@/components/campaigns/ObjectionAnalyzer";
+import { ObjectionTrendsComparison } from "@/components/campaigns/ObjectionTrendsComparison";
 
 const STAGES = [
   { value: "not_interested", label: "Not Interested", color: "bg-red-500/10 text-red-600 border-red-500" },
@@ -160,6 +161,7 @@ export default function CampaignNotInterestedLeads() {
         {/* AI Objection Analyzer */}
         <ObjectionAnalyzer
           campaignId={campaignId!}
+          campaignName={campaign?.name}
           leads={leads?.map((l) => ({
             id: l.id,
             name: l.name,
@@ -167,6 +169,9 @@ export default function CampaignNotInterestedLeads() {
             call_summary: l.call_summary,
           })) || []}
         />
+
+        {/* Cross-Campaign Objection Trends */}
+        <ObjectionTrendsComparison />
 
         {/* Leads Table */}
         <div className="border-2 border-border bg-card">

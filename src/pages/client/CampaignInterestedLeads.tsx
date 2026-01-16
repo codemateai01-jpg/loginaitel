@@ -168,6 +168,7 @@ export default function CampaignInterestedLeads() {
         {/* AI Transcript Analyzer */}
         <TranscriptAnalyzer
           campaignId={campaignId!}
+          campaignName={campaign?.name}
           leads={leads?.map((l) => ({
             id: l.id,
             name: l.name,

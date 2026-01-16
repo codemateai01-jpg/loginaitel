@@ -30,6 +30,7 @@ import {
   MessageSquare,
   AlertCircle,
 } from "lucide-react";
+import { PartialInterestAnalyzer } from "@/components/campaigns/PartialInterestAnalyzer";
 
 const STAGES = [
   { value: "partially_interested", label: "Partially Interested", color: "bg-yellow-500/10 text-yellow-600 border-yellow-500" },
@@ -143,6 +144,18 @@ export default function CampaignPartialLeads() {
             </p>
           </div>
         </div>
+
+        {/* AI Follow-Up Analyzer */}
+        <PartialInterestAnalyzer
+          campaignId={campaignId!}
+          campaignName={campaign?.name}
+          leads={leads?.map((l) => ({
+            id: l.id,
+            name: l.name,
+            call_id: l.call_id,
+            call_summary: l.call_summary,
+          })) || []}
+        />
 
         {/* Leads Table */}
         <div className="border-2 border-border bg-card">
