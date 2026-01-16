@@ -3,9 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Mic, ArrowLeft, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { setRememberMe } from "@/hooks/useSessionTimeout";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -13,6 +15,7 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [rememberMe, setRememberMeState] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -60,6 +63,9 @@ export default function AdminLogin() {
           await supabase.auth.signOut();
           throw new Error("You don't have admin access. Please use the correct login portal.");
         }
+
+        // Set remember me preference
+        setRememberMe(rememberMe);
 
         toast({
           title: "Welcome back, Admin!",
@@ -155,6 +161,19 @@ export default function AdminLogin() {
                 className="border-2"
               />
             </div>
+
+            {!isSignUp && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMeState(checked === true)}
+                />
+                <Label htmlFor="rememberMe" className="text-sm font-normal cursor-pointer">
+                  Remember me for 7 days
+                </Label>
+              </div>
+            )}
 
             <Button
               type="submit"

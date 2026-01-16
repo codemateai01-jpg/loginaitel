@@ -3,16 +3,19 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Mic, ArrowLeft, Building2, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { setRememberMe } from "@/hooks/useSessionTimeout";
 
 export default function ClientLogin() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMeState] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -87,6 +90,9 @@ export default function ClientLogin() {
           access_token: session.access_token,
           refresh_token: session.refresh_token,
         });
+
+        // Set remember me preference
+        setRememberMe(rememberMe);
 
         toast({
           title: isNewUser ? "Account Created!" : "Welcome back!",
@@ -194,6 +200,17 @@ export default function ClientLogin() {
                 <p className="text-xs text-muted-foreground">
                   We'll send a 6-digit verification code via SMS
                 </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMeState(checked === true)}
+                />
+                <Label htmlFor="rememberMe" className="text-sm font-normal cursor-pointer">
+                  Remember me for 7 days
+                </Label>
               </div>
 
               <Button
