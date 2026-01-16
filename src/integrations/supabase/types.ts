@@ -1253,6 +1253,91 @@ export type Database = {
           },
         ]
       }
+      telecaller_call_logs: {
+        Row: {
+          assignment_id: string | null
+          call_outcome: string | null
+          call_type: string
+          client_id: string
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          external_call_id: string | null
+          id: string
+          lead_id: string
+          notes: string | null
+          phone_number: string
+          provider: string | null
+          recording_url: string | null
+          started_at: string | null
+          status: string
+          telecaller_id: string
+          updated_at: string
+        }
+        Insert: {
+          assignment_id?: string | null
+          call_outcome?: string | null
+          call_type?: string
+          client_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          external_call_id?: string | null
+          id?: string
+          lead_id: string
+          notes?: string | null
+          phone_number: string
+          provider?: string | null
+          recording_url?: string | null
+          started_at?: string | null
+          status?: string
+          telecaller_id: string
+          updated_at?: string
+        }
+        Update: {
+          assignment_id?: string | null
+          call_outcome?: string | null
+          call_type?: string
+          client_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          external_call_id?: string | null
+          id?: string
+          lead_id?: string
+          notes?: string | null
+          phone_number?: string
+          provider?: string | null
+          recording_url?: string | null
+          started_at?: string | null
+          status?: string
+          telecaller_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telecaller_call_logs_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "lead_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telecaller_call_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telecaller_call_logs_telecaller_id_fkey"
+            columns: ["telecaller_id"]
+            isOneToOne: false
+            referencedRelation: "client_sub_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_entries: {
         Row: {
           break_end_time: string | null
