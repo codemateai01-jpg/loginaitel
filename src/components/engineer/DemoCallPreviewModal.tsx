@@ -159,10 +159,16 @@ export function DemoCallPreviewModal({
     setIsUploading(true);
 
     try {
-      // Upload to storage
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("You must be logged in to upload audio");
+      }
+
+      // Upload to storage (use user ID as folder for RLS policy)
       const fileExt = file.name.split(".").pop();
       const fileName = `${call.id}_${Date.now()}.${fileExt}`;
-      const filePath = `${call.task_id}/${fileName}`;
+      const filePath = `${user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("demo-audio")
