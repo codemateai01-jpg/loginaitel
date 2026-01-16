@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.aitel-webhook]
 verify_jwt = false
+
+[functions.secure-data-proxy]
+verify_jwt = false
