@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -167,6 +168,8 @@ export default function ClientCalls() {
   const [dateRange, setDateRange] = useState("7");
   const [currentPage, setCurrentPage] = useState(1);
   const [downloadingRecording, setDownloadingRecording] = useState<string | null>(null);
+  const [selectedCallIds, setSelectedCallIds] = useState<Set<string>>(new Set());
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
   // Fetch agents for this client (to get external agent IDs)
   const { data: agents } = useQuery({
@@ -427,6 +430,105 @@ export default function ClientCalls() {
     }
   };
 
+  // Get calls with recordings for bulk download
+  const callsWithRecordings = useMemo(() => {
+    return paginatedCalls.filter((call) => call.recording_url);
+  }, [paginatedCalls]);
+
+  const selectedCallsWithRecordings = useMemo(() => {
+    return callsWithRecordings.filter((call) => selectedCallIds.has(call.id));
+  }, [callsWithRecordings, selectedCallIds]);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSelected = new Set(selectedCallIds);
+      callsWithRecordings.forEach((call) => newSelected.add(call.id));
+      setSelectedCallIds(newSelected);
+    } else {
+      const newSelected = new Set(selectedCallIds);
+      callsWithRecordings.forEach((call) => newSelected.delete(call.id));
+      setSelectedCallIds(newSelected);
+    }
+  };
+
+  const handleSelectCall = (callId: string, checked: boolean) => {
+    const newSelected = new Set(selectedCallIds);
+    if (checked) {
+      newSelected.add(callId);
+    } else {
+      newSelected.delete(callId);
+    }
+    setSelectedCallIds(newSelected);
+  };
+
+  const isAllSelected = callsWithRecordings.length > 0 && 
+    callsWithRecordings.every((call) => selectedCallIds.has(call.id));
+  
+  const isSomeSelected = callsWithRecordings.some((call) => selectedCallIds.has(call.id));
+
+  const handleBulkDownload = async () => {
+    if (selectedCallsWithRecordings.length === 0) {
+      toast({
+        title: "No recordings selected",
+        description: "Please select calls with recordings to download.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBulkDownloading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    toast({
+      title: "Starting bulk download",
+      description: `Downloading ${selectedCallsWithRecordings.length} recording(s)...`,
+    });
+
+    for (const call of selectedCallsWithRecordings) {
+      if (!call.recording_url) continue;
+      
+      try {
+        const response = await fetch(call.recording_url);
+        if (!response.ok) throw new Error("Failed to fetch");
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `recording-${call.id}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        successCount++;
+        
+        // Small delay between downloads to prevent browser blocking
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`Failed to download recording for call ${call.id}:`, error);
+        failCount++;
+      }
+    }
+
+    setIsBulkDownloading(false);
+    setSelectedCallIds(new Set());
+
+    if (failCount === 0) {
+      toast({
+        title: "Download complete",
+        description: `Successfully downloaded ${successCount} recording(s).`,
+      });
+    } else {
+      toast({
+        title: "Download partially complete",
+        description: `Downloaded ${successCount} recording(s). ${failCount} failed.`,
+        variant: "destructive",
+      });
+    }
+  };
+
+
   return (
     <DashboardLayout role="client">
       <div className="space-y-6">
@@ -523,6 +625,35 @@ export default function ClientCalls() {
           </TabsList>
 
           <TabsContent value="history" className="space-y-4">
+            {/* Bulk Actions Bar */}
+            {selectedCallsWithRecordings.length > 0 && (
+              <div className="flex items-center gap-4 p-3 border-2 border-primary/20 bg-primary/5 rounded-md">
+                <span className="text-sm font-medium">
+                  {selectedCallsWithRecordings.length} recording(s) selected
+                </span>
+                <Button
+                  size="sm"
+                  onClick={handleBulkDownload}
+                  disabled={isBulkDownloading}
+                  className="gap-2"
+                >
+                  {isBulkDownloading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <DownloadCloud className="h-4 w-4" />
+                  )}
+                  Download All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedCallIds(new Set())}
+                >
+                  Clear Selection
+                </Button>
+              </div>
+            )}
+
             {/* Search & Filters */}
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
@@ -569,6 +700,14 @@ export default function ClientCalls() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-b-2 border-border hover:bg-transparent">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all calls with recordings"
+                        className={isSomeSelected && !isAllSelected ? "data-[state=checked]:bg-primary/50" : ""}
+                      />
+                    </TableHead>
                     <TableHead className="font-bold">Type</TableHead>
                     <TableHead className="font-bold">Phone Number</TableHead>
                     <TableHead className="font-bold">Agent</TableHead>
@@ -582,14 +721,14 @@ export default function ClientCalls() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={9} className="text-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                         Loading calls...
                       </TableCell>
                     </TableRow>
                   ) : paginatedCalls?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={9} className="text-center py-8">
                         <Phone className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                         <p className="text-muted-foreground">No calls found</p>
                       </TableCell>
@@ -600,6 +739,17 @@ export default function ClientCalls() {
                       const StatusIcon = status.icon;
                       return (
                         <TableRow key={call.id} className="border-b-2 border-border">
+                          <TableCell>
+                            {call.recording_url ? (
+                              <Checkbox
+                                checked={selectedCallIds.has(call.id)}
+                                onCheckedChange={(checked) => handleSelectCall(call.id, !!checked)}
+                                aria-label={`Select call ${call.id}`}
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {call.call_type === "inbound" ? (
                               <span className="inline-flex items-center gap-1 text-chart-1">
