@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,9 +27,11 @@ import {
   Clock,
   XCircle,
   RefreshCw,
-  Activity
+  Activity,
+  BarChart3
 } from "lucide-react";
 import { SubUserActivityLog } from "@/components/admin/SubUserActivityLog";
+import { ActivitySummaryDashboard } from "@/components/admin/ActivitySummaryDashboard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -266,7 +269,7 @@ export default function ClientTeam() {
               <Users className="h-6 w-6" />
               Team Management
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground mt-1">
               Add sub-users with their phone numbers. They can login using OTP.
             </p>
           </div>
@@ -367,6 +370,20 @@ export default function ClientTeam() {
           </Dialog>
         </div>
 
+        {/* Tabs for Team Members and Activity Dashboard */}
+        <Tabs defaultValue="members" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="members" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Team Members
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Activity Dashboard
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="members" className="space-y-6">
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
           <Card>
@@ -577,6 +594,12 @@ export default function ClientTeam() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="activity">
+            {user && <ActivitySummaryDashboard clientId={user.id} />}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Delete Confirmation Dialog */}

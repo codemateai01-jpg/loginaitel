@@ -1031,6 +1031,50 @@ export type Database = {
           },
         ]
       }
+      sub_user_activity_logs: {
+        Row: {
+          action_type: string
+          client_id: string
+          created_at: string
+          description: string | null
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          sub_user_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          action_type: string
+          client_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          sub_user_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          action_type?: string
+          client_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          sub_user_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_user_activity_logs_sub_user_id_fkey"
+            columns: ["sub_user_id"]
+            isOneToOne: false
+            referencedRelation: "client_sub_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscription_history: {
         Row: {
           action: string
