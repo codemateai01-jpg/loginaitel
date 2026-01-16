@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
+import Install from "./pages/Install";
 import LoginSelect from "./pages/auth/LoginSelect";
 import ClientLogin from "./pages/auth/ClientLogin";
 import EngineerLogin from "./pages/auth/EngineerLogin";
@@ -55,6 +56,7 @@ import AdminPerformance from "./pages/admin/AdminPerformance";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminPaymentAnalytics from "./pages/admin/AdminPaymentAnalytics";
 import AdminPackages from "./pages/admin/AdminPackages";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -66,6 +68,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/install" element={<Install />} />
             
             {/* Auth Routes */}
             <Route path="/login" element={<LoginSelect />} />
