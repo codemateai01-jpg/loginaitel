@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DownloadButton } from "@/components/pwa/DownloadButton";
 import { SplashScreen } from "@/components/SplashScreen";
+import { APP_VERSION } from "@/lib/version";
 import {
   Phone,
   Users,
@@ -137,6 +138,9 @@ export default function Landing() {
       <footer className="p-6 text-center animate-fade-in" style={{ animationDelay: "0.4s" }}>
         <p className="text-xs text-muted-foreground">
           © 2024 Aitel Platform. All rights reserved.
+        </p>
+        <p className="text-[10px] text-muted-foreground/60 mt-1">
+          {APP_VERSION.full}
         </p>
       </footer>
     </div>
