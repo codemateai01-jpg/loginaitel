@@ -25,6 +25,11 @@ import CampaignAnalytics from "./pages/client/CampaignAnalytics";
 import CampaignInterestedLeads from "./pages/client/CampaignInterestedLeads";
 import CampaignNotInterestedLeads from "./pages/client/CampaignNotInterestedLeads";
 import CampaignPartialLeads from "./pages/client/CampaignPartialLeads";
+import ClientTeam from "./pages/client/ClientTeam";
+import TelecallerDashboard from "./pages/client/TelecallerDashboard";
+import LeadManagerDashboard from "./pages/client/LeadManagerDashboard";
+import MonitoringDashboard from "./pages/client/MonitoringDashboard";
+import SubUserInvite from "./pages/auth/SubUserInvite";
 import EngineerDashboard from "./pages/engineer/EngineerDashboard";
 import EngineerTasks from "./pages/engineer/EngineerTasks";
 import EngineerLeaderboard from "./pages/engineer/EngineerLeaderboard";
@@ -408,6 +413,41 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/client/team"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <ClientTeam />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/telecaller"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <TelecallerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/lead-manager"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <LeadManagerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/monitoring"
+              element={
+                <ProtectedRoute allowedRoles={["client"]}>
+                  <MonitoringDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Sub-user invite activation (public) */}
+            <Route path="/invite/:token" element={<SubUserInvite />} />
             
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
