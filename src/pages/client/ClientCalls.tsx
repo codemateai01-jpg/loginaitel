@@ -746,11 +746,20 @@ export default function ClientCalls() {
                         Loading calls...
                       </TableCell>
                     </TableRow>
+                  ) : !agents || agents.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8">
+                        <Phone className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-muted-foreground">No agents assigned to your account</p>
+                        <p className="text-sm text-muted-foreground mt-1">Contact your administrator to assign agents</p>
+                      </TableCell>
+                    </TableRow>
                   ) : paginatedCalls?.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-8">
                         <Phone className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                         <p className="text-muted-foreground">No calls found</p>
+                        <p className="text-sm text-muted-foreground mt-1">Make some calls to see them here</p>
                       </TableCell>
                     </TableRow>
                   ) : (
