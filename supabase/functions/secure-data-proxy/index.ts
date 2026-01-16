@@ -77,13 +77,26 @@ function sanitizeMetadata(metadata: Record<string, unknown> | null): Record<stri
   if (metadata.retry_attempt !== undefined) sanitized.retry_attempt = metadata.retry_attempt;
   if (metadata.answered_by_voicemail !== undefined) sanitized.answered_by_voicemail = metadata.answered_by_voicemail;
   
+  // Encode extracted_data if present (may contain lead info, form responses, etc.)
+  if (metadata.extracted_data) {
+    const extractedStr = typeof metadata.extracted_data === 'string' 
+      ? metadata.extracted_data 
+      : JSON.stringify(metadata.extracted_data);
+    sanitized.extracted_data = encodeForTransport(extractedStr);
+  }
+  
   // Completely remove sensitive fields:
   // - usage_breakdown (LLM tokens, models, provider info)
   // - telephony_provider (infrastructure info)
   // - queue_item_id, last_webhook_at (internal system data)
-  // - extracted_data (may contain sensitive info)
   
   return sanitized;
+}
+
+// Encode notes field for transport
+function encodeNotes(notes: string | null): string | null {
+  if (!notes) return null;
+  return encodeForTransport(notes);
 }
 
 serve(async (req) => {

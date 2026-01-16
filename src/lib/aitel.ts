@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { decodeTranscript, decodeSummary } from "@/lib/decode-utils";
+import { decodeTranscript, decodeSummary, decodeExtractedData, decodeNotes } from "@/lib/decode-utils";
 
 const AITEL_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy`;
 
@@ -619,7 +619,15 @@ export async function listAgentExecutions(params: ListExecutionsParams): Promise
       if (decoded.summary) {
         decoded.summary = decodeSummary(decoded.summary) || decoded.summary;
       }
-      return decoded as CallExecution;
+      // Decode additional fields using type assertion for extended properties
+      const anyDecoded = decoded as Record<string, unknown>;
+      if (anyDecoded.extracted_data && typeof anyDecoded.extracted_data === 'string') {
+        anyDecoded.extracted_data = decodeExtractedData(anyDecoded.extracted_data) || anyDecoded.extracted_data;
+      }
+      if (anyDecoded.notes && typeof anyDecoded.notes === 'string') {
+        anyDecoded.notes = decodeNotes(anyDecoded.notes) || anyDecoded.notes;
+      }
+      return decoded;
     });
   }
   
@@ -697,7 +705,15 @@ export async function listBatchExecutions(batchId: string): Promise<AitelRespons
       if (decoded.summary) {
         decoded.summary = decodeSummary(decoded.summary) || decoded.summary;
       }
-      return decoded as CallExecution;
+      // Decode additional fields using type assertion for extended properties
+      const anyDecoded = decoded as Record<string, unknown>;
+      if (anyDecoded.extracted_data && typeof anyDecoded.extracted_data === 'string') {
+        anyDecoded.extracted_data = decodeExtractedData(anyDecoded.extracted_data) || anyDecoded.extracted_data;
+      }
+      if (anyDecoded.notes && typeof anyDecoded.notes === 'string') {
+        anyDecoded.notes = decodeNotes(anyDecoded.notes) || anyDecoded.notes;
+      }
+      return decoded;
     });
   }
   
