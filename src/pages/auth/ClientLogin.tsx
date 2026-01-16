@@ -3,30 +3,37 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mic, ArrowLeft, Building2, Mail } from "lucide-react";
+import { Mic, ArrowLeft, Building2, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export default function ClientLogin() {
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const formatDisplayPhone = (value: string) => {
+    // Only allow digits
+    const digits = value.replace(/\D/g, "");
+    return digits.slice(0, 10);
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      if (!email || !email.includes("@")) {
-        throw new Error("Please enter a valid email address");
+      const cleanPhone = phone.replace(/\D/g, "");
+      if (cleanPhone.length !== 10) {
+        throw new Error("Please enter a valid 10-digit phone number");
       }
 
       const response = await supabase.functions.invoke("send-otp", {
-        body: { email: email.trim().toLowerCase() },
+        body: { phone: cleanPhone },
       });
 
       if (response.error) {
@@ -40,7 +47,7 @@ export default function ClientLogin() {
       setStep("otp");
       toast({
         title: "OTP Sent!",
-        description: `A 6-digit verification code has been sent to ${email}`,
+        description: `A 6-digit verification code has been sent to +91 ${phone}`,
       });
     } catch (error: any) {
       toast({
@@ -60,7 +67,7 @@ export default function ClientLogin() {
     try {
       const response = await supabase.functions.invoke("verify-otp", {
         body: { 
-          email: email.trim().toLowerCase(),
+          phone: phone.replace(/\D/g, ""),
           otp: otp,
         },
       });
@@ -73,20 +80,21 @@ export default function ClientLogin() {
         throw new Error(response.data.error);
       }
 
-      const { isNewUser, tokenHash } = response.data;
+      const { isNewUser, tokenHash, email } = response.data;
 
       // Use the token to sign in
-      if (tokenHash) {
+      if (tokenHash && email) {
         const { error: verifyError } = await supabase.auth.verifyOtp({
-          email: email.trim().toLowerCase(),
+          email: email,
           token: tokenHash,
           type: "email",
         });
 
         if (verifyError) {
+          console.log("Token verification failed, trying alternative method");
           // Try magic link approach
           const { error: signInError } = await supabase.auth.signInWithOtp({
-            email: email.trim().toLowerCase(),
+            email: email,
             options: {
               shouldCreateUser: false,
             },
@@ -123,11 +131,17 @@ export default function ClientLogin() {
           });
           navigate("/client");
         } else {
-          // Manual sign in as last resort
           toast({
             title: "Verification Successful!",
-            description: "Please check your email for the login link.",
+            description: "Please wait while we complete your login...",
           });
+          // Retry session check after a brief delay
+          setTimeout(async () => {
+            const { data: delayedSession } = await supabase.auth.getSession();
+            if (delayedSession.session) {
+              navigate("/client");
+            }
+          }, 1000);
         }
       }
     } catch (error: any) {
@@ -145,7 +159,7 @@ export default function ClientLogin() {
     setLoading(true);
     try {
       const response = await supabase.functions.invoke("send-otp", {
-        body: { email: email.trim().toLowerCase() },
+        body: { phone: phone.replace(/\D/g, "") },
       });
 
       if (response.error || response.data?.error) {
@@ -154,7 +168,7 @@ export default function ClientLogin() {
 
       toast({
         title: "OTP Resent!",
-        description: "A new verification code has been sent to your email.",
+        description: "A new verification code has been sent to your phone.",
       });
     } catch (error: any) {
       toast({
@@ -195,38 +209,42 @@ export default function ClientLogin() {
             <div>
               <h1 className="text-2xl font-bold">Client Login</h1>
               <p className="text-sm text-muted-foreground">
-                {step === "email" 
-                  ? "Enter your email to receive a verification code" 
-                  : "Enter the 6-digit code sent to your email"}
+                {step === "phone" 
+                  ? "Enter your phone number to receive a verification code" 
+                  : "Enter the 6-digit code sent to your phone"}
               </p>
             </div>
           </div>
 
-          {step === "email" ? (
+          {step === "phone" ? (
             <form onSubmit={handleSendOtp} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="phone">Phone Number</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-muted-foreground">
+                    <Phone className="h-4 w-4" />
+                    <span className="text-sm">+91</span>
+                  </div>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="phone"
+                    type="tel"
+                    placeholder="9876543210"
+                    value={phone}
+                    onChange={(e) => setPhone(formatDisplayPhone(e.target.value))}
                     required
-                    className="border-2 pl-10"
+                    className="border-2 pl-20"
+                    maxLength={10}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  We'll send a 6-digit verification code to your email
+                  We'll send a 6-digit verification code via SMS
                 </p>
               </div>
 
               <Button
                 type="submit"
                 className="w-full shadow-sm"
-                disabled={loading}
+                disabled={loading || phone.length !== 10}
               >
                 {loading ? "Sending OTP..." : "Send OTP"}
               </Button>
@@ -252,7 +270,7 @@ export default function ClientLogin() {
                   </InputOTP>
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  OTP sent to {email}
+                  OTP sent to +91 {phone}
                 </p>
               </div>
 
@@ -268,12 +286,12 @@ export default function ClientLogin() {
                 <button
                   type="button"
                   onClick={() => {
-                    setStep("email");
+                    setStep("phone");
                     setOtp("");
                   }}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Change email
+                  Change phone number
                 </button>
                 <button
                   type="button"

@@ -7,8 +7,16 @@ const corsHeaders = {
 };
 
 interface VerifyOtpRequest {
-  email: string;
+  phone: string;
   otp: string;
+}
+
+function formatPhoneNumber(phone: string): string {
+  let cleaned = phone.replace(/\D/g, "");
+  if (!cleaned.startsWith("91") && cleaned.length === 10) {
+    cleaned = "91" + cleaned;
+  }
+  return "+" + cleaned;
 }
 
 serve(async (req) => {
@@ -22,19 +30,19 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { email, otp }: VerifyOtpRequest = await req.json();
+    const { phone, otp }: VerifyOtpRequest = await req.json();
 
-    if (!email || !otp) {
-      throw new Error("Email and OTP are required");
+    if (!phone || !otp) {
+      throw new Error("Phone number and OTP are required");
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const formattedPhone = formatPhoneNumber(phone);
 
     // Find valid OTP
     const { data: otpRecord, error: fetchError } = await supabaseAdmin
-      .from("email_otps")
+      .from("phone_otps")
       .select("*")
-      .eq("email", normalizedEmail)
+      .eq("phone", formattedPhone)
       .eq("otp_code", otp)
       .eq("verified", false)
       .gt("expires_at", new Date().toISOString())
@@ -51,14 +59,17 @@ serve(async (req) => {
 
     // Mark OTP as verified
     await supabaseAdmin
-      .from("email_otps")
+      .from("phone_otps")
       .update({ verified: true })
       .eq("id", otpRecord.id);
+
+    // Generate a unique email for this phone user (for Supabase auth)
+    const phoneEmail = `${formattedPhone.replace("+", "")}@phone.aitel.local`;
 
     // Check if user exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === normalizedEmail
+      (u) => u.email?.toLowerCase() === phoneEmail.toLowerCase()
     );
 
     let userId: string;
@@ -78,10 +89,13 @@ serve(async (req) => {
         throw new Error("You don't have client access. Please use the correct login portal.");
       }
     } else {
-      // Create new user
+      // Create new user with phone-based email
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: normalizedEmail,
+        email: phoneEmail,
         email_confirm: true,
+        user_metadata: {
+          phone: formattedPhone,
+        },
       });
 
       if (createError || !newUser.user) {
@@ -98,10 +112,11 @@ serve(async (req) => {
         role: "client",
       });
 
-      // Create profile
+      // Create profile with phone
       await supabaseAdmin.from("profiles").insert({
         user_id: userId,
-        email: normalizedEmail,
+        email: phoneEmail,
+        phone: formattedPhone,
         full_name: "",
       });
 
@@ -116,7 +131,7 @@ serve(async (req) => {
     // Generate a magic link for seamless login
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
-      email: normalizedEmail,
+      email: phoneEmail,
     });
 
     if (linkError || !linkData) {
@@ -124,14 +139,13 @@ serve(async (req) => {
       throw new Error("Failed to complete authentication");
     }
 
-    // Extract the token from the link
     const tokenHash = linkData.properties?.hashed_token;
 
     // Clean up used OTP
     await supabaseAdmin
-      .from("email_otps")
+      .from("phone_otps")
       .delete()
-      .eq("email", normalizedEmail);
+      .eq("phone", formattedPhone);
 
     return new Response(
       JSON.stringify({
@@ -139,7 +153,7 @@ serve(async (req) => {
         isNewUser,
         userId,
         tokenHash,
-        email: normalizedEmail,
+        email: phoneEmail,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
