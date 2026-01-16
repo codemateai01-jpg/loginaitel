@@ -19,6 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Phone,
@@ -39,6 +45,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  DollarSign,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   HoverCard,
@@ -48,6 +56,8 @@ import {
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { CallDetailsDialog } from "@/components/calls/CallDetailsDialog";
+import { CallCostAnalytics } from "@/components/analytics/CallCostAnalytics";
+import { exportCalls, type CallExportData } from "@/lib/export-utils";
 import {
   BarChart,
   Bar,
@@ -340,30 +350,37 @@ export default function ClientCalls() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const exportCalls = () => {
+  // Fetch credit balance for cost analytics
+  const { data: creditBalance } = useQuery({
+    queryKey: ["client-credits-balance", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_credits")
+        .select("balance")
+        .eq("client_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.balance || 0;
+    },
+  });
+
+  const handleExport = (exportFormat: "csv" | "excel") => {
     if (!filteredCalls || filteredCalls.length === 0) return;
     
-    const csv = [
-      ["Date", "Type", "Phone Number", "Agent", "Status", "Duration", "Connected"].join(","),
-      ...filteredCalls.map((call) =>
-        [
-          format(new Date(call.created_at), "yyyy-MM-dd HH:mm"),
-          call.call_type || "outbound",
-          call.phone_number || "",
-          call.agent_name || "",
-          call.status,
-          formatDuration(call.duration_seconds),
-          call.connected ? "Yes" : "No",
-        ].join(",")
-      ),
-    ].join("\n");
+    const exportData: CallExportData[] = filteredCalls.map((call) => ({
+      date: format(new Date(call.created_at), "yyyy-MM-dd HH:mm"),
+      callType: call.call_type || "outbound",
+      phoneNumber: call.phone_number || "",
+      agentName: call.agent_name || "",
+      status: call.status,
+      duration: formatDuration(call.duration_seconds),
+      connected: call.connected,
+      cost: Math.ceil((call.duration_seconds || 0) / 60) * 5, // ₹5 per minute
+      summary: call.summary || undefined,
+    }));
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `call-history-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
+    exportCalls(exportData, exportFormat);
   };
 
   return (
@@ -390,10 +407,24 @@ export default function ClientCalls() {
                 <SelectItem value="90">Last 90 days</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={exportCalls} className="shadow-xs">
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="shadow-xs">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExport("csv")}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("excel")}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export as Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -437,6 +468,13 @@ export default function ClientCalls() {
             >
               <BarChart3 className="h-4 w-4" />
               Analytics
+            </TabsTrigger>
+            <TabsTrigger
+              value="costs"
+              className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <DollarSign className="h-4 w-4" />
+              Cost & ROI
             </TabsTrigger>
           </TabsList>
 
@@ -765,6 +803,23 @@ export default function ClientCalls() {
                 ))}
               </div>
             </div>
+          </TabsContent>
+
+          {/* Cost & ROI Tab */}
+          <TabsContent value="costs" className="space-y-6">
+            <CallCostAnalytics 
+              calls={calls?.map(c => ({
+                id: c.id,
+                created_at: c.created_at,
+                duration_seconds: c.duration_seconds,
+                connected: c.connected,
+                status: c.status,
+                sentiment: c.summary?.toLowerCase().includes("interested") ? "positive" 
+                  : c.summary?.toLowerCase().includes("not interested") ? "negative" 
+                  : null,
+              })) || []}
+              creditBalance={creditBalance || 0}
+            />
           </TabsContent>
         </Tabs>
       </div>

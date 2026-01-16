@@ -44,6 +44,13 @@ import { GoogleSheetSync } from "@/components/campaigns/GoogleSheetSync";
 import { LeadDetailsDialog } from "@/components/campaigns/LeadDetailsDialog";
 import { RetrySettingsDialog } from "@/components/campaigns/RetrySettingsDialog";
 import { RetryTimelineDialog } from "@/components/campaigns/RetryTimelineDialog";
+import { exportLeads, type LeadExportData } from "@/lib/export-utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Plus,
   Upload,
@@ -549,6 +556,56 @@ export default function CampaignDetail() {
             <Upload className="h-4 w-4 mr-2" />
             Upload CSV
           </Button>
+
+          {/* Export Leads */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Export Leads
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => {
+                if (!leads?.length) return;
+                const exportData: LeadExportData[] = leads.map(lead => ({
+                  name: lead.name,
+                  phone: lead.phone_number,
+                  email: lead.email || undefined,
+                  stage: lead.stage,
+                  interestLevel: lead.interest_level || undefined,
+                  callStatus: lead.call_status || undefined,
+                  callDuration: lead.call_duration || undefined,
+                  callSummary: lead.call_summary || undefined,
+                  notes: lead.notes || undefined,
+                  createdAt: format(new Date(lead.created_at), "yyyy-MM-dd HH:mm"),
+                }));
+                exportLeads(exportData, campaign?.name || "campaign", "csv");
+              }}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                if (!leads?.length) return;
+                const exportData: LeadExportData[] = leads.map(lead => ({
+                  name: lead.name,
+                  phone: lead.phone_number,
+                  email: lead.email || undefined,
+                  stage: lead.stage,
+                  interestLevel: lead.interest_level || undefined,
+                  callStatus: lead.call_status || undefined,
+                  callDuration: lead.call_duration || undefined,
+                  callSummary: lead.call_summary || undefined,
+                  notes: lead.notes || undefined,
+                  createdAt: format(new Date(lead.created_at), "yyyy-MM-dd HH:mm"),
+                }));
+                exportLeads(exportData, campaign?.name || "campaign", "excel");
+              }}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Export as Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button variant="outline" onClick={() => setIsSheetSyncOpen(true)}>
             <RefreshCw className="h-4 w-4 mr-2" />
