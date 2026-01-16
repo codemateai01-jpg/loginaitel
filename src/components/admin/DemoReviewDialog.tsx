@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import {
   CheckCircle,
@@ -268,7 +269,7 @@ export function DemoReviewDialog({
         }
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Review Demo Submission</DialogTitle>
           <DialogDescription>
@@ -276,7 +277,8 @@ export function DemoReviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-4">
+        <ScrollArea className="flex-1 max-h-[65vh] pr-4">
+          <div className="space-y-4 pt-4">
           {/* Task Info */}
           <div className="border-2 border-border p-4 space-y-3">
             <h3 className="font-bold text-lg">{task.title}</h3>
@@ -510,7 +512,8 @@ export function DemoReviewDialog({
               </Button>
             </div>
           )}
-        </div>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

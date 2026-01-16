@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -149,12 +150,13 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Task" : "Create New Task"}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 pt-4">
+        <ScrollArea className="flex-1 max-h-[65vh] pr-4">
+          <div className="space-y-4 pt-4">
           <div className="space-y-2">
             <Label htmlFor="title">Task Title *</Label>
             <Input
@@ -243,7 +245,8 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
               {createMutation.isPending ? "Saving..." : isEditing ? "Update Task" : "Create Task"}
             </Button>
           </div>
-        </div>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Settings, Bell, RefreshCw, Loader2, AlertTriangle, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -90,7 +91,7 @@ export function CreditSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -101,7 +102,8 @@ export function CreditSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <ScrollArea className="flex-1 max-h-[65vh] pr-4">
+          <div className="space-y-6">
           {/* Low Balance Alerts */}
           <Card>
             <CardContent className="pt-6 space-y-4">
@@ -232,7 +234,8 @@ export function CreditSettingsDialog({
               "Save Settings"
             )}
           </Button>
-        </div>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

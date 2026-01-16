@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { CreditCard, Loader2, Check, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -179,7 +180,7 @@ export function BuyCreditsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5" />
@@ -190,7 +191,8 @@ export function BuyCreditsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <ScrollArea className="flex-1 max-h-[65vh] pr-4">
+          <div className="space-y-4">
           {/* Package Selection with Discounts */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {CREDIT_PACKAGES.map((pkg) => {
@@ -317,7 +319,8 @@ export function BuyCreditsDialog({
           <p className="text-xs text-center text-muted-foreground">
             Secured by Razorpay. Your payment information is encrypted.
           </p>
-        </div>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

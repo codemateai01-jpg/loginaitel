@@ -1,6 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutDashboard,
   Users,
@@ -132,27 +133,29 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             </Link>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 text-sm font-medium border-2 transition-all",
-                    isActive
-                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                      : "border-transparent hover:bg-accent hover:border-border"
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          {/* Navigation with scroll */}
+          <ScrollArea className="flex-1 px-4 py-2">
+            <nav className="space-y-1">
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 text-sm font-medium border-2 transition-all",
+                      isActive
+                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                        : "border-transparent hover:bg-accent hover:border-border"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </ScrollArea>
 
           {/* Logout */}
           <div className="p-4 border-t-2 border-border">
