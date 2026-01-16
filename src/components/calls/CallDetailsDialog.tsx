@@ -29,12 +29,15 @@ import {
   Loader2,
   Voicemail,
   AlertCircle,
+  Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Slider } from "@/components/ui/slider";
 import { getExecution, downloadRecording } from "@/lib/aitel";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useDecryptedContent } from "@/hooks/useDecryptedContent";
+import { isEncryptedPayload } from "@/lib/secure-decrypt";
 
 interface Call {
   id: string;
@@ -161,8 +164,37 @@ export function CallDetailsDialog({
   // Get recording URL from execution or call
   const recordingUrl = execution?.telephony_data?.recording_url || call.recording_url;
 
-  // Get summary from execution or call
-  const callSummary = execution?.summary || call.summary;
+  // Determine raw transcript and summary sources (may be encrypted)
+  const rawTranscript = execution?.transcript || call.transcript;
+  const rawSummary = execution?.summary || call.summary;
+
+  // Use secure decryption for transcript
+  const { 
+    data: decryptedTranscript, 
+    isLoading: isDecryptingTranscript 
+  } = useDecryptedContent({
+    field: rawTranscript,
+    resourceId: call.id,
+    resourceType: "call",
+    fieldType: "transcript",
+    enabled: open && !!rawTranscript,
+  });
+
+  // Use secure decryption for summary
+  const { 
+    data: decryptedSummary, 
+    isLoading: isDecryptingSummary 
+  } = useDecryptedContent({
+    field: rawSummary,
+    resourceId: call.id,
+    resourceType: "call",
+    fieldType: "summary",
+    enabled: open && !!rawSummary,
+  });
+
+  // Check if content is encrypted
+  const isTranscriptEncrypted = isEncryptedPayload(rawTranscript);
+  const isSummaryEncrypted = isEncryptedPayload(rawSummary);
 
   // Parse transcript into messages
   const parseTranscript = (transcript: string | null) => {
@@ -185,9 +217,8 @@ export function CallDetailsDialog({
     });
   };
 
-  // Use execution transcript if available, otherwise fall back to call transcript
-  const transcriptSource = execution?.transcript || call.transcript;
-  const transcriptMessages = parseTranscript(transcriptSource);
+  // Use decrypted transcript
+  const transcriptMessages = parseTranscript(decryptedTranscript || null);
 
   const handleDownloadRecording = async () => {
     if (recordingUrl) {
@@ -343,8 +374,23 @@ export function CallDetailsDialog({
           {/* Transcript Tab */}
           <TabsContent value="transcript" className="flex-1 min-h-0">
             <ScrollArea className="h-[300px] border-2 border-border p-4">
-              {transcriptMessages.length > 0 ? (
+              {isDecryptingTranscript ? (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <Loader2 className="h-8 w-8 mb-2 animate-spin" />
+                  <p className="flex items-center gap-2">
+                    <Lock className="h-4 w-4" />
+                    Decrypting transcript...
+                  </p>
+                  <p className="text-xs">Securely loading encrypted content</p>
+                </div>
+              ) : transcriptMessages.length > 0 ? (
                 <div className="space-y-4">
+                  {isTranscriptEncrypted && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 p-2 bg-muted/30 border border-border">
+                      <Lock className="h-3 w-3" />
+                      <span>Content securely decrypted</span>
+                    </div>
+                  )}
                   {transcriptMessages.map((message, index) => {
                     const isAgent = ["agent", "bot", "assistant"].includes(message.role);
                     return (
@@ -465,19 +511,28 @@ export function CallDetailsDialog({
             <ScrollArea className="h-[300px] border-2 border-border p-4">
               <div className="space-y-6">
                 {/* Loading State */}
-                {isLoadingExecution && call?.external_call_id ? (
+                {(isLoadingExecution && call?.external_call_id) || isDecryptingSummary ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Loader2 className="h-8 w-8 animate-spin mb-3" />
-                    <p className="text-sm">Loading summary...</p>
+                    <p className="text-sm flex items-center gap-2">
+                      {isDecryptingSummary && <Lock className="h-4 w-4" />}
+                      {isDecryptingSummary ? "Decrypting summary..." : "Loading summary..."}
+                    </p>
                   </div>
-                ) : callSummary ? (
+                ) : decryptedSummary ? (
                   <div>
                     <h4 className="font-medium mb-3 flex items-center gap-2">
                       <MessageSquare className="h-4 w-4" />
                       Call Summary
+                      {isSummaryEncrypted && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1 ml-2">
+                          <Lock className="h-3 w-3" />
+                          Encrypted
+                        </span>
+                      )}
                     </h4>
                     <div className="p-4 bg-muted/50 border-2 border-border">
-                      <p className="text-sm leading-relaxed">{callSummary}</p>
+                      <p className="text-sm leading-relaxed">{decryptedSummary}</p>
                     </div>
                   </div>
                 ) : (
