@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { clearLastActivity, clearRememberMe } from "@/hooks/useSessionTimeout";
 
 type AppRole = "admin" | "engineer" | "client";
 type SubUserRole = "monitoring" | "telecaller" | "lead_manager" | null;
@@ -105,6 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("Failed to clear active session:", error);
       }
     }
+    
+    // Clear session timeout data
+    clearLastActivity();
+    clearRememberMe();
     
     await supabase.auth.signOut();
     setUser(null);

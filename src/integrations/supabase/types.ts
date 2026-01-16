@@ -369,6 +369,42 @@ export type Database = {
           },
         ]
       }
+      client_active_sessions: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          device_info: string | null
+          id: string
+          ip_address: string | null
+          is_active: boolean | null
+          last_activity_at: string | null
+          logged_in_at: string | null
+          session_token: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          device_info?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          logged_in_at?: string | null
+          session_token: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          device_info?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          logged_in_at?: string | null
+          session_token?: string
+        }
+        Relationships: []
+      }
       client_credits: {
         Row: {
           auto_recharge_amount: number | null

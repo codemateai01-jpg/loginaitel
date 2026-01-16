@@ -1,14 +1,20 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { setLastActivity } from "./useSessionTimeout";
+
+const ACTIVITY_UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const DEBOUNCE_INTERVAL = 60 * 1000; // 1 minute debounce
 
 /**
  * Hook to track session activity and update last_activity_at for single-device enforcement.
+ * Also syncs with local storage for 24-hour session expiry.
  * Only tracks for main clients (not sub-users).
  */
 export function useSessionActivity() {
   const { user, role, isSubUser } = useAuth();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     // Only track for main clients (not sub-users)
@@ -17,6 +23,16 @@ export function useSessionActivity() {
     }
 
     const updateActivity = async () => {
+      const now = Date.now();
+      
+      // Debounce: only update if last update was > 1 minute ago
+      if (now - lastUpdateRef.current < DEBOUNCE_INTERVAL) {
+        return;
+      }
+      
+      lastUpdateRef.current = now;
+      setLastActivity(now); // Sync with local storage for session timeout
+
       try {
         await supabase
           .from("client_active_sessions" as any)
@@ -32,11 +48,10 @@ export function useSessionActivity() {
     updateActivity();
 
     // Update every 5 minutes
-    intervalRef.current = setInterval(updateActivity, 5 * 60 * 1000);
+    intervalRef.current = setInterval(updateActivity, ACTIVITY_UPDATE_INTERVAL);
 
-    // Also update on user interactions
+    // Also update on user interactions (debounced)
     const handleActivity = () => {
-      // Debounce: only update if last update was > 1 minute ago
       updateActivity();
     };
 
