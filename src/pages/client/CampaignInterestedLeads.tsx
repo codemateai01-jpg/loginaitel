@@ -30,6 +30,7 @@ import {
   MessageSquare,
   CheckCircle,
 } from "lucide-react";
+import { TranscriptAnalyzer } from "@/components/campaigns/TranscriptAnalyzer";
 
 const STAGES = [
   { value: "interested", label: "Interested", color: "bg-green-500/10 text-green-600 border-green-500" },
@@ -163,6 +164,17 @@ export default function CampaignInterestedLeads() {
             <p className="text-xs text-muted-foreground">Closed</p>
           </div>
         </div>
+
+        {/* AI Transcript Analyzer */}
+        <TranscriptAnalyzer
+          campaignId={campaignId!}
+          leads={leads?.map((l) => ({
+            id: l.id,
+            name: l.name,
+            call_id: l.call_id,
+            call_summary: l.call_summary,
+          })) || []}
+        />
 
         {/* Leads Table */}
         <div className="border-2 border-border bg-card">
