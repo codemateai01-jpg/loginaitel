@@ -269,38 +269,39 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             {lead.name}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-          {/* Lead Info */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="font-mono">{lead.phone_number}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span>{format(new Date(lead.created_at), "MMM d, yyyy")}</span>
-            </div>
-            {lead.call_duration && (
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="space-y-4 pr-4">
+            {/* Lead Info */}
+            <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span>{formatDuration(lead.call_duration)}</span>
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="font-mono">{lead.phone_number}</span>
               </div>
-            )}
-            <div className="flex items-center gap-2">
-              {getInterestBadge(lead.interest_level)}
-              {getSentimentBadge(lead.call_sentiment)}
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span>{format(new Date(lead.created_at), "MMM d, yyyy")}</span>
+              </div>
+              {lead.call_duration && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>{formatDuration(lead.call_duration)}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                {getInterestBadge(lead.interest_level)}
+                {getSentimentBadge(lead.call_sentiment)}
+              </div>
             </div>
-          </div>
 
-          {/* Tabs */}
-          <Tabs defaultValue={recordingUrl ? "recording" : "summary"} className="flex-1 flex flex-col overflow-hidden">
+            {/* Tabs */}
+            <Tabs defaultValue={recordingUrl ? "recording" : "summary"} className="flex flex-col">
             <TabsList className="grid grid-cols-3">
               <TabsTrigger value="recording" className="flex items-center gap-1">
                 <Volume2 className="h-4 w-4" />
@@ -490,8 +491,8 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
               </div>
             </TabsContent>
           </Tabs>
-        </div>
-
+          </div>
+        </ScrollArea>
         <div className="flex justify-end pt-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close

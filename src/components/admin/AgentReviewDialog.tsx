@@ -83,8 +83,8 @@ export function AgentReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Bot className="h-5 w-5" />
             Review Agent: {agent.name}
@@ -94,8 +94,8 @@ export function AgentReviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="prompt" className="flex-1 min-h-0">
-          <TabsList className="grid grid-cols-4 w-full">
+        <Tabs defaultValue="prompt" className="flex-1 min-h-0 flex flex-col">
+          <TabsList className="grid grid-cols-4 w-full flex-shrink-0">
             <TabsTrigger value="prompt" className="flex items-center gap-1">
               <MessageSquare className="h-4 w-4" />
               <span className="hidden sm:inline">Prompt</span>
@@ -114,7 +114,7 @@ export function AgentReviewDialog({
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4 h-[350px]">
+          <ScrollArea className="flex-1 min-h-0 mt-4">
             <TabsContent value="prompt" className="mt-0 space-y-4">
               <div className="space-y-2">
                 <h4 className="font-bold text-sm">Description</h4>

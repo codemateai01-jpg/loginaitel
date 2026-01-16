@@ -213,8 +213,8 @@ export function CallDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-2 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="border-2 max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Phone className="h-5 w-5" />
             Call Details
@@ -225,88 +225,90 @@ export function CallDetailsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-muted/50 border-2 border-border">
-          {!hidePhoneNumber && (
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-xs text-muted-foreground">Phone</p>
-                <p className="font-medium text-sm font-mono">{call.phone_number || "—"}</p>
-              </div>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <Bot className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">Agent</p>
-              <p className="font-medium text-sm">{call.agent_name || "—"}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">Duration</p>
-              <p className="font-medium text-sm font-mono">
-                {execution?.conversation_time 
-                  ? formatDuration(execution.conversation_time) 
-                  : formatDuration(call.duration_seconds)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">Date</p>
-              <p className="font-medium text-sm">
-                {format(new Date(call.created_at), "MMM d, HH:mm")}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Execution Details */}
-        {execution && (
-          <div className="flex flex-wrap gap-4 items-center text-sm">
-            <div className="flex items-center gap-2">
-              {call.connected || execution.status === "completed" ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <XCircle className="h-4 w-4 text-muted-foreground" />
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="space-y-4 pr-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-muted/50 border-2 border-border">
+              {!hidePhoneNumber && (
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="font-medium text-sm font-mono">{call.phone_number || "—"}</p>
+                  </div>
+                </div>
               )}
-              <span>{call.connected || execution.status === "completed" ? "Connected" : "Not Connected"}</span>
-            </div>
-            
-            {(execution.telephony_data?.call_type || call.call_type) && (
               <div className="flex items-center gap-2">
-                {(execution.telephony_data?.call_type || call.call_type) === "outbound" ? (
-                  <PhoneOutgoing className="h-4 w-4 text-chart-2" />
-                ) : (
-                  <PhoneIncoming className="h-4 w-4 text-chart-1" />
+                <Bot className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Agent</p>
+                  <p className="font-medium text-sm">{call.agent_name || "—"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Duration</p>
+                  <p className="font-medium text-sm font-mono">
+                    {execution?.conversation_time 
+                      ? formatDuration(execution.conversation_time) 
+                      : formatDuration(call.duration_seconds)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Date</p>
+                  <p className="font-medium text-sm">
+                    {format(new Date(call.created_at), "MMM d, HH:mm")}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Execution Details */}
+            {execution && (
+              <div className="flex flex-wrap gap-4 items-center text-sm">
+                <div className="flex items-center gap-2">
+                  {call.connected || execution.status === "completed" ? (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span>{call.connected || execution.status === "completed" ? "Connected" : "Not Connected"}</span>
+                </div>
+                
+                {(execution.telephony_data?.call_type || call.call_type) && (
+                  <div className="flex items-center gap-2">
+                    {(execution.telephony_data?.call_type || call.call_type) === "outbound" ? (
+                      <PhoneOutgoing className="h-4 w-4 text-chart-2" />
+                    ) : (
+                      <PhoneIncoming className="h-4 w-4 text-chart-1" />
+                    )}
+                    <span className="capitalize">{execution.telephony_data?.call_type || call.call_type}</span>
+                  </div>
                 )}
-                <span className="capitalize">{execution.telephony_data?.call_type || call.call_type}</span>
+
+                {execution.answered_by_voice_mail && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Voicemail className="h-4 w-4" />
+                    <span>Voicemail</span>
+                  </div>
+                )}
               </div>
             )}
 
-            {execution.answered_by_voice_mail && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Voicemail className="h-4 w-4" />
-                <span>Voicemail</span>
+            {/* Error Message */}
+            {execution?.error_message && (
+              <div className="flex items-start gap-2 p-3 bg-destructive/10 border-2 border-destructive text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{execution.error_message}</span>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Error Message */}
-        {execution?.error_message && (
-          <div className="flex items-start gap-2 p-3 bg-destructive/10 border-2 border-destructive text-destructive text-sm">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>{execution.error_message}</span>
-          </div>
-        )}
-
-        {/* Tabs - Only Transcript, Recording, Summary */}
-        <Tabs defaultValue="transcript" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="border-2 border-border bg-card p-1 flex-wrap h-auto gap-1">
+            {/* Tabs - Only Transcript, Recording, Summary */}
+            <Tabs defaultValue="transcript" className="flex flex-col">
+              <TabsList className="border-2 border-border bg-card p-1 flex-wrap h-auto gap-1">
             <TabsTrigger
               value="transcript"
               className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -529,9 +531,10 @@ export function CallDetailsDialog({
                 )}
               </div>
             </ScrollArea>
-          </TabsContent>
-        </Tabs>
-
+            </TabsContent>
+          </Tabs>
+          </div>
+        </ScrollArea>
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-4 border-t-2 border-border">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
