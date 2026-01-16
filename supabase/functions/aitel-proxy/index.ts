@@ -57,25 +57,37 @@ function proxyRecordingUrl(url: string | null | undefined, executionId: string):
   return `proxy:recording:${executionId}`;
 }
 
+// Sanitize telephony_data to remove sensitive provider info
+function sanitizeTelephonyData(telephonyData: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!telephonyData) return null;
+  
+  const sanitized: Record<string, unknown> = {};
+  
+  // Keep only essential UI fields, mask phone numbers
+  if (telephonyData.to_number) sanitized.to_number = maskPhone(telephonyData.to_number as string);
+  if (telephonyData.from_number) sanitized.from_number = maskPhone(telephonyData.from_number as string);
+  if (telephonyData.duration) sanitized.duration = telephonyData.duration;
+  if (telephonyData.call_status) sanitized.call_status = telephonyData.call_status;
+  if (telephonyData.recording_url) sanitized.recording_url = telephonyData.recording_url; // Will be proxied later
+  
+  // Remove: provider, provider_id, sip_*, call_sid, trunk info, etc.
+  return sanitized;
+}
+
 // Encode/mask execution data for transport (visible in UI after decode, encoded in DevTools)
 function maskExecutionData(execution: Record<string, unknown>, includeRealRecordingUrl = false): Record<string, unknown> {
   const masked = { ...execution };
-  const telephonyData = { ...(execution.telephony_data || {}) as Record<string, unknown> };
   
-  // Mask phone numbers (truly masked - not recoverable)
-  if (telephonyData.to_number) {
-    telephonyData.to_number = maskPhone(telephonyData.to_number as string);
-  }
-  if (telephonyData.from_number) {
-    telephonyData.from_number = maskPhone(telephonyData.from_number as string);
-  }
+  // Sanitize telephony_data first, then process recording URL
+  const rawTelephonyData = (execution.telephony_data || {}) as Record<string, unknown>;
+  const telephonyData = sanitizeTelephonyData(rawTelephonyData) || {};
   
   // Mask recording URL (keep real URL in a separate field for actual playback)
-  if (telephonyData.recording_url) {
+  if (rawTelephonyData.recording_url) {
     if (includeRealRecordingUrl) {
-      masked._real_recording_url = telephonyData.recording_url;
+      masked._real_recording_url = rawTelephonyData.recording_url;
     }
-    telephonyData.recording_url = proxyRecordingUrl(telephonyData.recording_url as string, execution.id as string);
+    telephonyData.recording_url = proxyRecordingUrl(rawTelephonyData.recording_url as string, execution.id as string);
   }
   
   masked.telephony_data = telephonyData;
@@ -89,6 +101,19 @@ function maskExecutionData(execution: Record<string, unknown>, includeRealRecord
   if (execution.summary) {
     masked.summary = encodeSummary(execution.summary as string);
   }
+  
+  // Remove sensitive execution-level fields
+  delete masked.agent_id; // External Bolna agent ID - sensitive
+  delete masked.batch_id; // Internal batch reference
+  delete masked.usage; // Token usage details
+  delete masked.cost; // Cost breakdown
+  delete masked.metadata; // May contain provider config
+  delete masked.context_data; // System context
+  delete masked.tools_used; // Internal tool calls
+  delete masked.function_calls; // Function execution details
+  delete masked.llm_latency; // Performance metrics
+  delete masked.stt_latency; // Performance metrics  
+  delete masked.tts_latency; // Performance metrics
   
   return masked;
 }

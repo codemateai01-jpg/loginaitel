@@ -60,6 +60,32 @@ function proxyRecordingUrl(url: string | null, callId: string): string | null {
   return `proxy:recording:${callId}`;
 }
 
+// Sanitize metadata to remove sensitive provider/usage details
+function sanitizeMetadata(metadata: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!metadata) return null;
+  
+  // Only keep essential non-sensitive fields for UI
+  const sanitized: Record<string, unknown> = {};
+  
+  // Keep basic info needed for UI
+  if (metadata.source) sanitized.source = metadata.source;
+  if (metadata.is_retry !== undefined) sanitized.is_retry = metadata.is_retry;
+  if (metadata.lead_name) sanitized.lead_name = metadata.lead_name;
+  if (metadata.campaign_id) sanitized.campaign_id = metadata.campaign_id;
+  if (metadata.aitel_status) sanitized.aitel_status = metadata.aitel_status;
+  if (metadata.error_message) sanitized.error_message = metadata.error_message;
+  if (metadata.retry_attempt !== undefined) sanitized.retry_attempt = metadata.retry_attempt;
+  if (metadata.answered_by_voicemail !== undefined) sanitized.answered_by_voicemail = metadata.answered_by_voicemail;
+  
+  // Completely remove sensitive fields:
+  // - usage_breakdown (LLM tokens, models, provider info)
+  // - telephony_provider (infrastructure info)
+  // - queue_item_id, last_webhook_at (internal system data)
+  // - extracted_data (may contain sensitive info)
+  
+  return sanitized;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -272,6 +298,7 @@ serve(async (req) => {
         transcript: encodeTranscript(call.transcript),
         summary: encodeSummary(call.summary),
         recording_url: proxyRecordingUrl(call.recording_url, call.id),
+        metadata: sanitizeMetadata(call.metadata),
         agent: { name: 'Agent' },
       }));
 
@@ -310,6 +337,7 @@ serve(async (req) => {
         transcript: encodeTranscript(call.transcript),
         summary: encodeSummary(call.summary),
         recording_url: proxyRecordingUrl(call.recording_url, call.id),
+        metadata: sanitizeMetadata(call.metadata),
       }));
 
       return new Response(JSON.stringify(maskedData), {
