@@ -6,10 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Settings, User, Mail, Phone, Building2, Save, Loader2 } from "lucide-react";
+import { Settings, User, Mail, Phone, Building2, Save, Loader2, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function ClientSettings() {
   const { user } = useAuth();
@@ -18,8 +26,14 @@ export default function ClientSettings() {
 
   const [formData, setFormData] = useState({
     full_name: "",
-    phone: "",
   });
+
+  // Phone update state
+  const [newPhone, setNewPhone] = useState("");
+  const [showPhoneDialog, setShowPhoneDialog] = useState(false);
+  const [phoneStep, setPhoneStep] = useState<"input" | "verify">("input");
+  const [otp, setOtp] = useState("");
+  const [phoneLoading, setPhoneLoading] = useState(false);
 
   // Fetch profile
   const { data: profile, isLoading } = useQuery({
@@ -35,21 +49,19 @@ export default function ClientSettings() {
       
       setFormData({
         full_name: data.full_name || "",
-        phone: data.phone || "",
       });
       
       return data;
     },
   });
 
-  // Update profile mutation
+  // Update profile mutation (for name only)
   const updateProfile = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("profiles")
         .update({
           full_name: formData.full_name,
-          phone: formData.phone,
         })
         .eq("user_id", user!.id);
       
@@ -74,6 +86,99 @@ export default function ClientSettings() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     updateProfile.mutate();
+  };
+
+  const formatPhoneInput = (value: string) => {
+    return value.replace(/\D/g, "").slice(0, 10);
+  };
+
+  const extractPhoneDigits = (phone: string | null) => {
+    if (!phone) return "";
+    // Extract last 10 digits from the stored phone number
+    const digits = phone.replace(/\D/g, "");
+    return digits.slice(-10);
+  };
+
+  const handleSendPhoneOtp = async () => {
+    if (newPhone.length !== 10) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Phone Number",
+        description: "Please enter a valid 10-digit phone number",
+      });
+      return;
+    }
+
+    setPhoneLoading(true);
+    try {
+      const response = await supabase.functions.invoke("send-otp", {
+        body: { phone: newPhone },
+      });
+
+      if (response.error || response.data?.error) {
+        throw new Error(response.data?.error || "Failed to send OTP");
+      }
+
+      setPhoneStep("verify");
+      toast({
+        title: "OTP Sent!",
+        description: `Verification code sent to +91 ${newPhone}`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to send OTP",
+        description: error.message,
+      });
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleVerifyAndUpdatePhone = async () => {
+    if (otp.length !== 6) return;
+
+    setPhoneLoading(true);
+    try {
+      // Verify OTP
+      const response = await supabase.functions.invoke("verify-phone-update", {
+        body: { 
+          phone: newPhone,
+          otp: otp,
+          userId: user?.id,
+        },
+      });
+
+      if (response.error || response.data?.error) {
+        throw new Error(response.data?.error || "Failed to verify OTP");
+      }
+
+      toast({
+        title: "Phone Number Updated!",
+        description: "Your phone number has been verified and updated.",
+      });
+
+      setShowPhoneDialog(false);
+      setPhoneStep("input");
+      setNewPhone("");
+      setOtp("");
+      queryClient.invalidateQueries({ queryKey: ["client-profile"] });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Verification Failed",
+        description: error.message,
+      });
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleOpenPhoneDialog = () => {
+    setNewPhone(extractPhoneDigits(profile?.phone));
+    setPhoneStep("input");
+    setOtp("");
+    setShowPhoneDialog(true);
   };
 
   return (
@@ -117,7 +222,7 @@ export default function ClientSettings() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Email cannot be changed
+                    System-generated email for your account
                   </p>
                 </div>
 
@@ -134,19 +239,6 @@ export default function ClientSettings() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+91 98765 43210"
-                    />
-                  </div>
-                </div>
-
                 <Separator />
 
                 <Button type="submit" disabled={updateProfile.isPending}>
@@ -159,6 +251,46 @@ export default function ClientSettings() {
                 </Button>
               </form>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Phone Number Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5" />
+              Phone Number
+            </CardTitle>
+            <CardDescription>
+              Your verified phone number for login and notifications
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 border-2 border-border rounded-lg bg-muted/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-accent border border-border rounded">
+                  <Shield className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-medium">
+                    {profile?.phone ? (
+                      <>+91 {extractPhoneDigits(profile.phone)}</>
+                    ) : (
+                      <span className="text-muted-foreground">No phone number set</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {profile?.phone ? "Verified phone number" : "Add a phone number for secure access"}
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={handleOpenPhoneDialog}>
+                {profile?.phone ? "Change" : "Add"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Changing your phone number requires OTP verification
+            </p>
           </CardContent>
         </Card>
 
@@ -200,6 +332,107 @@ export default function ClientSettings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Phone Update Dialog */}
+      <Dialog open={showPhoneDialog} onOpenChange={setShowPhoneDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {phoneStep === "input" ? "Update Phone Number" : "Verify OTP"}
+            </DialogTitle>
+            <DialogDescription>
+              {phoneStep === "input" 
+                ? "Enter your new phone number. We'll send an OTP for verification."
+                : `Enter the 6-digit code sent to +91 ${newPhone}`
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          {phoneStep === "input" ? (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>New Phone Number</Label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-muted-foreground">
+                    <Phone className="h-4 w-4" />
+                    <span className="text-sm">+91</span>
+                  </div>
+                  <Input
+                    type="tel"
+                    placeholder="9876543210"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(formatPhoneInput(e.target.value))}
+                    className="pl-20"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={handleSendPhoneOtp} 
+                disabled={phoneLoading || newPhone.length !== 10}
+                className="w-full"
+              >
+                {phoneLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : null}
+                Send OTP
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="space-y-4">
+                <Label>Enter Verification Code</Label>
+                <div className="flex justify-center">
+                  <InputOTP
+                    maxLength={6}
+                    value={otp}
+                    onChange={(value) => setOtp(value)}
+                  >
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} className="border-2" />
+                      <InputOTPSlot index={1} className="border-2" />
+                      <InputOTPSlot index={2} className="border-2" />
+                      <InputOTPSlot index={3} className="border-2" />
+                      <InputOTPSlot index={4} className="border-2" />
+                      <InputOTPSlot index={5} className="border-2" />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+              </div>
+              <Button 
+                onClick={handleVerifyAndUpdatePhone} 
+                disabled={phoneLoading || otp.length !== 6}
+                className="w-full"
+              >
+                {phoneLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : null}
+                Verify & Update
+              </Button>
+              <div className="flex justify-between text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoneStep("input");
+                    setOtp("");
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Change number
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendPhoneOtp}
+                  disabled={phoneLoading}
+                  className="text-primary hover:underline"
+                >
+                  Resend OTP
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
