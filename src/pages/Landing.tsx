@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { DownloadButton } from "@/components/pwa/DownloadButton";
 import {
   Mic,
   Bot,
@@ -105,15 +106,11 @@ export default function Landing() {
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
-              <Link to="/login">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                >
-                  View Demo
-                </Button>
-              </Link>
+              <DownloadButton 
+                size="lg" 
+                variant="outline" 
+                className="w-full sm:w-auto"
+              />
             </div>
           </div>
         </div>
