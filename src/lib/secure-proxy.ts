@@ -237,6 +237,45 @@ export async function fetchTodayStats() {
 }
 
 // ==========================================
+// RECORDING URL RESOLUTION
+// ==========================================
+
+/**
+ * Resolves a demo call recording proxy URL to an actual playable URL
+ */
+export async function getDemoRecordingUrl(callId: string): Promise<{ url: string; call_id: string }> {
+  return fetchSecureData<{ url: string; call_id: string }>({
+    action: "get_demo_recording",
+    params: { call_id: callId },
+  });
+}
+
+/**
+ * Resolves a call recording proxy URL to an actual playable URL
+ */
+export async function getCallRecordingUrl(callId: string): Promise<{ url: string; call_id: string }> {
+  return fetchSecureData<{ url: string; call_id: string }>({
+    action: "get_call_recording",
+    params: { call_id: callId },
+  });
+}
+
+/**
+ * Check if a recording URL is a proxy URL that needs resolution
+ */
+export function isProxyRecordingUrl(url: string | null): boolean {
+  return !!url && url.startsWith("proxy:recording:");
+}
+
+/**
+ * Extract call ID from a proxy recording URL
+ */
+export function extractCallIdFromProxyUrl(url: string): string | null {
+  if (!url.startsWith("proxy:recording:")) return null;
+  return url.replace("proxy:recording:", "");
+}
+
+// ==========================================
 // TASKS
 // ==========================================
 

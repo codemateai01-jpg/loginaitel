@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useDecryptedContent } from "@/hooks/useDecryptedContent";
 import { isEncryptedPayload } from "@/lib/secure-decrypt";
+import { getDemoRecordingUrl, isProxyRecordingUrl, extractCallIdFromProxyUrl } from "@/lib/secure-proxy";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -80,18 +81,52 @@ export function DemoCallPreviewModal({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  // Resolve proxy recording URL to actual URL when modal opens
   useEffect(() => {
-    if (!open) {
+    if (!open || !call) {
+      setResolvedAudioUrl(null);
+      setIsLoadingAudio(false);
       setIsPlaying(false);
       setCurrentTime(0);
+      setDuration(0);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
+      return;
     }
-  }, [open]);
+
+    const rawUrl = call.uploaded_audio_url || call.recording_url;
+    
+    // If URL is a proxy URL, resolve it
+    if (rawUrl && isProxyRecordingUrl(rawUrl)) {
+      setIsLoadingAudio(true);
+      getDemoRecordingUrl(call.id)
+        .then((result) => {
+          setResolvedAudioUrl(result.url);
+        })
+        .catch((error) => {
+          console.error("Failed to resolve recording URL:", error);
+          toast({
+            variant: "destructive",
+            title: "Recording Error",
+            description: "Failed to load recording URL",
+          });
+        })
+        .finally(() => {
+          setIsLoadingAudio(false);
+        });
+    } else if (rawUrl) {
+      // Direct URL, use as-is
+      setResolvedAudioUrl(rawUrl);
+    } else {
+      setResolvedAudioUrl(null);
+    }
+  }, [open, call?.id, call?.recording_url, call?.uploaded_audio_url, toast]);
 
   const togglePlayPause = () => {
     if (!audioRef.current) return;
@@ -236,9 +271,10 @@ export function DemoCallPreviewModal({
 
   if (!call) return null;
 
-  const audioUrl = call.uploaded_audio_url || call.recording_url;
+  const rawAudioUrl = call.uploaded_audio_url || call.recording_url;
+  const hasAudioSource = !!rawAudioUrl;
   const isSelected = call.tasks?.selected_demo_call_id === call.id;
-  const canSubmit = call.status === "completed" && audioUrl && !isSelected;
+  const canSubmit = call.status === "completed" && hasAudioSource && !isSelected;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -314,7 +350,7 @@ export function DemoCallPreviewModal({
             <Separator />
 
             {/* Audio Player */}
-            {audioUrl ? (
+            {hasAudioSource ? (
               <div className="space-y-3">
                 <h4 className="font-medium flex items-center gap-2">
                   {call.uploaded_audio_url ? (
@@ -329,41 +365,52 @@ export function DemoCallPreviewModal({
                     </>
                   )}
                 </h4>
-                <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border">
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={togglePlayPause}
-                    className="h-10 w-10 shrink-0"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-4 w-4" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <div className="flex-1 space-y-1">
-                    <input
-                      type="range"
-                      min={0}
-                      max={duration || 100}
-                      value={currentTime}
-                      onChange={handleSeek}
-                      className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                      <span>{formatTime(currentTime)}</span>
-                      <span>{formatTime(duration)}</span>
-                    </div>
+                {isLoadingAudio ? (
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Loading recording...</span>
                   </div>
-                  <audio
-                    ref={audioRef}
-                    src={audioUrl}
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onEnded={handleEnded}
-                  />
-                </div>
+                ) : resolvedAudioUrl ? (
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={togglePlayPause}
+                      className="h-10 w-10 shrink-0"
+                    >
+                      {isPlaying ? (
+                        <Pause className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <div className="flex-1 space-y-1">
+                      <input
+                        type="range"
+                        min={0}
+                        max={duration || 100}
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                        <span>{formatTime(currentTime)}</span>
+                        <span>{formatTime(duration)}</span>
+                      </div>
+                    </div>
+                    <audio
+                      ref={audioRef}
+                      src={resolvedAudioUrl}
+                      onTimeUpdate={handleTimeUpdate}
+                      onLoadedMetadata={handleLoadedMetadata}
+                      onEnded={handleEnded}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 border-2 border-border text-muted-foreground">
+                    <span className="text-sm">Failed to load recording</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">

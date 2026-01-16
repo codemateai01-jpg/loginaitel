@@ -723,6 +723,110 @@ serve(async (req) => {
     }
 
     // ==========================================
+    // GET DEMO RECORDING URL - Returns actual recording URL for playback
+    // ==========================================
+    if (action === "get_demo_recording") {
+      const demoCallId = url.searchParams.get("call_id");
+      
+      if (!demoCallId) {
+        return new Response(JSON.stringify({ error: "Missing call_id parameter" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch the demo call
+      const { data: demoCall, error } = await supabase
+        .from("demo_calls")
+        .select("id, engineer_id, recording_url, uploaded_audio_url")
+        .eq("id", demoCallId)
+        .single();
+
+      if (error || !demoCall) {
+        return new Response(JSON.stringify({ error: "Demo call not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Authorization: only the engineer who made the call or admin can access
+      if (userRole !== "admin" && demoCall.engineer_id !== userId) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Return the actual recording URL (prefer uploaded over synced)
+      const actualUrl = demoCall.uploaded_audio_url || demoCall.recording_url;
+      
+      if (!actualUrl) {
+        return new Response(JSON.stringify({ error: "No recording available" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        url: actualUrl,
+        call_id: demoCallId 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
+    // GET CALL RECORDING URL - Returns actual recording URL for playback
+    // ==========================================
+    if (action === "get_call_recording") {
+      const callId = url.searchParams.get("call_id");
+      
+      if (!callId) {
+        return new Response(JSON.stringify({ error: "Missing call_id parameter" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch the call
+      const { data: call, error } = await supabase
+        .from("calls")
+        .select("id, client_id, recording_url")
+        .eq("id", callId)
+        .single();
+
+      if (error || !call) {
+        return new Response(JSON.stringify({ error: "Call not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Authorization: only the client who owns the call or admin can access
+      if (userRole !== "admin" && call.client_id !== userId) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Return the actual recording URL
+      if (!call.recording_url) {
+        return new Response(JSON.stringify({ error: "No recording available" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        url: call.recording_url,
+        call_id: callId 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ==========================================
     // TASKS
     // ==========================================
     if (action === "tasks") {
