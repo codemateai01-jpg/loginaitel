@@ -3,11 +3,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Sparkles, AlertTriangle, ShieldX, Lightbulb, TrendingDown } from "lucide-react";
+import { Loader2, Sparkles, AlertTriangle, ShieldX, Lightbulb, TrendingDown, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ObjectionAnalyzerProps {
   campaignId: string;
+  campaignName?: string;
   leads: Array<{
     id: string;
     name: string;
@@ -25,8 +28,88 @@ interface ObjectionAnalysis {
   improvementAreas: string[];
 }
 
-export function ObjectionAnalyzer({ campaignId, leads }: ObjectionAnalyzerProps) {
+export function ObjectionAnalyzer({ campaignId, campaignName, leads }: ObjectionAnalyzerProps) {
   const [analysis, setAnalysis] = useState<ObjectionAnalysis | null>(null);
+
+  const exportToPDF = () => {
+    if (!analysis) return;
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Title
+    doc.setFontSize(20);
+    doc.setTextColor(220, 38, 38);
+    doc.text("Objection Analysis Report", pageWidth / 2, 20, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100);
+    doc.text(`Campaign: ${campaignName || campaignId}`, pageWidth / 2, 30, { align: "center" });
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, 36, { align: "center" });
+    
+    let yPos = 50;
+    
+    // Top Objections
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text("Top Objections", 14, yPos);
+    autoTable(doc, {
+      startY: yPos + 5,
+      head: [["Objection", "Count", "Percentage"]],
+      body: analysis.topObjections.map(o => [o.objection, o.count.toString(), `${o.percentage}%`]),
+      theme: "striped",
+      headStyles: { fillColor: [220, 38, 38] },
+    });
+    
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Objection Categories
+    doc.text("Objection Categories", 14, yPos);
+    autoTable(doc, {
+      startY: yPos + 5,
+      head: [["Category", "Count"]],
+      body: analysis.objectionCategories.map(c => [c.category, c.count.toString()]),
+      theme: "striped",
+      headStyles: { fillColor: [249, 115, 22] },
+    });
+    
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Common Rejection Phrases
+    doc.text("Common Rejection Phrases", 14, yPos);
+    autoTable(doc, {
+      startY: yPos + 5,
+      head: [["Phrase"]],
+      body: analysis.commonRejectionPhrases.map(p => [`"${p}"`]),
+      theme: "striped",
+      headStyles: { fillColor: [234, 179, 8] },
+    });
+    
+    // Rebuttals on new page
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.text("Suggested Rebuttals", 14, 20);
+    autoTable(doc, {
+      startY: 25,
+      head: [["Objection", "Suggested Rebuttal"]],
+      body: analysis.rebuttals.map(r => [r.objection, r.suggestedRebuttal]),
+      theme: "striped",
+      headStyles: { fillColor: [124, 58, 237] },
+      columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
+    });
+    
+    const yPos2 = (doc as any).lastAutoTable.finalY + 15;
+    doc.text("Script Improvement Suggestions", 14, yPos2);
+    autoTable(doc, {
+      startY: yPos2 + 5,
+      head: [["Improvement Area"]],
+      body: analysis.improvementAreas.map(a => [a]),
+      theme: "striped",
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+    
+    doc.save(`objection-analysis-${campaignId}.pdf`);
+  };
 
   // Fetch transcripts for leads with call_ids
   const { data: transcripts, isLoading: transcriptsLoading } = useQuery({
@@ -116,25 +199,33 @@ Focus on:
           <AlertTriangle className="h-5 w-5 text-red-600" />
           <h3 className="font-bold">AI Objection Analyzer</h3>
         </div>
-        <Button
-          onClick={() => analyzeMutation.mutate()}
-          disabled={!hasTranscripts || analyzeMutation.isPending}
-          size="sm"
-          variant="destructive"
-          className="gap-2"
-        >
-          {analyzeMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              Analyze Objections
-            </>
+        <div className="flex gap-2">
+          {analysis && (
+            <Button onClick={exportToPDF} size="sm" variant="outline" className="gap-2">
+              <Download className="h-4 w-4" />
+              Export PDF
+            </Button>
           )}
-        </Button>
+          <Button
+            onClick={() => analyzeMutation.mutate()}
+            disabled={!hasTranscripts || analyzeMutation.isPending}
+            size="sm"
+            variant="destructive"
+            className="gap-2"
+          >
+            {analyzeMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Analyze Objections
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {transcriptsLoading && (

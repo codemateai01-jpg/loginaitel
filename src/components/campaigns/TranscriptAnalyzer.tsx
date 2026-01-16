@@ -3,11 +3,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Sparkles, TrendingUp, MessageSquare, Target, ThumbsUp } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, MessageSquare, Target, ThumbsUp, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface TranscriptAnalyzerProps {
   campaignId: string;
+  campaignName?: string;
   leads: Array<{
     id: string;
     name: string;
@@ -25,8 +28,81 @@ interface AnalysisResult {
   recommendations: string[];
 }
 
-export function TranscriptAnalyzer({ campaignId, leads }: TranscriptAnalyzerProps) {
+export function TranscriptAnalyzer({ campaignId, campaignName, leads }: TranscriptAnalyzerProps) {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+
+  const exportToPDF = () => {
+    if (!analysis) return;
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Title
+    doc.setFontSize(20);
+    doc.setTextColor(34, 139, 34);
+    doc.text("Interested Leads Analysis Report", pageWidth / 2, 20, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100);
+    doc.text(`Campaign: ${campaignName || campaignId}`, pageWidth / 2, 30, { align: "center" });
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, 36, { align: "center" });
+    
+    let yPos = 50;
+    
+    // Top Interests
+    doc.setFontSize(14);
+    doc.setTextColor(0);
+    doc.text("Top Interests", 14, yPos);
+    autoTable(doc, {
+      startY: yPos + 5,
+      head: [["Topic", "Count", "Percentage"]],
+      body: analysis.topInterests.map(i => [i.topic, i.count.toString(), `${i.percentage}%`]),
+      theme: "striped",
+      headStyles: { fillColor: [34, 139, 34] },
+    });
+    
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Buying Signals
+    doc.text("Buying Signals Detected", 14, yPos);
+    autoTable(doc, {
+      startY: yPos + 5,
+      head: [["Signal", "Count"]],
+      body: analysis.buyingSignals.map(s => [s.signal, s.count.toString()]),
+      theme: "striped",
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+    
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Sentiment
+    doc.text("Sentiment Breakdown", 14, yPos);
+    autoTable(doc, {
+      startY: yPos + 5,
+      head: [["Sentiment", "Percentage"]],
+      body: [
+        ["Positive", `${analysis.sentimentBreakdown.positive}%`],
+        ["Neutral", `${analysis.sentimentBreakdown.neutral}%`],
+        ["Negative", `${analysis.sentimentBreakdown.negative}%`],
+      ],
+      theme: "striped",
+      headStyles: { fillColor: [34, 139, 34] },
+    });
+    
+    // Recommendations on new page
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.text("AI Recommendations", 14, 20);
+    autoTable(doc, {
+      startY: 25,
+      head: [["Recommendation"]],
+      body: analysis.recommendations.map(r => [r]),
+      theme: "striped",
+      headStyles: { fillColor: [124, 58, 237] },
+    });
+    
+    doc.save(`interested-leads-analysis-${campaignId}.pdf`);
+  };
 
   // Fetch transcripts for leads with call_ids
   const { data: transcripts, isLoading: transcriptsLoading } = useQuery({
@@ -117,24 +193,32 @@ Focus on:
           <Sparkles className="h-5 w-5 text-green-600" />
           <h3 className="font-bold">AI Transcript Analyzer</h3>
         </div>
-        <Button
-          onClick={() => analyzeMutation.mutate()}
-          disabled={!hasTranscripts || analyzeMutation.isPending}
-          size="sm"
-          className="gap-2"
-        >
-          {analyzeMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              Analyze Interests
-            </>
+        <div className="flex gap-2">
+          {analysis && (
+            <Button onClick={exportToPDF} size="sm" variant="outline" className="gap-2">
+              <Download className="h-4 w-4" />
+              Export PDF
+            </Button>
           )}
-        </Button>
+          <Button
+            onClick={() => analyzeMutation.mutate()}
+            disabled={!hasTranscripts || analyzeMutation.isPending}
+            size="sm"
+            className="gap-2"
+          >
+            {analyzeMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Analyze Interests
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {transcriptsLoading && (
