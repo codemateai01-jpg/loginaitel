@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
-import { getExecution, downloadRecording, CallExecution } from "@/lib/aitel";
+import { getExecution, downloadRecording } from "@/lib/aitel";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
@@ -27,7 +27,10 @@ import {
   FileText,
   Volume2,
   Loader2,
+  Lock,
 } from "lucide-react";
+import { useDecryptedContent } from "@/hooks/useDecryptedContent";
+import { isEncryptedPayload } from "@/lib/secure-decrypt";
 
 interface CampaignLead {
   id: string;
@@ -90,8 +93,52 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
 
   // Get recording URL from execution or call data
   const recordingUrl = executionData?.telephony_data?.recording_url || callData?.recording_url;
-  const transcript = executionData?.transcript || callData?.transcript;
-  const summary = executionData?.summary || lead?.call_summary;
+  
+  // Raw transcript and summary (may be encrypted)
+  const rawTranscript = executionData?.transcript || callData?.transcript;
+  const rawSummary = executionData?.summary || lead?.call_summary;
+  const rawNotes = lead?.notes;
+
+  // Check if content is encrypted
+  const isTranscriptEncrypted = isEncryptedPayload(rawTranscript);
+  const isSummaryEncrypted = isEncryptedPayload(rawSummary);
+  const isNotesEncrypted = isEncryptedPayload(rawNotes);
+
+  // Use secure decryption for transcript
+  const { 
+    data: decryptedTranscript, 
+    isLoading: isDecryptingTranscript 
+  } = useDecryptedContent({
+    field: rawTranscript,
+    resourceId: lead?.call_id || lead?.id || "",
+    resourceType: "call",
+    fieldType: "transcript",
+    enabled: open && !!rawTranscript && !!lead?.call_id,
+  });
+
+  // Use secure decryption for summary
+  const { 
+    data: decryptedSummary, 
+    isLoading: isDecryptingSummary 
+  } = useDecryptedContent({
+    field: rawSummary,
+    resourceId: lead?.call_id || lead?.id || "",
+    resourceType: "call",
+    fieldType: "summary",
+    enabled: open && !!rawSummary && !!lead?.call_id,
+  });
+
+  // Use secure decryption for notes
+  const { 
+    data: decryptedNotes, 
+    isLoading: isDecryptingNotes 
+  } = useDecryptedContent({
+    field: rawNotes,
+    resourceId: lead?.call_id || lead?.id || "",
+    resourceType: "call",
+    fieldType: "notes",
+    enabled: open && !!rawNotes,
+  });
 
   // Load audio when recording URL is available
   useEffect(() => {
@@ -234,7 +281,8 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
     return [];
   };
 
-  const transcriptMessages = parseTranscript(transcript || null);
+  // Use decrypted transcript
+  const transcriptMessages = parseTranscript(decryptedTranscript || null);
 
   const getSentimentBadge = (sentiment: string | null) => {
     if (!sentiment) return null;
@@ -413,13 +461,27 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
 
             <TabsContent value="transcript" className="flex-1 overflow-hidden mt-4">
               <ScrollArea className="h-[300px] border-2 border-border rounded-lg">
-                {transcriptMessages.length === 0 ? (
+                {isDecryptingTranscript ? (
+                  <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                    <p className="flex items-center gap-2">
+                      <Lock className="h-4 w-4" />
+                      Decrypting transcript...
+                    </p>
+                  </div>
+                ) : transcriptMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                     <MessageSquare className="h-10 w-10 mb-2 opacity-50" />
                     <p>No transcript available</p>
                   </div>
                 ) : (
                   <div className="p-4 space-y-3">
+                    {isTranscriptEncrypted && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 p-2 bg-muted/30 border border-border rounded">
+                        <Lock className="h-3 w-3" />
+                        <span>Content securely decrypted</span>
+                      </div>
+                    )}
                     {transcriptMessages.map((msg, idx) => (
                       <div
                         key={idx}
@@ -452,9 +514,23 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
 
             <TabsContent value="summary" className="flex-1 mt-4">
               <div className="space-y-4">
-                {summary ? (
+                {isDecryptingSummary ? (
+                  <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                    <p className="flex items-center gap-2">
+                      <Lock className="h-4 w-4" />
+                      Decrypting summary...
+                    </p>
+                  </div>
+                ) : decryptedSummary ? (
                   <div className="bg-muted/50 border-2 border-border p-4 rounded-lg">
-                    <p className="text-sm whitespace-pre-wrap">{summary}</p>
+                    {isSummaryEncrypted && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <Lock className="h-3 w-3" />
+                        <span>Securely decrypted</span>
+                      </div>
+                    )}
+                    <p className="text-sm whitespace-pre-wrap">{decryptedSummary}</p>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
@@ -463,11 +539,19 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
                   </div>
                 )}
 
-                {lead.notes && (
+                {isDecryptingNotes ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Decrypting notes...</span>
+                  </div>
+                ) : decryptedNotes && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Notes</h4>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      Notes
+                      {isNotesEncrypted && <Lock className="h-3 w-3 text-muted-foreground" />}
+                    </h4>
                     <div className="bg-muted/50 border-2 border-border p-4 rounded-lg">
-                      <p className="text-sm">{lead.notes}</p>
+                      <p className="text-sm">{decryptedNotes}</p>
                     </div>
                   </div>
                 )}
