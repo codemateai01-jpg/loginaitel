@@ -24,11 +24,11 @@ import { format } from "date-fns";
 import {
   ArrowLeft,
   XCircle,
-  Phone,
   Loader2,
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { ObjectionAnalyzer } from "@/components/campaigns/ObjectionAnalyzer";
 
 const STAGES = [
   { value: "not_interested", label: "Not Interested", color: "bg-red-500/10 text-red-600 border-red-500" },
@@ -156,6 +156,17 @@ export default function CampaignNotInterestedLeads() {
             </p>
           </div>
         </div>
+
+        {/* AI Objection Analyzer */}
+        <ObjectionAnalyzer
+          campaignId={campaignId!}
+          leads={leads?.map((l) => ({
+            id: l.id,
+            name: l.name,
+            call_id: l.call_id,
+            call_summary: l.call_summary,
+          })) || []}
+        />
 
         {/* Leads Table */}
         <div className="border-2 border-border bg-card">
