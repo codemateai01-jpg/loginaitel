@@ -51,6 +51,7 @@ const engineerNavItems = [
   { icon: Bot, label: "My Workspace", href: "/engineer/agents" },
   { icon: Settings, label: "Agent Config", href: "/engineer/agent-config" },
   { icon: Phone, label: "Make Call", href: "/engineer/make-call" },
+  { icon: Phone, label: "Demo Call Logs", href: "/engineer/demo-calls" },
   { icon: Trophy, label: "Leaderboard", href: "/engineer/leaderboard" },
   { icon: Clock, label: "Time Tracker", href: "/engineer/time" },
   { icon: Settings, label: "Settings", href: "/engineer/settings" },
