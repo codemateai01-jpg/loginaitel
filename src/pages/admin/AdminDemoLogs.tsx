@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAdminDemoCalls } from "@/lib/secure-proxy";
 import { downloadRecording } from "@/lib/aitel";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -101,17 +102,11 @@ export default function AdminDemoLogs() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedCall, setSelectedCall] = useState<DemoCall | null>(null);
 
-  // Fetch demo calls
+  // Fetch demo calls via secure proxy (masks phone numbers in network tab)
   const { data: demoCalls = [], isLoading: loadingCalls } = useQuery({
     queryKey: ["admin-demo-calls"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("demo_calls")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data as DemoCall[];
+      return await fetchAdminDemoCalls() as DemoCall[];
     },
   });
 

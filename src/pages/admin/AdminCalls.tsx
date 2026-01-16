@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchCalls } from "@/lib/secure-proxy";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useRealtimeCalls } from "@/hooks/useRealtimeCalls";
 import { Button } from "@/components/ui/button";
@@ -145,23 +146,12 @@ export default function AdminCalls() {
   // Subscribe to realtime updates
   useRealtimeCalls({ queryKey: callsQueryKey });
 
-  // Fetch all calls (admin sees all)
+  // Fetch all calls via secure proxy (masks sensitive data in network tab)
   const { data: calls, isLoading } = useQuery({
     queryKey: callsQueryKey,
     queryFn: async () => {
       const startDate = subDays(new Date(), parseInt(dateRange)).toISOString();
-      
-      const { data, error } = await supabase
-        .from("calls")
-        .select("*")
-        .gte("created_at", startDate)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data?.map(d => ({ 
-        ...d, 
-        agent: { name: 'Agent' }
-      })) as Call[];
+      return await fetchCalls({ startDate }) as Call[];
     },
   });
 

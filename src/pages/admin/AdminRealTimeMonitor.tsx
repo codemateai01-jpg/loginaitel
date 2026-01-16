@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchActiveCalls, fetchTodayStats } from "@/lib/secure-proxy";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   Phone,
@@ -94,59 +95,20 @@ export default function AdminRealTimeMonitor() {
     Array<{ id: string; type: string; call: LiveCall; timestamp: Date }>
   >([]);
 
-  // Fetch active calls (initiated or in_progress)
+  // Fetch active calls via secure proxy (masks sensitive data in network tab)
   const { data: activeCalls, isLoading: activeLoading } = useQuery({
     queryKey: ["admin-active-calls"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("calls")
-        .select("*")
-        .in("status", ["initiated", "in_progress"])
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data as LiveCall[];
+      return await fetchActiveCalls() as LiveCall[];
     },
     refetchInterval: 5000, // Backup polling every 5 seconds
   });
 
-  // Fetch today's stats
+  // Fetch today's stats via secure proxy
   const { data: todayStats } = useQuery({
     queryKey: ["admin-today-stats"],
     queryFn: async () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const { data: todayCalls, error } = await supabase
-        .from("calls")
-        .select("status, connected, duration_seconds")
-        .gte("created_at", today.toISOString());
-
-      if (error) throw error;
-
-      const total = todayCalls?.length || 0;
-      const completed =
-        todayCalls?.filter((c) => c.status === "completed").length || 0;
-      const connected = todayCalls?.filter((c) => c.connected).length || 0;
-      const failed = todayCalls?.filter((c) => c.status === "failed").length || 0;
-      const inProgress =
-        todayCalls?.filter((c) =>
-          ["initiated", "in_progress"].includes(c.status)
-        ).length || 0;
-      const totalDuration = todayCalls?.reduce(
-        (sum, c) => sum + (c.duration_seconds || 0),
-        0
-      );
-
-      return {
-        total,
-        completed,
-        connected,
-        failed,
-        inProgress,
-        connectionRate: total > 0 ? Math.round((connected / total) * 100) : 0,
-        avgDuration: total > 0 ? Math.round((totalDuration || 0) / total) : 0,
-      };
+      return await fetchTodayStats();
     },
     refetchInterval: 10000, // Refresh stats every 10 seconds
   });

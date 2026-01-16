@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchDemoCalls } from "@/lib/secure-proxy";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -50,23 +51,12 @@ export default function DemoCallsPage() {
   const [filterTaskId, setFilterTaskId] = useState<string>(taskIdFilter || "all");
   const [previewCall, setPreviewCall] = useState<DemoCall | null>(null);
 
-  // Fetch demo calls
+  // Fetch demo calls via secure proxy (masks phone numbers in network tab)
   const { data: demoCalls = [], isLoading, refetch } = useQuery({
     queryKey: ["demo-calls", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from("demo_calls")
-        .select(`
-          *,
-          tasks (title, selected_demo_call_id),
-          aitel_agents (agent_name)
-        `)
-        .eq("engineer_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data as DemoCall[];
+      return await fetchDemoCalls(user.id) as DemoCall[];
     },
     enabled: !!user?.id,
   });
