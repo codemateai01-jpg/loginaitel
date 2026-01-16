@@ -26,6 +26,7 @@ import {
   PhoneIncoming,
   PhoneOutgoing,
   Download,
+  Loader2,
   Voicemail,
   AlertCircle,
 } from "lucide-react";
@@ -71,7 +72,7 @@ export function CallDetailsDialog({
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Fetch execution details if we have external_call_id
-  const { data: execution } = useQuery({
+  const { data: execution, isLoading: isLoadingExecution } = useQuery({
     queryKey: ["execution", call?.external_call_id],
     enabled: !!call?.external_call_id && open,
     queryFn: async () => {
@@ -463,8 +464,13 @@ export function CallDetailsDialog({
           <TabsContent value="summary" className="flex-1">
             <ScrollArea className="h-[300px] border-2 border-border p-4">
               <div className="space-y-6">
-                {/* Call Summary */}
-                {callSummary ? (
+                {/* Loading State */}
+                {isLoadingExecution && call?.external_call_id ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin mb-3" />
+                    <p className="text-sm">Loading summary...</p>
+                  </div>
+                ) : callSummary ? (
                   <div>
                     <h4 className="font-medium mb-3 flex items-center gap-2">
                       <MessageSquare className="h-4 w-4" />
