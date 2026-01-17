@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UpgradeSeatsDialog } from "@/components/client/UpgradeSeatsDialog";
 import {
   CreditCard,
   Calendar,
@@ -17,6 +20,7 @@ import {
   TrendingUp,
   Gift,
   CalendarClock,
+  Plus,
 } from "lucide-react";
 
 const SEAT_PRICE = 300;
@@ -51,6 +55,7 @@ interface SeatSubscription {
 
 export function SeatPaymentHistory() {
   const { user } = useAuth();
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
 
   // Fetch seat subscription
   const { data: subscription, isLoading: subLoading } = useQuery({
@@ -173,6 +178,16 @@ export function SeatPaymentHistory() {
 
   return (
     <div className="space-y-6">
+      {/* Upgrade Button */}
+      {subscription && subscription.status === "active" && (
+        <div className="flex justify-end">
+          <Button onClick={() => setUpgradeDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add More Seats
+          </Button>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         {/* Current Plan */}
@@ -411,6 +426,16 @@ export function SeatPaymentHistory() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Upgrade Seats Dialog */}
+      {subscription && (
+        <UpgradeSeatsDialog
+          open={upgradeDialogOpen}
+          onOpenChange={setUpgradeDialogOpen}
+          currentSeats={subscription.seats_count}
+          nextBillingDate={subscription.next_billing_date}
+        />
       )}
     </div>
   );
