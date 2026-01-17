@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+
+// Updated to accept seats count from request
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -7,7 +9,6 @@ const corsHeaders = {
 };
 
 const TRIAL_DAYS = 7;
-const TRIAL_SEATS = 10; // Allow up to 10 seats during trial
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,7 +41,16 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    console.log(`Starting trial for client: ${userId}`);
+    // Get seats count from request body
+    let seatsCount = 1;
+    try {
+      const body = await req.json();
+      seatsCount = Math.max(1, body.seats || 1);
+    } catch {
+      seatsCount = 1;
+    }
+
+    console.log(`Starting trial for client: ${userId} with ${seatsCount} seats`);
 
     // Use service role for database operations
     const supabaseAdmin = createClient(
@@ -111,7 +121,7 @@ serve(async (req) => {
 
     const subscriptionData = {
       client_id: userId,
-      seats_count: TRIAL_SEATS,
+      seats_count: seatsCount,
       status: "active",
       is_trial: true,
       trial_started_at: now.toISOString(),
