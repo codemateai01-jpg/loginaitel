@@ -24,10 +24,12 @@ import {
   RefreshCw,
   Activity,
   BarChart3,
+  Receipt,
 } from "lucide-react";
 import { SubUserActivityLog } from "@/components/admin/SubUserActivityLog";
 import { ActivitySummaryDashboard } from "@/components/admin/ActivitySummaryDashboard";
 import { AddSubUserWizard } from "@/components/client/AddSubUserWizard";
+import { SeatPaymentHistory } from "@/components/client/SeatPaymentHistory";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -251,6 +253,10 @@ export default function ClientTeam() {
               <Users className="h-4 w-4" />
               Team Members
             </TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center gap-2">
+              <Receipt className="h-4 w-4" />
+              Billing & Payments
+            </TabsTrigger>
             <TabsTrigger value="activity" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               Activity Dashboard
@@ -468,6 +474,10 @@ export default function ClientTeam() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="billing">
+            <SeatPaymentHistory />
           </TabsContent>
 
           <TabsContent value="activity">
