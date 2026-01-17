@@ -97,13 +97,31 @@ export default function ClientLogin() {
       });
 
       // Check for session conflict (409 status)
-      if (response.error?.message?.includes("session_conflict") || response.data?.error === "session_conflict") {
-        const conflictData = response.data || JSON.parse(response.error?.message || "{}");
+      // The error message contains the JSON response when status is 409
+      const errorMessage = response.error?.message || "";
+      const isSessionConflict = errorMessage.includes("session_conflict") || response.data?.error === "session_conflict";
+      
+      if (isSessionConflict) {
+        let conflictData = response.data;
+        
+        // Try to parse the error message if data is not available
+        if (!conflictData || !conflictData.existingSession) {
+          try {
+            // Extract JSON from error message like "Edge function returned 409: Error, {...}"
+            const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              conflictData = JSON.parse(jsonMatch[0]);
+            }
+          } catch (e) {
+            console.error("Failed to parse session conflict data:", e);
+          }
+        }
+        
         setSessionConflict({
-          device: conflictData.existingSession?.device || "Unknown device",
-          lastActivity: conflictData.existingSession?.lastActivity || "Recently",
-          loggedInAt: conflictData.existingSession?.loggedInAt || "",
-          upgradeMessage: conflictData.upgradeMessage || "",
+          device: conflictData?.existingSession?.device || "Unknown device",
+          lastActivity: conflictData?.existingSession?.lastActivity || "Recently",
+          loggedInAt: conflictData?.existingSession?.loggedInAt || "",
+          upgradeMessage: conflictData?.upgradeMessage || "Purchase team seats to enable multi-device access for your team.",
         });
         setShowConflictDialog(true);
         setLoading(false);
