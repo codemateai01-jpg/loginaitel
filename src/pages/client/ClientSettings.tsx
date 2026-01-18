@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Settings, User, Mail, Phone, Building2, Save, Loader2, Shield } from "lucide-react";
+import { Settings, User, Mail, Phone, Building2, Save, Loader2, Shield, LogOut, Monitor } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +17,19 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function ClientSettings() {
   const { user } = useAuth();
@@ -34,7 +46,7 @@ export default function ClientSettings() {
   const [phoneStep, setPhoneStep] = useState<"input" | "verify">("input");
   const [otp, setOtp] = useState("");
   const [phoneLoading, setPhoneLoading] = useState(false);
-
+  const [signOutAllLoading, setSignOutAllLoading] = useState(false);
   // Fetch profile
   const { data: profile, isLoading } = useQuery({
     queryKey: ["client-profile", user?.id],
@@ -179,6 +191,38 @@ export default function ClientSettings() {
     setPhoneStep("input");
     setOtp("");
     setShowPhoneDialog(true);
+  };
+
+  const handleSignOutAllDevices = async () => {
+    if (!user?.id) return;
+    setSignOutAllLoading(true);
+
+    try {
+      // Clear all active sessions for this client
+      const { error } = await supabase
+        .from("client_active_sessions")
+        .update({ is_active: false })
+        .eq("client_id", user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "All Devices Signed Out",
+        description:
+          "All other devices have been signed out. You will need to log in again on those devices.",
+      });
+
+      // Sign out the current user as well so they re-authenticate fresh
+      await supabase.auth.signOut();
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to sign out devices",
+        description: err.message || "Something went wrong",
+      });
+    } finally {
+      setSignOutAllLoading(false);
+    }
   };
 
   return (
@@ -328,6 +372,60 @@ export default function ClientSettings() {
                     : "—"}
                 </p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Security / Sessions Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Monitor className="h-5 w-5" />
+              Active Sessions
+            </CardTitle>
+            <CardDescription>
+              Manage your active login sessions across devices
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 border-2 border-destructive/30 rounded-lg bg-destructive/5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-destructive/10 border border-destructive/20 rounded">
+                  <LogOut className="h-4 w-4 text-destructive" />
+                </div>
+                <div>
+                  <p className="font-medium">Sign out all devices</p>
+                  <p className="text-xs text-muted-foreground">
+                    This will log you out everywhere, including this device
+                  </p>
+                </div>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={signOutAllLoading}>
+                    {signOutAllLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Sign out all"
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Sign out all devices?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will terminate all active sessions, including the current one. You'll
+                      need to log in again on every device.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSignOutAllDevices}>
+                      Yes, sign out everywhere
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </CardContent>
         </Card>
