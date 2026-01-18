@@ -480,6 +480,9 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
 
   const ins = analysis?.insights;
 
+  // Helper to safely get arrays from AI response (prevents crashes on undefined)
+  const safeArray = <T,>(arr: T[] | undefined | null): T[] => arr ?? [];
+
   return (
     <DashboardLayout role={role}>
       <div className="space-y-6">
@@ -978,7 +981,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {ins.bestSalesPitch?.recommendedCallFlow?.map((step, idx) => (
+                      {safeArray(ins?.bestSalesPitch?.recommendedCallFlow).map((step, idx) => (
                         <div key={idx} className="flex gap-4 p-4 border rounded-lg bg-muted/30">
                           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                             {step.step}
@@ -1003,7 +1006,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.bestSalesPitch?.openingLines?.map((line, idx) => (
+                      {safeArray(ins?.bestSalesPitch?.openingLines).map((line, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <Quote className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                           <span className="italic">{line}</span>
@@ -1020,7 +1023,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.bestSalesPitch?.valuePropositions?.map((prop, idx) => (
+                      {safeArray(ins?.bestSalesPitch?.valuePropositions).map((prop, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
                           <span>{prop}</span>
@@ -1037,7 +1040,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.bestSalesPitch?.closingTechniques?.map((tech, idx) => (
+                      {safeArray(ins?.bestSalesPitch?.closingTechniques).map((tech, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <Target className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                           <span>{tech}</span>
@@ -1054,7 +1057,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.bestSalesPitch?.toneGuidelines?.map((guide, idx) => (
+                      {safeArray(ins?.bestSalesPitch?.toneGuidelines).map((guide, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <MessageSquare className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
                           <span>{guide}</span>
@@ -1080,7 +1083,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   <CardContent>
                     <ScrollArea className="h-[400px]">
                       <div className="space-y-4">
-                        {ins.customerQuestions?.mostAsked?.map((q, idx) => (
+                        {safeArray(ins?.customerQuestions?.mostAsked).map((q, idx) => (
                           <div key={idx} className="p-4 border rounded-lg space-y-2">
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-2">
@@ -1109,7 +1112,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.customerQuestions?.criticalQuestions?.map((q, idx) => (
+                      {safeArray(ins?.customerQuestions?.criticalQuestions).map((q, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-yellow-500/10 rounded">
                           <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
                           <span>{q}</span>
@@ -1125,7 +1128,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.customerQuestions?.questionPatterns?.map((p, idx) => (
+                      {safeArray(ins?.customerQuestions?.questionPatterns).map((p, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <TrendingUp className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                           <span>{p}</span>
@@ -1150,7 +1153,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   <CardContent>
                     <ScrollArea className="h-[400px]">
                       <div className="space-y-4">
-                        {ins.objectionHandling?.topObjections?.map((obj, idx) => (
+                        {safeArray(ins?.objectionHandling?.topObjections).map((obj, idx) => (
                           <div key={idx} className="p-4 border rounded-lg space-y-3">
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-2">
@@ -1179,13 +1182,13 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {ins.objectionHandling?.objectionCategories?.map((cat, idx) => (
+                      {safeArray(ins?.objectionHandling?.objectionCategories).map((cat, idx) => (
                         <div key={idx} className="space-y-1">
                           <div className="flex justify-between text-sm">
                             <span className="font-medium">{cat.category}</span>
                             <span className="text-muted-foreground">{cat.count} occurrences</span>
                           </div>
-                          <Progress value={(cat.count / (ins.objectionHandling?.objectionCategories?.[0]?.count || 1)) * 100} className="h-2" />
+                          <Progress value={(cat.count / (safeArray(ins?.objectionHandling?.objectionCategories)[0]?.count || 1)) * 100} className="h-2" />
                           <p className="text-xs text-muted-foreground">{cat.handlingStrategy}</p>
                         </div>
                       ))}
@@ -1200,7 +1203,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.objectionHandling?.killerRebuttals?.map((r, idx) => (
+                      {safeArray(ins?.objectionHandling?.killerRebuttals).map((r, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-green-500/10 rounded">
                           <Zap className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
                           <span>{r}</span>
@@ -1224,7 +1227,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-3 md:grid-cols-2">
-                      {ins.interestTriggers?.whatWorked?.map((trigger, idx) => (
+                      {safeArray(ins?.interestTriggers?.whatWorked).map((trigger, idx) => (
                         <div key={idx} className="p-4 border rounded-lg bg-yellow-500/5">
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-medium">{trigger.trigger}</span>
@@ -1244,7 +1247,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
-                      {ins.interestTriggers?.buyingSignals?.map((signal, idx) => (
+                      {safeArray(ins?.interestTriggers?.buyingSignals).map((signal, idx) => (
                         <Badge key={idx} variant="secondary" className="gap-1">
                           <TrendingUp className="h-3 w-3" />
                           {signal}
@@ -1261,7 +1264,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.interestTriggers?.emotionalTriggers?.map((t, idx) => (
+                      {safeArray(ins?.interestTriggers?.emotionalTriggers).map((t, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <Sparkles className="h-4 w-4 text-pink-500 flex-shrink-0 mt-0.5" />
                           <span>{t}</span>
@@ -1284,7 +1287,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-bold text-primary">{ins.callFlowAnalysis?.optimalDuration}</p>
+                    <p className="text-3xl font-bold text-primary">{ins?.callFlowAnalysis?.optimalDuration || "N/A"}</p>
                   </CardContent>
                 </Card>
 
@@ -1295,7 +1298,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.callFlowAnalysis?.criticalMoments?.map((m, idx) => (
+                      {safeArray(ins?.callFlowAnalysis?.criticalMoments).map((m, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <Target className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                           <span>{m}</span>
@@ -1312,7 +1315,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.callFlowAnalysis?.dropoffPoints?.map((p, idx) => (
+                      {safeArray(ins?.callFlowAnalysis?.dropoffPoints).map((p, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-red-500/10 rounded">
                           <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                           <span>{p}</span>
@@ -1329,7 +1332,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {ins.callFlowAnalysis?.recoveryTechniques?.map((t, idx) => (
+                      {safeArray(ins?.callFlowAnalysis?.recoveryTechniques).map((t, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-green-500/10 rounded">
                           <RefreshCw className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
                           <span>{t}</span>
@@ -1354,7 +1357,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-3">
-                      {ins.aiRecommendations?.immediate?.map((rec, idx) => (
+                      {safeArray(ins?.aiRecommendations?.immediate).map((rec, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <ArrowRight className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                           <span>{rec}</span>
@@ -1374,7 +1377,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-3">
-                      {ins.aiRecommendations?.shortTerm?.map((rec, idx) => (
+                      {safeArray(ins?.aiRecommendations?.shortTerm).map((rec, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <ArrowRight className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                           <span>{rec}</span>
@@ -1394,7 +1397,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-3">
-                      {ins.aiRecommendations?.longTerm?.map((rec, idx) => (
+                      {safeArray(ins?.aiRecommendations?.longTerm).map((rec, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
                           <ArrowRight className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
                           <span>{rec}</span>
@@ -1413,7 +1416,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-3 md:grid-cols-2">
-                      {ins.aiRecommendations?.scriptUpdates?.map((update, idx) => (
+                      {safeArray(ins?.aiRecommendations?.scriptUpdates).map((update, idx) => (
                         <div key={idx} className="p-3 border rounded-lg bg-muted/30">
                           <p className="text-sm">{update}</p>
                         </div>
@@ -1432,7 +1435,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-3 md:grid-cols-2">
-                      {ins.performanceInsights?.trainingRecommendations?.map((rec, idx) => (
+                      {safeArray(ins?.performanceInsights?.trainingRecommendations).map((rec, idx) => (
                         <div key={idx} className="flex items-start gap-2 p-3 border rounded-lg">
                           <Lightbulb className="h-5 w-5 text-blue-500 flex-shrink-0" />
                           <span className="text-sm">{rec}</span>
