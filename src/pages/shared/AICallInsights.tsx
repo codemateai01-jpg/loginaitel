@@ -49,6 +49,11 @@ import {
   VolumeX,
   BarChart3,
   Bot,
+  Swords,
+  Trophy,
+  TrendingDown,
+  DollarSign,
+  Layers,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -184,6 +189,22 @@ interface InsightsData {
       dropoffPoints: string[];
       recoveryOpportunities: string[];
     };
+  };
+  competitorMentions?: {
+    competitorsIdentified: {
+      name: string;
+      mentionCount: number;
+      context: string;
+      sentiment: string;
+    }[];
+    mentionTiming: string[];
+    customerComparisons: string[];
+    competitiveAdvantages: string[];
+    competitiveWeaknesses: string[];
+    winStrategies: string[];
+    lossPatterns: string[];
+    pricingComparisons: string[];
+    featureComparisons: string[];
   };
   performanceInsights: {
     conversionPatterns: string[];
@@ -1110,10 +1131,14 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
         {/* Main Analysis Tabs */}
         {analysis && (
           <Tabs defaultValue="intelligence" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+            <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
               <TabsTrigger value="intelligence" className="gap-2">
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Intelligence</span>
+              </TabsTrigger>
+              <TabsTrigger value="competitors" className="gap-2">
+                <Swords className="h-4 w-4" />
+                <span className="hidden sm:inline">Competitors</span>
               </TabsTrigger>
               <TabsTrigger value="questions" className="gap-2">
                 <HelpCircle className="h-4 w-4" />
@@ -1360,6 +1385,256 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                             <span>{flag}</span>
                           </li>
                         ))}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* Competitor Mentions Tab */}
+            <TabsContent value="competitors" className="space-y-4">
+              {/* Identified Competitors */}
+              <Card className="border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Swords className="h-5 w-5 text-primary" />
+                    Competitors Identified
+                  </CardTitle>
+                  <CardDescription>Competitors mentioned in calls with frequency and context</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[300px]">
+                    <div className="space-y-3 pr-4">
+                      {safeArray(ins?.competitorMentions?.competitorsIdentified).length > 0 ? (
+                        safeArray(ins?.competitorMentions?.competitorsIdentified).map((comp, idx) => (
+                          <div key={idx} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-lg">{comp.name}</span>
+                                <Badge variant={
+                                  comp.sentiment === "positive" ? "default" :
+                                  comp.sentiment === "negative" ? "destructive" : "secondary"
+                                }>
+                                  {comp.sentiment}
+                                </Badge>
+                              </div>
+                              <Badge variant="outline" className="text-lg">
+                                {comp.mentionCount} mentions
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{comp.context}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Swords className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No competitor mentions detected</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* Win/Loss Analysis */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card className="border-green-200 dark:border-green-900/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-green-600">
+                      <Trophy className="h-5 w-5" />
+                      Win Strategies
+                    </CardTitle>
+                    <CardDescription>Successful approaches against competitors</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[250px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.winStrategies).map((strategy, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-green-500/10 rounded">
+                            <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                            <span>{strategy}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.winStrategies).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No win strategies identified yet</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-red-200 dark:border-red-900/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-600">
+                      <TrendingDown className="h-5 w-5" />
+                      Loss Patterns
+                    </CardTitle>
+                    <CardDescription>When we lose to competitors</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[250px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.lossPatterns).map((pattern, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-red-500/10 rounded">
+                            <XCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                            <span>{pattern}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.lossPatterns).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No loss patterns identified yet</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Competitive Advantages/Weaknesses */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-green-600">
+                      <TrendingUp className="h-5 w-5" />
+                      Our Competitive Advantages
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.competitiveAdvantages).map((adv, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm">
+                            <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                            <span>{adv}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.competitiveAdvantages).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No advantages identified yet</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-600">
+                      <AlertTriangle className="h-5 w-5" />
+                      Our Competitive Weaknesses
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.competitiveWeaknesses).map((weak, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm">
+                            <XCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                            <span>{weak}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.competitiveWeaknesses).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No weaknesses identified yet</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Comparisons */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-yellow-600" />
+                      Pricing Comparisons
+                    </CardTitle>
+                    <CardDescription>How pricing compares based on customer feedback</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.pricingComparisons).map((comp, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-yellow-500/10 rounded">
+                            <DollarSign className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                            <span>{comp}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.pricingComparisons).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No pricing comparisons identified</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Layers className="h-5 w-5 text-primary" />
+                      Feature Comparisons
+                    </CardTitle>
+                    <CardDescription>Feature-by-feature comparisons mentioned</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.featureComparisons).map((comp, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-primary/10 rounded">
+                            <Layers className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                            <span>{comp}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.featureComparisons).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No feature comparisons identified</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Customer Comparisons & Timing */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Customer Comparisons</CardTitle>
+                    <CardDescription>What customers compare between us and competitors</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.customerComparisons).map((comp, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm">
+                            <Users className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                            <span>{comp}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.customerComparisons).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No comparisons identified</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Mention Timing</CardTitle>
+                    <CardDescription>When in calls competitors are typically mentioned</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <ul className="space-y-2 pr-4">
+                        {safeArray(ins?.competitorMentions?.mentionTiming).map((timing, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm">
+                            <Clock className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                            <span>{timing}</span>
+                          </li>
+                        ))}
+                        {safeArray(ins?.competitorMentions?.mentionTiming).length === 0 && (
+                          <li className="text-sm text-muted-foreground text-center py-4">No timing patterns identified</li>
+                        )}
                       </ul>
                     </ScrollArea>
                   </CardContent>
