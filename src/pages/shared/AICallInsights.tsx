@@ -171,8 +171,8 @@ interface SavedInsight {
 
 export default function AICallInsights({ role }: AICallInsightsProps) {
   const { user } = useAuth();
-  const [selectedClient, setSelectedClient] = useState<string>("");
-  const [selectedCampaign, setSelectedCampaign] = useState<string>("");
+  const [selectedClient, setSelectedClient] = useState<string>("all");
+  const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
@@ -208,7 +208,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
       if (role === "client") {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) query = query.eq("client_id", user.id);
-      } else if (selectedClient) {
+      } else if (selectedClient && selectedClient !== "all") {
         query = query.eq("client_id", selectedClient);
       }
       
@@ -223,8 +223,8 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("analyze-call-insights", {
         body: {
-          clientId: role === "admin" ? selectedClient : undefined,
-          campaignId: selectedCampaign || undefined,
+          clientId: role === "admin" && selectedClient !== "all" ? selectedClient : undefined,
+          campaignId: selectedCampaign !== "all" ? selectedCampaign : undefined,
           analysisType: "comprehensive",
         },
       });
@@ -259,11 +259,11 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
 
       if (role === "client" && user) {
         query = query.eq("client_id", user.id);
-      } else if (selectedClient) {
+      } else if (selectedClient && selectedClient !== "all") {
         query = query.eq("client_id", selectedClient);
       }
 
-      if (selectedCampaign) {
+      if (selectedCampaign && selectedCampaign !== "all") {
         query = query.eq("campaign_id", selectedCampaign);
       }
 
@@ -278,14 +278,14 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
     mutationFn: async () => {
       if (!analysis || !user) throw new Error("No analysis to save");
       
-      const clientId = role === "admin" && selectedClient ? selectedClient : user.id;
+      const clientId = role === "admin" && selectedClient && selectedClient !== "all" ? selectedClient : user.id;
       const conversionRate = analysis.metadata.totalCalls > 0 
         ? (analysis.metadata.interestedCalls / analysis.metadata.totalCalls) * 100 
         : 0;
 
       const { error } = await supabase.from("ai_insights_history" as any).insert({
         client_id: clientId,
-        campaign_id: selectedCampaign || null,
+        campaign_id: selectedCampaign !== "all" ? selectedCampaign : null,
         insights: analysis.insights,
         metadata: analysis.metadata,
         total_calls: analysis.metadata.totalCalls,
@@ -806,12 +806,12 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
               {role === "admin" && (
                 <div className="w-64">
                   <label className="text-sm font-medium mb-2 block">Select Client</label>
-                  <Select value={selectedClient} onValueChange={setSelectedClient}>
+                <Select value={selectedClient} onValueChange={setSelectedClient}>
                     <SelectTrigger>
                       <SelectValue placeholder="All clients" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Clients</SelectItem>
+                      <SelectItem value="all">All Clients</SelectItem>
                       {clients?.map((c) => (
                         <SelectItem key={c.user_id} value={c.user_id}>
                           {c.full_name || c.email}
@@ -829,7 +829,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                     <SelectValue placeholder="All campaigns" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Campaigns</SelectItem>
+                    <SelectItem value="all">All Campaigns</SelectItem>
                     {campaigns?.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
