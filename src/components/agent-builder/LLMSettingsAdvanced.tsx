@@ -31,12 +31,20 @@ export interface LLMConfigAdvanced {
 }
 
 interface LLMSettingsAdvancedProps {
-  value: LLMConfigAdvanced;
+  value?: LLMConfigAdvanced;
   onChange: (config: LLMConfigAdvanced) => void;
 }
 
 export function LLMSettingsAdvanced({ value, onChange }: LLMSettingsAdvancedProps) {
-  const selectedModel = LLM_MODELS.find((m) => m.id === value.model);
+  const safeValue: LLMConfigAdvanced = value ?? {
+    model: "gpt-4.1-nano",
+    provider: "openai",
+    family: "openai",
+    temperature: 0.2,
+    maxTokens: 450,
+  };
+
+  const selectedModel = LLM_MODELS.find((m) => m.id === safeValue.model);
 
   // Group models by provider
   const openaiModels = LLM_MODELS.filter((m) => m.provider === "openai");
@@ -60,7 +68,7 @@ export function LLMSettingsAdvanced({ value, onChange }: LLMSettingsAdvancedProp
               const firstModel = models[0];
               if (firstModel) {
                 onChange({
-                  ...value,
+                  ...safeValue,
                   model: firstModel.id,
                   provider: firstModel.provider,
                   family: firstModel.family,
@@ -78,12 +86,12 @@ export function LLMSettingsAdvanced({ value, onChange }: LLMSettingsAdvancedProp
           </Select>
 
           <Select
-            value={value.model}
+            value={safeValue.model}
             onValueChange={(modelId) => {
               const model = LLM_MODELS.find((m) => m.id === modelId);
               if (model) {
                 onChange({
-                  ...value,
+                  ...safeValue,
                   model: model.id,
                   provider: model.provider,
                   family: model.family,
@@ -119,11 +127,11 @@ export function LLMSettingsAdvanced({ value, onChange }: LLMSettingsAdvancedProp
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>Tokens generated on each LLM output</Label>
-            <span className="text-sm font-mono bg-muted px-2 py-0.5">{value.maxTokens}</span>
+            <span className="text-sm font-mono bg-muted px-2 py-0.5">{safeValue.maxTokens}</span>
           </div>
           <Slider
-            value={[value.maxTokens]}
-            onValueChange={([tokens]) => onChange({ ...value, maxTokens: tokens })}
+            value={[safeValue.maxTokens]}
+            onValueChange={([tokens]) => onChange({ ...safeValue, maxTokens: tokens })}
             max={2000}
             min={50}
             step={50}
@@ -138,11 +146,11 @@ export function LLMSettingsAdvanced({ value, onChange }: LLMSettingsAdvancedProp
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>Temperature</Label>
-            <span className="text-sm font-mono bg-muted px-2 py-0.5">{value.temperature.toFixed(1)}</span>
+            <span className="text-sm font-mono bg-muted px-2 py-0.5">{safeValue.temperature.toFixed(1)}</span>
           </div>
           <Slider
-            value={[value.temperature]}
-            onValueChange={([temp]) => onChange({ ...value, temperature: temp })}
+            value={[safeValue.temperature]}
+            onValueChange={([temp]) => onChange({ ...safeValue, temperature: temp })}
             max={1}
             min={0}
             step={0.1}

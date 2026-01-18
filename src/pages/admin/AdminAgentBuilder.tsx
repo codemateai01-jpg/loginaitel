@@ -150,6 +150,23 @@ export default function AdminAgentBuilder() {
     a.agent_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const mergeWithDefaults = (partial: unknown): AgentFullConfig => {
+    const p = (partial ?? {}) as Partial<AgentFullConfig>;
+
+    return {
+      ...DEFAULT_CONFIG,
+      ...p,
+      agent: { ...DEFAULT_CONFIG.agent, ...(p.agent ?? {}) },
+      llm: { ...DEFAULT_CONFIG.llm, ...(p.llm ?? {}) },
+      audio: { ...DEFAULT_CONFIG.audio, ...(p.audio ?? {}) },
+      engine: { ...DEFAULT_CONFIG.engine, ...(p.engine ?? {}) },
+      call: { ...DEFAULT_CONFIG.call, ...(p.call ?? {}) },
+      tools: { ...DEFAULT_CONFIG.tools, ...(p.tools ?? {}) },
+      analytics: { ...DEFAULT_CONFIG.analytics, ...(p.analytics ?? {}) },
+      inbound: { ...DEFAULT_CONFIG.inbound, ...(p.inbound ?? {}) },
+    };
+  };
+
   // Load agent details when selecting an agent
   useEffect(() => {
     async function loadAgentDetails() {
@@ -161,9 +178,9 @@ export default function AdminAgentBuilder() {
       setAgentName(agent.agent_name);
       setLastUpdated(new Date(agent.updated_at));
 
-      // If we have cached config, use it
+      // If we have cached config, use it (but always merge with defaults)
       if (agent.agent_config) {
-        setConfig(agent.agent_config as unknown as AgentFullConfig);
+        setConfig(mergeWithDefaults(agent.agent_config));
         return;
       }
 
@@ -172,7 +189,7 @@ export default function AdminAgentBuilder() {
       try {
         const details = await fetchAgentDetails(agent.external_agent_id);
         if (details) {
-          setConfig(details);
+          setConfig(mergeWithDefaults(details));
         }
       } finally {
         setIsLoadingDetails(false);
