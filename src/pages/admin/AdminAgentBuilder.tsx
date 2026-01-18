@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,18 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   FileText,
@@ -28,6 +40,8 @@ import {
   Plus,
   Download,
   Clock,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 
 // Import all settings components
@@ -39,25 +53,7 @@ import { CallSettings, CallConfig } from "@/components/agent-builder/CallSetting
 import { ToolsSettings, ToolsConfig } from "@/components/agent-builder/ToolsSettings";
 import { AnalyticsSettings, AnalyticsConfig } from "@/components/agent-builder/AnalyticsSettings";
 import { InboundSettings, InboundConfig } from "@/components/agent-builder/InboundSettings";
-
-// Mock agents for sidebar
-const MOCK_AGENTS = [
-  { id: "1", name: "vedantu trail", status: "active" },
-  { id: "2", name: "varsha", status: "active" },
-  { id: "3", name: "My New Agent", status: "draft" },
-  { id: "4", name: "(v3) Recruitment - En - copy", status: "active" },
-];
-
-interface AgentFullConfig {
-  agent: AgentConfig;
-  llm: LLMConfigAdvanced;
-  audio: AudioConfig;
-  engine: EngineConfig;
-  call: CallConfig;
-  tools: ToolsConfig;
-  analytics: AnalyticsConfig;
-  inbound: InboundConfig;
-}
+import { useAgentBuilder, AgentFullConfig } from "@/hooks/useAgentBuilder";
 
 const DEFAULT_CONFIG: AgentFullConfig = {
   agent: {
@@ -120,44 +116,136 @@ You are [Agent Name], a representative of [Company Name].`,
 
 export default function AdminAgentBuilder() {
   const navigate = useNavigate();
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>("1");
+  const {
+    agents,
+    isLoadingAgents,
+    syncAgents,
+    isSyncing,
+    createAgent,
+    isCreating,
+    updateAgent,
+    isUpdating,
+    deleteAgent,
+    isDeleting,
+    fetchAgentDetails,
+  } = useAgentBuilder();
+
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("agent");
   const [config, setConfig] = useState<AgentFullConfig>(DEFAULT_CONFIG);
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [agentName, setAgentName] = useState("New Agent");
+  const [isNewAgent, setIsNewAgent] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-  const selectedAgent = MOCK_AGENTS.find((a) => a.id === selectedAgentId);
-  const filteredAgents = MOCK_AGENTS.filter((a) =>
-    a.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const selectedAgent = agents.find((a) => a.id === selectedAgentId);
+  const filteredAgents = agents.filter((a) =>
+    a.agent_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Load agent details when selecting an agent
+  useEffect(() => {
+    async function loadAgentDetails() {
+      if (!selectedAgentId || isNewAgent) return;
+
+      const agent = agents.find((a) => a.id === selectedAgentId);
+      if (!agent) return;
+
+      setAgentName(agent.agent_name);
+      setLastUpdated(new Date(agent.updated_at));
+
+      // If we have cached config, use it
+      if (agent.agent_config) {
+        setConfig(agent.agent_config as unknown as AgentFullConfig);
+        return;
+      }
+
+      // Otherwise fetch from API
+      setIsLoadingDetails(true);
+      try {
+        const details = await fetchAgentDetails(agent.external_agent_id);
+        if (details) {
+          setConfig(details);
+        }
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    }
+
+    loadAgentDetails();
+  }, [selectedAgentId, isNewAgent, agents, fetchAgentDetails]);
+
+  // Select first agent on load
+  useEffect(() => {
+    if (agents.length > 0 && !selectedAgentId) {
+      setSelectedAgentId(agents[0].id);
+      setIsNewAgent(false);
+    }
+  }, [agents, selectedAgentId]);
+
   const handleSave = async () => {
-    setIsSaving(true);
+    if (!agentName.trim()) {
+      toast.error("Agent name is required");
+      return;
+    }
+
     try {
-      // TODO: Implement actual save via Bolna API
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (isNewAgent) {
+        const newAgent = await createAgent({ name: agentName, config });
+        setSelectedAgentId(newAgent.id);
+        setIsNewAgent(false);
+      } else if (selectedAgent) {
+        await updateAgent({
+          id: selectedAgent.id,
+          externalId: selectedAgent.external_agent_id,
+          name: agentName,
+          config,
+        });
+      }
       setLastUpdated(new Date());
-      toast.success("Agent saved successfully");
     } catch (error) {
-      toast.error("Failed to save agent");
-    } finally {
-      setIsSaving(false);
+      // Error already handled by mutation
     }
   };
 
   const handleNewAgent = () => {
     setSelectedAgentId(null);
     setConfig(DEFAULT_CONFIG);
+    setAgentName("New Agent");
+    setIsNewAgent(true);
     setActiveTab("agent");
+    setLastUpdated(null);
+  };
+
+  const handleDeleteAgent = async () => {
+    if (!selectedAgent) return;
+
+    try {
+      await deleteAgent({
+        id: selectedAgent.id,
+        externalId: selectedAgent.external_agent_id,
+      });
+      setSelectedAgentId(null);
+      setIsNewAgent(true);
+      setConfig(DEFAULT_CONFIG);
+      setAgentName("New Agent");
+    } catch (error) {
+      // Error already handled by mutation
+    }
+  };
+
+  const handleCopyAgentId = () => {
+    if (selectedAgent) {
+      navigator.clipboard.writeText(selectedAgent.external_agent_id);
+      toast.success("Agent ID copied to clipboard");
+    }
   };
 
   const calculateCostPerMin = () => {
-    // Simplified cost calculation
     return "$0.039";
   };
 
-  // Cost breakdown percentages (simplified)
   const costBreakdown = {
     transcriber: 20,
     llm: 30,
@@ -165,7 +253,8 @@ export default function AdminAgentBuilder() {
     telephony: 25,
   };
 
-  const formatTimeAgo = (date: Date) => {
+  const formatTimeAgo = (date: Date | null) => {
+    if (!date) return "Not saved";
     const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
     if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes} min ago`;
@@ -173,6 +262,8 @@ export default function AdminAgentBuilder() {
     if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
     return `${Math.floor(hours / 24)} day${Math.floor(hours / 24) > 1 ? "s" : ""} ago`;
   };
+
+  const isSaving = isCreating || isUpdating;
 
   return (
     <DashboardLayout role="admin">
@@ -190,9 +281,20 @@ export default function AdminAgentBuilder() {
           {/* Sidebar - Agent List */}
           <div className="w-72 border-r flex flex-col bg-card">
             <div className="p-4 border-b space-y-3">
-              <h2 className="font-bold">Your Agents</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold">Your Agents</h2>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => syncAgents()}
+                  disabled={isSyncing}
+                  title="Sync from API"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="gap-1">
+                <Button variant="outline" size="sm" className="gap-1" disabled>
                   <Download className="h-3 w-3" />
                   Import
                 </Button>
@@ -214,19 +316,42 @@ export default function AdminAgentBuilder() {
 
             <ScrollArea className="flex-1">
               <div className="p-2 space-y-1">
-                {filteredAgents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    onClick={() => setSelectedAgentId(agent.id)}
-                    className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
-                      selectedAgentId === agent.id
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    {agent.name}
-                  </button>
-                ))}
+                {isLoadingAgents ? (
+                  <div className="space-y-2 p-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : filteredAgents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center p-4">
+                    {searchQuery ? "No agents found" : "No agents yet. Create one!"}
+                  </p>
+                ) : (
+                  filteredAgents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => {
+                        setSelectedAgentId(agent.id);
+                        setIsNewAgent(false);
+                      }}
+                      className={`w-full text-left px-3 py-2.5 text-sm transition-colors rounded ${
+                        selectedAgentId === agent.id && !isNewAgent
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="truncate">{agent.agent_name}</span>
+                        <Badge
+                          variant={agent.status === "active" ? "default" : "secondary"}
+                          className="text-[10px] ml-2"
+                        >
+                          {agent.status}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -240,16 +365,24 @@ export default function AdminAgentBuilder() {
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-2">
                     <Input
-                      value={selectedAgent?.name || "New Agent"}
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
                       className="text-2xl font-bold border-none p-0 h-auto focus-visible:ring-0 bg-transparent max-w-md"
                       placeholder="Agent Name"
                     />
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" className="gap-1">
-                        <Copy className="h-3 w-3" />
-                        Agent ID
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-1">
+                      {!isNewAgent && selectedAgent && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={handleCopyAgentId}
+                        >
+                          <Copy className="h-3 w-3" />
+                          Agent ID
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" className="gap-1" disabled>
                         <Share2 className="h-3 w-3" />
                         Share
                       </Button>
@@ -305,100 +438,107 @@ export default function AdminAgentBuilder() {
                   </div>
                 </div>
 
-                {/* Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid grid-cols-8 w-full mb-6">
-                    <TabsTrigger value="agent" className="gap-1 text-xs">
-                      <FileText className="h-3 w-3" />
-                      Agent
-                    </TabsTrigger>
-                    <TabsTrigger value="llm" className="gap-1 text-xs">
-                      <Brain className="h-3 w-3" />
-                      LLM
-                    </TabsTrigger>
-                    <TabsTrigger value="audio" className="gap-1 text-xs">
-                      <Headphones className="h-3 w-3" />
-                      Audio
-                    </TabsTrigger>
-                    <TabsTrigger value="engine" className="gap-1 text-xs">
-                      <Cog className="h-3 w-3" />
-                      Engine
-                    </TabsTrigger>
-                    <TabsTrigger value="call" className="gap-1 text-xs">
-                      <Phone className="h-3 w-3" />
-                      Call
-                    </TabsTrigger>
-                    <TabsTrigger value="tools" className="gap-1 text-xs">
-                      <Wrench className="h-3 w-3" />
-                      Tools
-                    </TabsTrigger>
-                    <TabsTrigger value="analytics" className="gap-1 text-xs">
-                      <BarChart3 className="h-3 w-3" />
-                      Analytics
-                    </TabsTrigger>
-                    <TabsTrigger value="inbound" className="gap-1 text-xs">
-                      <PhoneIncoming className="h-3 w-3" />
-                      Inbound
-                    </TabsTrigger>
-                  </TabsList>
+                {/* Loading State */}
+                {isLoadingDetails ? (
+                  <div className="flex items-center justify-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  /* Tabs */
+                  <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsList className="grid grid-cols-8 w-full mb-6">
+                      <TabsTrigger value="agent" className="gap-1 text-xs">
+                        <FileText className="h-3 w-3" />
+                        Agent
+                      </TabsTrigger>
+                      <TabsTrigger value="llm" className="gap-1 text-xs">
+                        <Brain className="h-3 w-3" />
+                        LLM
+                      </TabsTrigger>
+                      <TabsTrigger value="audio" className="gap-1 text-xs">
+                        <Headphones className="h-3 w-3" />
+                        Audio
+                      </TabsTrigger>
+                      <TabsTrigger value="engine" className="gap-1 text-xs">
+                        <Cog className="h-3 w-3" />
+                        Engine
+                      </TabsTrigger>
+                      <TabsTrigger value="call" className="gap-1 text-xs">
+                        <Phone className="h-3 w-3" />
+                        Call
+                      </TabsTrigger>
+                      <TabsTrigger value="tools" className="gap-1 text-xs">
+                        <Wrench className="h-3 w-3" />
+                        Tools
+                      </TabsTrigger>
+                      <TabsTrigger value="analytics" className="gap-1 text-xs">
+                        <BarChart3 className="h-3 w-3" />
+                        Analytics
+                      </TabsTrigger>
+                      <TabsTrigger value="inbound" className="gap-1 text-xs">
+                        <PhoneIncoming className="h-3 w-3" />
+                        Inbound
+                      </TabsTrigger>
+                    </TabsList>
 
-                  <Card className="p-6">
-                    <TabsContent value="agent" className="m-0">
-                      <AgentSettings
-                        value={config.agent}
-                        onChange={(agent) => setConfig({ ...config, agent })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="llm" className="m-0">
-                      <LLMSettingsAdvanced
-                        value={config.llm}
-                        onChange={(llm) => setConfig({ ...config, llm })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="audio" className="m-0">
-                      <AudioSettings
-                        value={config.audio}
-                        onChange={(audio) => setConfig({ ...config, audio })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="engine" className="m-0">
-                      <EngineSettings
-                        value={config.engine}
-                        onChange={(engine) => setConfig({ ...config, engine })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="call" className="m-0">
-                      <CallSettings
-                        value={config.call}
-                        onChange={(call) => setConfig({ ...config, call })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="tools" className="m-0">
-                      <ToolsSettings
-                        value={config.tools}
-                        onChange={(tools) => setConfig({ ...config, tools })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="analytics" className="m-0">
-                      <AnalyticsSettings
-                        value={config.analytics}
-                        onChange={(analytics) => setConfig({ ...config, analytics })}
-                      />
-                    </TabsContent>
-                    <TabsContent value="inbound" className="m-0">
-                      <InboundSettings
-                        value={config.inbound}
-                        onChange={(inbound) => setConfig({ ...config, inbound })}
-                      />
-                    </TabsContent>
-                  </Card>
-                </Tabs>
+                    <Card className="p-6">
+                      <TabsContent value="agent" className="m-0">
+                        <AgentSettings
+                          value={config.agent}
+                          onChange={(agent) => setConfig({ ...config, agent })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="llm" className="m-0">
+                        <LLMSettingsAdvanced
+                          value={config.llm}
+                          onChange={(llm) => setConfig({ ...config, llm })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="audio" className="m-0">
+                        <AudioSettings
+                          value={config.audio}
+                          onChange={(audio) => setConfig({ ...config, audio })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="engine" className="m-0">
+                        <EngineSettings
+                          value={config.engine}
+                          onChange={(engine) => setConfig({ ...config, engine })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="call" className="m-0">
+                        <CallSettings
+                          value={config.call}
+                          onChange={(call) => setConfig({ ...config, call })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="tools" className="m-0">
+                        <ToolsSettings
+                          value={config.tools}
+                          onChange={(tools) => setConfig({ ...config, tools })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="analytics" className="m-0">
+                        <AnalyticsSettings
+                          value={config.analytics}
+                          onChange={(analytics) => setConfig({ ...config, analytics })}
+                        />
+                      </TabsContent>
+                      <TabsContent value="inbound" className="m-0">
+                        <InboundSettings
+                          value={config.inbound}
+                          onChange={(inbound) => setConfig({ ...config, inbound })}
+                        />
+                      </TabsContent>
+                    </Card>
+                  </Tabs>
+                )}
               </div>
             </div>
 
             {/* Right Sidebar - Actions */}
             <div className="w-72 border-l bg-card p-4 space-y-4">
-              <Button variant="outline" className="w-full gap-2">
+              <Button variant="outline" className="w-full gap-2" disabled>
                 <ExternalLink className="h-4 w-4" />
                 See all call logs
               </Button>
@@ -408,23 +548,56 @@ export default function AdminAgentBuilder() {
                   <Button
                     className="flex-1 gap-2"
                     onClick={handleSave}
-                    disabled={isSaving}
+                    disabled={isSaving || isLoadingDetails}
                   >
-                    <Save className="h-4 w-4" />
-                    {isSaving ? "Saving..." : "Save agent"}
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    {isSaving ? "Saving..." : isNewAgent ? "Create agent" : "Save agent"}
                   </Button>
-                  <Button variant="outline" size="icon">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+
+                  {!isNewAgent && selectedAgent && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="icon" disabled={isDeleting}>
+                          {isDeleting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete "{selectedAgent.agent_name}"? This action
+                            cannot be undone and will remove the agent from both the system and API.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleDeleteAgent}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  Last updated {formatTimeAgo(lastUpdated)}
+                  {isNewAgent ? "Not saved yet" : `Last updated ${formatTimeAgo(lastUpdated)}`}
                 </div>
               </div>
 
               <div className="border-t pt-4 space-y-3">
-                <Button variant="outline" className="w-full gap-2 text-primary border-primary">
+                <Button variant="outline" className="w-full gap-2 text-primary border-primary" disabled>
                   <MessageCircle className="h-4 w-4" />
                   Chat with agent
                 </Button>
@@ -434,7 +607,7 @@ export default function AdminAgentBuilder() {
               </div>
 
               <div className="border-t pt-4 space-y-3">
-                <Button variant="outline" className="w-full gap-2">
+                <Button variant="outline" className="w-full gap-2" disabled>
                   <PhoneCall className="h-4 w-4" />
                   Test via web call
                 </Button>
@@ -444,11 +617,11 @@ export default function AdminAgentBuilder() {
               </div>
 
               <div className="border-t pt-4 space-y-2">
-                <Button className="w-full gap-2" variant="default">
+                <Button className="w-full gap-2" variant="default" disabled>
                   <PhoneCall className="h-4 w-4" />
                   Get call from agent
                 </Button>
-                <Button variant="outline" className="w-full gap-2">
+                <Button variant="outline" className="w-full gap-2" disabled>
                   <PhoneIncoming className="h-4 w-4" />
                   Set inbound agent
                 </Button>
