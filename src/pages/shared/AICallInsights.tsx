@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Brain,
   Sparkles,
@@ -448,6 +449,40 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Empty State - Show when no analysis has been run */}
+        {!analysis && !analyzeMutation.isPending && (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="p-4 rounded-full bg-primary/10 mb-4">
+                <Brain className="h-12 w-12 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No Analysis Yet</h3>
+              <p className="text-muted-foreground max-w-md mb-6">
+                Click "Run AI Analysis" to analyze your call transcripts and get actionable insights 
+                including best sales pitches, customer questions, objection handling strategies, and more.
+              </p>
+              <Button onClick={() => analyzeMutation.mutate()} className="gap-2">
+                <Sparkles className="h-4 w-4" />
+                Run AI Analysis
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loading State */}
+        {analyzeMutation.isPending && (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Analyzing Calls...</h3>
+              <p className="text-muted-foreground max-w-md">
+                Our AI is analyzing your call transcripts to extract insights. 
+                This may take a few moments depending on the number of calls.
+              </p>
+            </CardContent>
+          </Card>
         )}
 
         {/* Main Insights Tabs */}
