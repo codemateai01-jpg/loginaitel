@@ -38,7 +38,35 @@ import {
   Shield,
   ArrowRight,
   Quote,
+  History,
+  Save,
+  GitCompare,
+  Trash2,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
 } from "lucide-react";
+import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface AICallInsightsProps {
   role: "admin" | "client";
@@ -126,10 +154,30 @@ interface AnalysisResult {
   };
 }
 
+interface SavedInsight {
+  id: string;
+  client_id: string;
+  campaign_id: string | null;
+  insights: InsightsData;
+  metadata: AnalysisResult["metadata"];
+  total_calls: number;
+  interested_calls: number;
+  not_interested_calls: number;
+  partial_calls: number;
+  conversion_rate: number | null;
+  created_at: string;
+  notes: string | null;
+}
+
 export default function AICallInsights({ role }: AICallInsightsProps) {
+  const { user } = useAuth();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [selectedCampaign, setSelectedCampaign] = useState<string>("");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedForCompare, setSelectedForCompare] = useState<SavedInsight[]>([]);
+  const [saveNotes, setSaveNotes] = useState("");
 
   // Fetch clients for admin
   const { data: clients } = useQuery({
@@ -198,6 +246,130 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
       });
     },
   });
+
+  // Fetch saved insights history
+  const { data: insightsHistory, refetch: refetchHistory } = useQuery({
+    queryKey: ["insights-history", selectedClient, selectedCampaign],
+    queryFn: async () => {
+      // Using raw query since table is not in generated types yet
+      let query = supabase
+        .from("ai_insights_history" as any)
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (role === "client" && user) {
+        query = query.eq("client_id", user.id);
+      } else if (selectedClient) {
+        query = query.eq("client_id", selectedClient);
+      }
+
+      if (selectedCampaign) {
+        query = query.eq("campaign_id", selectedCampaign);
+      }
+
+      const { data, error } = await query.limit(20);
+      if (error) throw error;
+      return (data || []) as unknown as SavedInsight[];
+    },
+  });
+
+  // Save insights mutation
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!analysis || !user) throw new Error("No analysis to save");
+      
+      const clientId = role === "admin" && selectedClient ? selectedClient : user.id;
+      const conversionRate = analysis.metadata.totalCalls > 0 
+        ? (analysis.metadata.interestedCalls / analysis.metadata.totalCalls) * 100 
+        : 0;
+
+      const { error } = await supabase.from("ai_insights_history" as any).insert({
+        client_id: clientId,
+        campaign_id: selectedCampaign || null,
+        insights: analysis.insights,
+        metadata: analysis.metadata,
+        total_calls: analysis.metadata.totalCalls,
+        interested_calls: analysis.metadata.interestedCalls,
+        not_interested_calls: analysis.metadata.notInterestedCalls,
+        partial_calls: analysis.metadata.partialCalls,
+        conversion_rate: conversionRate,
+        notes: saveNotes || null,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Insights Saved!", {
+        description: "Your analysis has been saved for future comparison",
+      });
+      setSaveNotes("");
+      refetchHistory();
+    },
+    onError: (error) => {
+      toast.error("Failed to save", {
+        description: error instanceof Error ? error.message : "Please try again",
+      });
+    },
+  });
+
+  // Delete insight mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("ai_insights_history" as any)
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Insight deleted");
+      refetchHistory();
+      setSelectedForCompare([]);
+    },
+    onError: () => {
+      toast.error("Failed to delete insight");
+    },
+  });
+
+  // Load a saved insight
+  const loadSavedInsight = (saved: SavedInsight) => {
+    setAnalysis({
+      insights: saved.insights,
+      metadata: saved.metadata,
+    });
+    setShowHistory(false);
+    toast.success("Loaded saved insight", {
+      description: `From ${format(new Date(saved.created_at), "MMM d, yyyy 'at' h:mm a")}`,
+    });
+  };
+
+  // Toggle selection for comparison
+  const toggleCompareSelection = (saved: SavedInsight) => {
+    setSelectedForCompare(prev => {
+      const exists = prev.find(s => s.id === saved.id);
+      if (exists) {
+        return prev.filter(s => s.id !== saved.id);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], saved];
+      }
+      return [...prev, saved];
+    });
+  };
+
+  // Calculate comparison metrics
+  const getComparisonData = () => {
+    if (selectedForCompare.length !== 2) return null;
+    const [older, newer] = selectedForCompare.sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    
+    const conversionChange = (newer.conversion_rate || 0) - (older.conversion_rate || 0);
+    const callsChange = newer.total_calls - older.total_calls;
+    const interestedChange = newer.interested_calls - older.interested_calls;
+
+    return { older, newer, conversionChange, callsChange, interestedChange };
+  };
 
   const exportToPDF = () => {
     if (!analysis) return;
@@ -323,11 +495,288 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* History Button */}
+            <Dialog open={showHistory} onOpenChange={setShowHistory}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <History className="h-4 w-4" />
+                  <span className="hidden sm:inline">History</span>
+                  {insightsHistory && insightsHistory.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">{insightsHistory.length}</Badge>
+                  )}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Saved Insights History
+                  </DialogTitle>
+                  <DialogDescription>
+                    View, load, and compare past AI analyses to track improvements
+                  </DialogDescription>
+                </DialogHeader>
+                
+                {/* Compare Mode Toggle */}
+                <div className="flex items-center justify-between py-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={compareMode ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setCompareMode(!compareMode);
+                        setSelectedForCompare([]);
+                      }}
+                      className="gap-2"
+                    >
+                      <GitCompare className="h-4 w-4" />
+                      {compareMode ? "Exit Compare" : "Compare Mode"}
+                    </Button>
+                    {compareMode && (
+                      <span className="text-sm text-muted-foreground">
+                        Select 2 insights to compare ({selectedForCompare.length}/2)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Comparison View */}
+                {compareMode && selectedForCompare.length === 2 && getComparisonData() && (
+                  <Card className="bg-muted/30 border-primary/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <GitCompare className="h-5 w-5 text-primary" />
+                        Performance Comparison
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        const data = getComparisonData()!;
+                        return (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="text-center p-3 rounded-lg bg-background">
+                              <p className="text-xs text-muted-foreground">Period</p>
+                              <p className="text-sm font-medium">
+                                {format(new Date(data.older.created_at), "MMM d")} → {format(new Date(data.newer.created_at), "MMM d")}
+                              </p>
+                            </div>
+                            <div className="text-center p-3 rounded-lg bg-background">
+                              <p className="text-xs text-muted-foreground">Conversion Rate</p>
+                              <div className="flex items-center justify-center gap-1">
+                                {data.conversionChange > 0 ? (
+                                  <ArrowUpRight className="h-4 w-4 text-green-600" />
+                                ) : data.conversionChange < 0 ? (
+                                  <ArrowDownRight className="h-4 w-4 text-red-600" />
+                                ) : (
+                                  <Minus className="h-4 w-4 text-muted-foreground" />
+                                )}
+                                <span className={`font-bold ${data.conversionChange > 0 ? 'text-green-600' : data.conversionChange < 0 ? 'text-red-600' : ''}`}>
+                                  {data.conversionChange > 0 ? '+' : ''}{data.conversionChange.toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-center p-3 rounded-lg bg-background">
+                              <p className="text-xs text-muted-foreground">Total Calls</p>
+                              <div className="flex items-center justify-center gap-1">
+                                {data.callsChange > 0 ? (
+                                  <ArrowUpRight className="h-4 w-4 text-green-600" />
+                                ) : data.callsChange < 0 ? (
+                                  <ArrowDownRight className="h-4 w-4 text-red-600" />
+                                ) : (
+                                  <Minus className="h-4 w-4 text-muted-foreground" />
+                                )}
+                                <span className="font-bold">
+                                  {data.callsChange > 0 ? '+' : ''}{data.callsChange}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-center p-3 rounded-lg bg-background">
+                              <p className="text-xs text-muted-foreground">Interested Leads</p>
+                              <div className="flex items-center justify-center gap-1">
+                                {data.interestedChange > 0 ? (
+                                  <ArrowUpRight className="h-4 w-4 text-green-600" />
+                                ) : data.interestedChange < 0 ? (
+                                  <ArrowDownRight className="h-4 w-4 text-red-600" />
+                                ) : (
+                                  <Minus className="h-4 w-4 text-muted-foreground" />
+                                )}
+                                <span className={`font-bold ${data.interestedChange > 0 ? 'text-green-600' : data.interestedChange < 0 ? 'text-red-600' : ''}`}>
+                                  {data.interestedChange > 0 ? '+' : ''}{data.interestedChange}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* History List */}
+                <ScrollArea className="flex-1 pr-4">
+                  {!insightsHistory || insightsHistory.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No saved insights yet</p>
+                      <p className="text-sm">Run an analysis and save it to start tracking</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {insightsHistory.map((saved) => (
+                        <Card 
+                          key={saved.id} 
+                          className={`cursor-pointer transition-all ${
+                            compareMode && selectedForCompare.find(s => s.id === saved.id) 
+                              ? 'ring-2 ring-primary bg-primary/5' 
+                              : 'hover:bg-muted/50'
+                          }`}
+                          onClick={() => compareMode ? toggleCompareSelection(saved) : undefined}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">
+                                    {format(new Date(saved.created_at), "MMM d, yyyy 'at' h:mm a")}
+                                  </span>
+                                  {compareMode && selectedForCompare.find(s => s.id === saved.id) && (
+                                    <Badge variant="default" className="text-xs">
+                                      #{selectedForCompare.findIndex(s => s.id === saved.id) + 1}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  <Badge variant="outline">{saved.total_calls} calls</Badge>
+                                  <Badge variant="secondary" className="bg-green-500/10 text-green-700">
+                                    {saved.interested_calls} interested
+                                  </Badge>
+                                  <Badge variant="secondary">
+                                    {saved.conversion_rate?.toFixed(1) || 0}% conversion
+                                  </Badge>
+                                </div>
+                                {saved.notes && (
+                                  <p className="text-sm text-muted-foreground truncate">{saved.notes}</p>
+                                )}
+                              </div>
+                              {!compareMode && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      loadSavedInsight(saved);
+                                    }}
+                                  >
+                                    Load
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-destructive hover:text-destructive"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete this insight?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This action cannot be undone. This will permanently delete the saved analysis.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => deleteMutation.mutate(saved.id)}
+                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </DialogContent>
+            </Dialog>
+
+            {/* Save Button */}
+            {analysis && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Save className="h-4 w-4" />
+                    <span className="hidden sm:inline">Save</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Save Analysis</DialogTitle>
+                    <DialogDescription>
+                      Save this analysis to track changes over time and compare with future results.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="text-muted-foreground">Total Calls</p>
+                        <p className="text-lg font-bold">{analysis.metadata.totalCalls}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="text-muted-foreground">Conversion Rate</p>
+                        <p className="text-lg font-bold">
+                          {analysis.metadata.totalCalls > 0 
+                            ? ((analysis.metadata.interestedCalls / analysis.metadata.totalCalls) * 100).toFixed(1)
+                            : 0}%
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Notes (optional)</label>
+                      <textarea
+                        className="w-full p-3 border rounded-lg text-sm resize-none bg-background"
+                        rows={3}
+                        placeholder="Add notes about this analysis..."
+                        value={saveNotes}
+                        onChange={(e) => setSaveNotes(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      onClick={() => saveMutation.mutate()}
+                      disabled={saveMutation.isPending}
+                      className="gap-2"
+                    >
+                      {saveMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Save Analysis
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
             {analysis && (
               <Button variant="outline" onClick={exportToPDF} className="gap-2">
                 <Download className="h-4 w-4" />
-                Export PDF
+                <span className="hidden sm:inline">Export PDF</span>
               </Button>
             )}
             <Button
