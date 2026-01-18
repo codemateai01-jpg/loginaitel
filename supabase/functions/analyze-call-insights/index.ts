@@ -320,6 +320,19 @@ Return this exact JSON structure:
       "recoveryOpportunities": ["Moments where failed calls could have been saved"]
     }
   },
+  "competitorMentions": {
+    "competitorsIdentified": [
+      {"name": "Competitor Name", "mentionCount": 5, "context": "How/why they were mentioned", "sentiment": "positive/negative/neutral"}
+    ],
+    "mentionTiming": ["When in calls competitors are typically mentioned"],
+    "customerComparisons": ["What customers compare between us and competitors"],
+    "competitiveAdvantages": ["Areas where we win against competitors based on calls"],
+    "competitiveWeaknesses": ["Areas where competitors are preferred"],
+    "winStrategies": ["Successful approaches when competitor is mentioned"],
+    "lossPatterns": ["What happens when we lose to competitor"],
+    "pricingComparisons": ["How pricing compares based on customer feedback"],
+    "featureComparisons": ["Feature-by-feature comparisons mentioned"]
+  },
   "performanceInsights": {
     "conversionPatterns": ["Patterns in successful conversions"],
     "failurePatterns": ["Patterns in failed calls"],
@@ -335,7 +348,7 @@ Return this exact JSON structure:
   }
 }
 
-Focus on CONVERSATION DYNAMICS: talk time, silences, interruptions, response speed, and agent performance metrics. Quote actual phrases from transcripts where helpful. Be direct and practical.`;
+Focus on CONVERSATION DYNAMICS: talk time, silences, interruptions, response speed, and agent performance metrics. IMPORTANT: Identify ALL competitor mentions - look for company names, product names, or phrases like "other company", "alternative", "competition", "currently using", "compared to". Quote actual phrases from transcripts where helpful. Be direct and practical.`;
 
     // Call Lovable AI
     const aiResponse = await fetch(LOVABLE_AI_URL, {
