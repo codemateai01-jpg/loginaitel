@@ -56,17 +56,31 @@ serve(async (req) => {
     }
 
     if (!otpRecord) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired OTP. Please request a new OTP." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      // Check if OTP was already verified (user might be retrying after partial success)
+      const { data: verifiedOtp } = await supabaseAdmin
+        .from("phone_otps")
+        .select("*")
+        .eq("phone", formattedPhone)
+        .eq("otp_code", otp)
+        .eq("verified", true)
+        .maybeSingle();
 
-    // Mark OTP as verified
-    await supabaseAdmin
-      .from("phone_otps")
-      .update({ verified: true })
-      .eq("id", otpRecord.id);
+      if (verifiedOtp) {
+        // OTP was already verified - proceed with login anyway
+        console.log("OTP already verified, proceeding with login");
+      } else {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired OTP. Please request a new OTP." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // Mark OTP as verified only if we found an unverified one
+      await supabaseAdmin
+        .from("phone_otps")
+        .update({ verified: true })
+        .eq("id", otpRecord.id);
+    }
 
     // Check if this phone belongs to a sub-user
     const { data: subUserData, error: subUserError } = await supabaseAdmin
