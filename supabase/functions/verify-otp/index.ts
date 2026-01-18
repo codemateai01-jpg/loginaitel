@@ -294,15 +294,23 @@ serve(async (req) => {
     }
 
     // Sign in the user and get session
+    console.log("Attempting to sign in user:", phoneEmail);
     const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
       email: phoneEmail,
       password: phonePassword,
     });
 
-    if (signInError || !signInData.session) {
-      console.error("Error signing in:", signInError);
-      throw new Error("Failed to create session");
+    if (signInError) {
+      console.error("Sign in error details:", JSON.stringify(signInError));
+      throw new Error(`Failed to create session: ${signInError.message}`);
     }
+
+    if (!signInData.session) {
+      console.error("No session returned from sign in");
+      throw new Error("Failed to create session - no session returned");
+    }
+
+    const session = signInData.session;
 
     // For main clients (not sub-users), track their active session
     if (!isSubUser && clientId) {
@@ -350,7 +358,6 @@ serve(async (req) => {
       }
     }
 
-    const session = signInData.session;
     // Return a minimal session payload (avoid exposing user/email/phone in response)
     const safeSession = {
       access_token: session.access_token,
