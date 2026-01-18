@@ -56,6 +56,8 @@ export interface AgentFullConfig {
     enableDtmf: boolean;
     noiseCancellation: boolean;
     noiseCancellationLevel: number;
+    ambientNoise: boolean;
+    ambientNoiseTrack: string;
   };
   tools: {
     selectedFunctions: string[];
@@ -197,7 +199,8 @@ function convertToBolnaFormat(
       hangup_after_silence: 15,
       number_of_words_for_interruption: config.engine.interruptWords,
       call_terminate: 1800,
-      ambient_noise: config.call.noiseCancellation,
+      ambient_noise: config.call.ambientNoise,
+      ambient_noise_track: config.call.ambientNoise ? config.call.ambientNoiseTrack : undefined,
     },
   };
 
@@ -318,12 +321,15 @@ function convertFromBolnaFormat(agent: AitelAgent): Partial<AgentFullConfig> {
 
       // Call config
       const ioConfig = toolsConfig.input;
+      const taskCfg = task.task_config as Record<string, unknown> | undefined;
       if (ioConfig) {
         config.call = {
           telephonyProvider: ioConfig.provider || "plivo",
           enableDtmf: false,
-          noiseCancellation: !!task.task_config?.ambient_noise,
+          noiseCancellation: false,
           noiseCancellationLevel: 85,
+          ambientNoise: !!(taskCfg?.ambient_noise),
+          ambientNoiseTrack: (taskCfg?.ambient_noise_track as string) || "office-ambience",
         };
       }
 
@@ -616,7 +622,7 @@ export function useAgentBuilder() {
       llm: partialConfig.llm || { model: "gpt-4.1-nano", provider: "openai", family: "openai", temperature: 0.2, maxTokens: 450 },
       audio: partialConfig.audio || { language: "en", transcriberProvider: "elevenlabs", transcriberModel: "scribe_v2_realtime", keywords: "", voiceProvider: "cartesia", voiceId: "", voiceName: "" },
       engine: partialConfig.engine || { preciseTranscript: false, interruptWords: 2, responseRate: "rapid" },
-      call: partialConfig.call || { telephonyProvider: "plivo", enableDtmf: false, noiseCancellation: true, noiseCancellationLevel: 85 },
+      call: partialConfig.call || { telephonyProvider: "plivo", enableDtmf: false, noiseCancellation: true, noiseCancellationLevel: 85, ambientNoise: false, ambientNoiseTrack: "office-ambience" },
       tools: { selectedFunctions: [] },
       analytics: { autoReschedule: false, summarization: false, extraction: false, extractionPrompt: "" },
       inbound: { dataSource: "none", restrictToDatabase: false },

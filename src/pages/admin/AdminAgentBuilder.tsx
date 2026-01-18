@@ -99,6 +99,8 @@ You are [Agent Name], a representative of [Company Name].`,
     enableDtmf: false,
     noiseCancellation: true,
     noiseCancellationLevel: 85,
+    ambientNoise: false,
+    ambientNoiseTrack: "office-ambience",
   },
   tools: {
     selectedFunctions: [],

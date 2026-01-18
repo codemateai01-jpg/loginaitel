@@ -202,7 +202,7 @@ export interface ConversationConfig {
   backchanneling_message_gap?: number;
   backchanneling_start_delay?: number;
   ambient_noise?: boolean;
-  ambient_noise_track?: "office-ambience" | "coffee-shop" | "call-center";
+  ambient_noise_track?: string;
   call_terminate?: number;
   voicemail?: boolean;
   inbound_limit?: number;
