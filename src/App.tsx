@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InstallPromptBanner } from "@/components/pwa/InstallPromptBanner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 import Install from "./pages/Install";
@@ -221,7 +222,9 @@ const App = () => (
               path="/admin/ai-insights"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
-                  <AICallInsights role="admin" />
+                  <ErrorBoundary title="AI Insights failed to load">
+                    <AICallInsights role="admin" />
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -472,7 +475,9 @@ const App = () => (
               path="/client/ai-insights"
               element={
                 <ProtectedRoute allowedRoles={["client"]}>
-                  <AICallInsights role="client" />
+                  <ErrorBoundary title="AI Insights failed to load">
+                    <AICallInsights role="client" />
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />

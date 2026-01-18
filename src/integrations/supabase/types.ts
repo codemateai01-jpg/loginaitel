@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_insights_history: {
+        Row: {
+          campaign_id: string | null
+          client_id: string
+          conversion_rate: number | null
+          created_at: string
+          id: string
+          insights: Json
+          interested_calls: number
+          metadata: Json
+          not_interested_calls: number
+          notes: string | null
+          partial_calls: number
+          total_calls: number
+        }
+        Insert: {
+          campaign_id?: string | null
+          client_id: string
+          conversion_rate?: number | null
+          created_at?: string
+          id?: string
+          insights: Json
+          interested_calls?: number
+          metadata: Json
+          not_interested_calls?: number
+          notes?: string | null
+          partial_calls?: number
+          total_calls?: number
+        }
+        Update: {
+          campaign_id?: string | null
+          client_id?: string
+          conversion_rate?: number | null
+          created_at?: string
+          id?: string
+          insights?: Json
+          interested_calls?: number
+          metadata?: Json
+          not_interested_calls?: number
+          notes?: string | null
+          partial_calls?: number
+          total_calls?: number
+        }
+        Relationships: []
+      }
       aitel_agents: {
         Row: {
           agent_config: Json | null
