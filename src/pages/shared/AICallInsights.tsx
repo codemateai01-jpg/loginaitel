@@ -21,7 +21,6 @@ import {
   Target,
   TrendingUp,
   AlertTriangle,
-  Lightbulb,
   Phone,
   Download,
   RefreshCw,
@@ -30,14 +29,10 @@ import {
   XCircle,
   Clock,
   Zap,
-  BookOpen,
   Users,
-  ThumbsUp,
-  ThumbsDown,
   HelpCircle,
   Shield,
   ArrowRight,
-  Quote,
   History,
   Save,
   GitCompare,
@@ -46,6 +41,14 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Mic,
+  MicOff,
+  Activity,
+  Timer,
+  Volume2,
+  VolumeX,
+  BarChart3,
+  Bot,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -72,74 +75,128 @@ interface AICallInsightsProps {
   role: "admin" | "client";
 }
 
-interface CallFlowStep {
-  step: number;
-  action: string;
-  script: string;
-  timing: string;
+interface ScoreBreakdown {
+  metric: string;
+  score: number;
+  description: string;
 }
 
 interface CustomerQuestion {
   question: string;
   frequency: number;
-  suggestedAnswer: string;
   category: string;
 }
 
 interface Objection {
   objection: string;
   frequency: number;
-  bestRebuttal: string;
-  successRate: string;
+  category: string;
 }
 
-interface InterestTrigger {
-  trigger: string;
-  frequency: number;
-  context: string;
+interface ObjectionCategory {
+  category: string;
+  count: number;
+  handlingStrategy: string;
+}
+
+interface LatencyByPhase {
+  phase: string;
+  avgLatency: string;
+}
+
+interface QuestionsByPhase {
+  phase: string;
+  questions: string[];
+}
+
+interface DailyPerformance {
+  date: string;
+  callCount: number;
+  avgScore: number;
+  avgDuration: string;
 }
 
 interface InsightsData {
-  bestSalesPitch: {
-    openingLines: string[];
-    valuePropositions: string[];
-    closingTechniques: string[];
-    recommendedCallFlow: CallFlowStep[];
-    toneGuidelines: string[];
+  conversationIntelligence: {
+    agentPerformance: {
+      overallScore: number;
+      scoreBreakdown: ScoreBreakdown[];
+      overTalkingFlags: string[];
+      underTalkingFlags: string[];
+      latencyIssues: string[];
+    };
+    talkTimeAnalysis: {
+      avgAgentTalkPercent: number;
+      avgCustomerTalkPercent: number;
+      optimalRatio: string;
+      talkTimeInsights: string[];
+    };
+    silenceAnalysis: {
+      avgSilenceDuration: string;
+      awkwardSilences: string[];
+      strategicPauses: string[];
+      recommendations: string[];
+    };
+    interruptionPatterns: {
+      agentInterruptions: number;
+      customerInterruptions: number;
+      interruptionImpact: string[];
+      recommendations: string[];
+    };
+    responseLatency: {
+      avgLatencySeconds: number;
+      fastResponses: string[];
+      slowResponses: string[];
+      latencyByCallPhase: LatencyByPhase[];
+    };
+    dailyPerformance: DailyPerformance[];
   };
   customerQuestions: {
     mostAsked: CustomerQuestion[];
     criticalQuestions: string[];
     questionPatterns: string[];
+    questionsByPhase: QuestionsByPhase[];
   };
   objectionHandling: {
     topObjections: Objection[];
-    objectionCategories: { category: string; count: number; handlingStrategy: string }[];
-    killerRebuttals: string[];
+    objectionCategories: ObjectionCategory[];
+    objectionTiming: string[];
+    resolutionPatterns: string[];
   };
-  interestTriggers: {
-    whatWorked: InterestTrigger[];
-    buyingSignals: string[];
-    engagementPeaks: string[];
-    emotionalTriggers: string[];
-  };
-  callFlowAnalysis: {
-    optimalDuration: string;
-    criticalMoments: string[];
-    dropoffPoints: string[];
-    recoveryTechniques: string[];
+  transcriptInsights: {
+    keyPhrases: {
+      positiveIndicators: string[];
+      negativeIndicators: string[];
+      engagementPeaks: string[];
+    };
+    sentimentFlow: {
+      openingMood: string;
+      turningPoints: string[];
+      closingMood: string;
+    };
+    topicAnalysis: {
+      mostDiscussed: string[];
+      successfulTopics: string[];
+      problematicTopics: string[];
+    };
+    callStructure: {
+      optimalFlow: string[];
+      dropoffPoints: string[];
+      recoveryOpportunities: string[];
+    };
   };
   performanceInsights: {
     conversionPatterns: string[];
     failurePatterns: string[];
     improvementAreas: string[];
     trainingRecommendations: string[];
+    agentStrengths: string[];
+    agentWeaknesses: string[];
   };
   aiRecommendations: {
     immediate: string[];
     shortTerm: string[];
     longTerm: string[];
-    scriptUpdates: string[];
   };
 }
 
@@ -151,6 +208,12 @@ interface AnalysisResult {
     interestedCalls: number;
     notInterestedCalls: number;
     partialCalls: number;
+    avgDuration: number;
+    minDuration: number;
+    maxDuration: number;
+    clientId?: string;
+    campaignId?: string;
+    agentId?: string;
   };
 }
 
@@ -173,6 +236,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
   const { user } = useAuth();
   const [selectedClient, setSelectedClient] = useState<string>("all");
   const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
+  const [selectedAgent, setSelectedAgent] = useState<string>("all");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
@@ -199,20 +263,37 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
     },
   });
 
-  // Fetch campaigns
-  const { data: campaigns } = useQuery({
-    queryKey: ["campaigns-for-insights", selectedClient],
+  // Fetch agents
+  const { data: agents } = useQuery({
+    queryKey: ["agents-for-insights", selectedClient],
     queryFn: async () => {
-      let query = supabase.from("campaigns").select("id, name, client_id");
+      let query = supabase.from("aitel_agents").select("id, agent_name, client_id");
       
-      if (role === "client") {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) query = query.eq("client_id", user.id);
+      if (role === "client" && user) {
+        query = query.eq("client_id", user.id);
       } else if (selectedClient && selectedClient !== "all") {
         query = query.eq("client_id", selectedClient);
       }
       
       const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch campaigns
+  const { data: campaigns } = useQuery({
+    queryKey: ["campaigns-for-insights", selectedClient],
+    queryFn: async () => {
+      let query = supabase.from("campaigns").select("id, name, client_id, status, total_leads, interested_leads, created_at");
+      
+      if (role === "client" && user) {
+        query = query.eq("client_id", user.id);
+      } else if (selectedClient && selectedClient !== "all") {
+        query = query.eq("client_id", selectedClient);
+      }
+      
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -225,6 +306,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
         body: {
           clientId: role === "admin" && selectedClient !== "all" ? selectedClient : undefined,
           campaignId: selectedCampaign !== "all" ? selectedCampaign : undefined,
+          agentId: selectedAgent !== "all" ? selectedAgent : undefined,
           analysisType: "comprehensive",
         },
       });
@@ -251,7 +333,6 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
   const { data: insightsHistory, refetch: refetchHistory } = useQuery({
     queryKey: ["insights-history", selectedClient, selectedCampaign],
     queryFn: async () => {
-      // Using raw query since table is not in generated types yet
       let query = supabase
         .from("ai_insights_history" as any)
         .select("*")
@@ -380,7 +461,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
     // Title
     doc.setFontSize(22);
     doc.setTextColor(79, 70, 229);
-    doc.text("AI Call Insights Report", pageWidth / 2, 20, { align: "center" });
+    doc.text("Conversation Intelligence Report", pageWidth / 2, 20, { align: "center" });
 
     doc.setFontSize(10);
     doc.setTextColor(100);
@@ -389,20 +470,20 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
 
     let yPos = 45;
 
-    // Best Sales Pitch Section
+    // Agent Performance Section
     doc.setFontSize(14);
     doc.setTextColor(0);
-    doc.text("Best Sales Pitch - Recommended Call Flow", 14, yPos);
+    doc.text("Agent Performance Metrics", 14, yPos);
 
-    if (analysis.insights.bestSalesPitch?.recommendedCallFlow?.length) {
+    const perfData = analysis.insights.conversationIntelligence?.agentPerformance;
+    if (perfData?.scoreBreakdown?.length) {
       autoTable(doc, {
         startY: yPos + 5,
-        head: [["Step", "Action", "Script", "Timing"]],
-        body: analysis.insights.bestSalesPitch.recommendedCallFlow.map(s => [
-          s.step.toString(),
-          s.action,
-          s.script.substring(0, 60) + (s.script.length > 60 ? "..." : ""),
-          s.timing
+        head: [["Metric", "Score", "Details"]],
+        body: perfData.scoreBreakdown.map(s => [
+          s.metric,
+          `${s.score}/100`,
+          s.description.substring(0, 60) + (s.description.length > 60 ? "..." : ""),
         ]),
         theme: "striped",
         headStyles: { fillColor: [79, 70, 229] },
@@ -419,11 +500,11 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
     if (analysis.insights.customerQuestions?.mostAsked?.length) {
       autoTable(doc, {
         startY: yPos + 5,
-        head: [["Question", "Frequency", "Suggested Answer"]],
+        head: [["Question", "Frequency", "Category"]],
         body: analysis.insights.customerQuestions.mostAsked.slice(0, 10).map(q => [
           q.question,
           q.frequency.toString(),
-          q.suggestedAnswer.substring(0, 50) + "..."
+          q.category,
         ]),
         theme: "striped",
         headStyles: { fillColor: [59, 130, 246] },
@@ -432,19 +513,19 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
       yPos = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // Objection Handling
+    // Objections
     doc.addPage();
     yPos = 20;
-    doc.text("Top Objections & Rebuttals", 14, yPos);
+    doc.text("Top Objections", 14, yPos);
 
     if (analysis.insights.objectionHandling?.topObjections?.length) {
       autoTable(doc, {
         startY: yPos + 5,
-        head: [["Objection", "Best Rebuttal", "Success Rate"]],
+        head: [["Objection", "Frequency", "Category"]],
         body: analysis.insights.objectionHandling.topObjections.slice(0, 10).map(o => [
           o.objection,
-          o.bestRebuttal.substring(0, 50) + "...",
-          o.successRate
+          o.frequency.toString(),
+          o.category,
         ]),
         theme: "striped",
         headStyles: { fillColor: [239, 68, 68] },
@@ -474,14 +555,33 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
       });
     }
 
-    doc.save(`ai-call-insights-${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`conversation-intelligence-${new Date().toISOString().split('T')[0]}.pdf`);
     toast.success("PDF exported successfully!");
+  };
+
+  // Quick campaign selection
+  const selectCampaign = (campaignId: string) => {
+    setSelectedCampaign(campaignId);
+    toast.info("Campaign selected", { description: "Click 'Run AI Analysis' to analyze this campaign" });
   };
 
   const ins = analysis?.insights;
 
-  // Helper to safely get arrays from AI response (prevents crashes on undefined)
+  // Helper to safely get arrays from AI response
   const safeArray = <T,>(arr: T[] | undefined | null): T[] => arr ?? [];
+
+  // Get score color
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-yellow-600";
+    return "text-red-600";
+  };
+
+  const getScoreBg = (score: number) => {
+    if (score >= 80) return "bg-green-500";
+    if (score >= 60) return "bg-yellow-500";
+    return "bg-red-500";
+  };
 
   return (
     <DashboardLayout role={role}>
@@ -491,10 +591,10 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Brain className="h-7 w-7 text-primary" />
-              AI Call Insights
+              Conversation Intelligence
             </h1>
             <p className="text-muted-foreground">
-              Comprehensive AI analysis of call transcripts for actionable sales insights
+              AI-powered analysis of agent performance, talk time, and call dynamics
             </p>
           </div>
 
@@ -807,9 +907,9 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-4">
               {role === "admin" && (
-                <div className="w-64">
-                  <label className="text-sm font-medium mb-2 block">Select Client</label>
-                <Select value={selectedClient} onValueChange={setSelectedClient}>
+                <div className="w-56">
+                  <label className="text-sm font-medium mb-2 block">Client</label>
+                  <Select value={selectedClient} onValueChange={setSelectedClient}>
                     <SelectTrigger>
                       <SelectValue placeholder="All clients" />
                     </SelectTrigger>
@@ -825,8 +925,28 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                 </div>
               )}
 
-              <div className="w-64">
-                <label className="text-sm font-medium mb-2 block">Select Campaign</label>
+              <div className="w-56">
+                <label className="text-sm font-medium mb-2 block">Agent</label>
+                <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All agents" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Agents</SelectItem>
+                    {agents?.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        <div className="flex items-center gap-2">
+                          <Bot className="h-4 w-4" />
+                          {a.agent_name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-56">
+                <label className="text-sm font-medium mb-2 block">Campaign</label>
                 <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
                   <SelectTrigger>
                     <SelectValue placeholder="All campaigns" />
@@ -845,57 +965,111 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
           </CardContent>
         </Card>
 
+        {/* Recent Campaigns Quick Select */}
+        {campaigns && campaigns.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Target className="h-5 w-5 text-primary" />
+                Recent Campaigns
+              </CardTitle>
+              <CardDescription>Click to quickly analyze a campaign</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {campaigns.slice(0, 6).map((campaign) => (
+                  <Button
+                    key={campaign.id}
+                    variant={selectedCampaign === campaign.id ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => selectCampaign(campaign.id)}
+                    className="gap-2"
+                  >
+                    <span>{campaign.name}</span>
+                    {campaign.total_leads && (
+                      <Badge variant="secondary" className="text-xs">
+                        {campaign.total_leads} leads
+                      </Badge>
+                    )}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats Overview */}
         {analysis && (
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
+                  <div className="p-2 bg-primary/10 rounded-lg">
                     <Phone className="h-5 w-5 text-primary" />
                   </div>
                   <div>
+                    <p className="text-sm text-muted-foreground">Total Calls</p>
                     <p className="text-2xl font-bold">{analysis.metadata.totalCalls}</p>
-                    <p className="text-sm text-muted-foreground">Calls Analyzed</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <ThumbsUp className="h-5 w-5 text-green-600" />
+                  <div className="p-2 bg-green-500/10 rounded-lg">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{analysis.metadata.interestedCalls}</p>
                     <p className="text-sm text-muted-foreground">Interested</p>
+                    <p className="text-2xl font-bold text-green-600">{analysis.metadata.interestedCalls}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-red-500/10">
-                    <ThumbsDown className="h-5 w-5 text-red-600" />
+                  <div className="p-2 bg-red-500/10 rounded-lg">
+                    <XCircle className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{analysis.metadata.notInterestedCalls}</p>
                     <p className="text-sm text-muted-foreground">Not Interested</p>
+                    <p className="text-2xl font-bold text-red-600">{analysis.metadata.notInterestedCalls}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-yellow-500/10">
+                  <div className="p-2 bg-yellow-500/10 rounded-lg">
                     <Clock className="h-5 w-5 text-yellow-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{analysis.metadata.partialCalls}</p>
-                    <p className="text-sm text-muted-foreground">Partial Interest</p>
+                    <p className="text-sm text-muted-foreground">Avg Duration</p>
+                    <p className="text-2xl font-bold">{analysis.metadata.avgDuration}s</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Conversion</p>
+                    <p className="text-2xl font-bold">
+                      {analysis.metadata.totalCalls > 0 
+                        ? ((analysis.metadata.interestedCalls / analysis.metadata.totalCalls) * 100).toFixed(1)
+                        : 0}%
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -903,164 +1077,266 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
           </div>
         )}
 
-        {/* Empty State - Show when no analysis has been run */}
+        {/* Analysis Empty State */}
         {!analysis && !analyzeMutation.isPending && (
           <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="p-4 rounded-full bg-primary/10 mb-4">
-                <Brain className="h-12 w-12 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">No Analysis Yet</h3>
-              <p className="text-muted-foreground max-w-md mb-6">
-                Click "Run AI Analysis" to analyze your call transcripts and get actionable insights 
-                including best sales pitches, customer questions, objection handling strategies, and more.
+            <CardContent className="py-12 text-center">
+              <Brain className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No Analysis Yet</h3>
+              <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                Select your filters and click "Run AI Analysis" to get comprehensive conversation intelligence insights
               </p>
               <Button onClick={() => analyzeMutation.mutate()} className="gap-2">
                 <Sparkles className="h-4 w-4" />
-                Run AI Analysis
+                Start Analysis
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Loading State */}
+        {/* Analysis Loading */}
         {analyzeMutation.isPending && (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Analyzing Calls...</h3>
-              <p className="text-muted-foreground max-w-md">
-                Our AI is analyzing your call transcripts to extract insights. 
-                This may take a few moments depending on the number of calls.
+            <CardContent className="py-16 text-center">
+              <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin text-primary" />
+              <h3 className="text-lg font-semibold mb-2">Analyzing Conversations...</h3>
+              <p className="text-muted-foreground">
+                AI is processing call transcripts and extracting insights
               </p>
             </CardContent>
           </Card>
         )}
 
-        {/* Main Insights Tabs */}
-        {analysis && ins && (
-          <Tabs defaultValue="sales-pitch" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto">
-              <TabsTrigger value="sales-pitch" className="gap-2">
-                <Target className="h-4 w-4" />
-                <span className="hidden md:inline">Sales Pitch</span>
+        {/* Main Analysis Tabs */}
+        {analysis && (
+          <Tabs defaultValue="intelligence" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+              <TabsTrigger value="intelligence" className="gap-2">
+                <Activity className="h-4 w-4" />
+                <span className="hidden sm:inline">Intelligence</span>
               </TabsTrigger>
               <TabsTrigger value="questions" className="gap-2">
                 <HelpCircle className="h-4 w-4" />
-                <span className="hidden md:inline">Questions</span>
+                <span className="hidden sm:inline">Questions</span>
               </TabsTrigger>
               <TabsTrigger value="objections" className="gap-2">
                 <Shield className="h-4 w-4" />
-                <span className="hidden md:inline">Objections</span>
+                <span className="hidden sm:inline">Objections</span>
               </TabsTrigger>
-              <TabsTrigger value="triggers" className="gap-2">
-                <Zap className="h-4 w-4" />
-                <span className="hidden md:inline">Interest</span>
-              </TabsTrigger>
-              <TabsTrigger value="flow" className="gap-2">
-                <TrendingUp className="h-4 w-4" />
-                <span className="hidden md:inline">Call Flow</span>
+              <TabsTrigger value="transcripts" className="gap-2">
+                <MessageSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Transcripts</span>
               </TabsTrigger>
               <TabsTrigger value="recommendations" className="gap-2">
-                <Lightbulb className="h-4 w-4" />
-                <span className="hidden md:inline">Actions</span>
+                <Zap className="h-4 w-4" />
+                <span className="hidden sm:inline">Actions</span>
               </TabsTrigger>
             </TabsList>
 
-            {/* Sales Pitch Tab */}
-            <TabsContent value="sales-pitch" className="space-y-4">
+            {/* Conversation Intelligence Tab */}
+            <TabsContent value="intelligence" className="space-y-4">
+              {/* Agent Performance Score */}
+              <Card className="border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                    Agent Performance Score
+                  </CardTitle>
+                  <CardDescription>Overall conversation quality assessment</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-6 mb-6">
+                    <div className="text-center">
+                      <div className={`text-5xl font-bold ${getScoreColor(ins?.conversationIntelligence?.agentPerformance?.overallScore || 0)}`}>
+                        {ins?.conversationIntelligence?.agentPerformance?.overallScore || 0}
+                      </div>
+                      <p className="text-sm text-muted-foreground">Overall Score</p>
+                    </div>
+                    <div className="flex-1">
+                      <Progress 
+                        value={ins?.conversationIntelligence?.agentPerformance?.overallScore || 0} 
+                        className="h-4"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {safeArray(ins?.conversationIntelligence?.agentPerformance?.scoreBreakdown).map((item, idx) => (
+                      <div key={idx} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">{item.metric}</span>
+                          <span className={`font-bold ${getScoreColor(item.score)}`}>{item.score}/100</span>
+                        </div>
+                        <Progress value={item.score} className="h-2 mb-2" />
+                        <p className="text-sm text-muted-foreground">{item.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Talk Time Analysis */}
               <div className="grid gap-4 md:grid-cols-2">
-                {/* Recommended Call Flow */}
-                <Card className="md:col-span-2">
+                <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <BookOpen className="h-5 w-5 text-primary" />
-                      Recommended Call Flow
+                      <Mic className="h-5 w-5 text-blue-600" />
+                      Talk Time Distribution
                     </CardTitle>
-                    <CardDescription>AI-generated optimal call script based on successful calls</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {safeArray(ins?.bestSalesPitch?.recommendedCallFlow).map((step, idx) => (
-                        <div key={idx} className="flex gap-4 p-4 border rounded-lg bg-muted/30">
-                          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                            {step.step}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <h4 className="font-semibold">{step.action}</h4>
-                              <Badge variant="outline">{step.timing}</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground italic">"{step.script}"</p>
-                          </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Agent Talk Time</span>
+                          <span className="font-medium">{ins?.conversationIntelligence?.talkTimeAnalysis?.avgAgentTalkPercent || 0}%</span>
+                        </div>
+                        <Progress value={ins?.conversationIntelligence?.talkTimeAnalysis?.avgAgentTalkPercent || 0} className="h-3" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Customer Talk Time</span>
+                          <span className="font-medium">{ins?.conversationIntelligence?.talkTimeAnalysis?.avgCustomerTalkPercent || 0}%</span>
+                        </div>
+                        <Progress value={ins?.conversationIntelligence?.talkTimeAnalysis?.avgCustomerTalkPercent || 0} className="h-3 [&>div]:bg-green-500" />
+                      </div>
+                      <Separator />
+                      <p className="text-sm text-muted-foreground">
+                        <strong>Optimal Ratio:</strong> {ins?.conversationIntelligence?.talkTimeAnalysis?.optimalRatio || "N/A"}
+                      </p>
+                      <ul className="space-y-1">
+                        {safeArray(ins?.conversationIntelligence?.talkTimeAnalysis?.talkTimeInsights).map((insight, idx) => (
+                          <li key={idx} className="text-sm flex items-start gap-2">
+                            <TrendingUp className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                            {insight}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Timer className="h-5 w-5 text-yellow-600" />
+                      Response Latency
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center mb-4">
+                      <div className="text-4xl font-bold text-primary">
+                        {ins?.conversationIntelligence?.responseLatency?.avgLatencySeconds || 0}s
+                      </div>
+                      <p className="text-sm text-muted-foreground">Average Response Time</p>
+                    </div>
+                    <div className="space-y-2">
+                      {safeArray(ins?.conversationIntelligence?.responseLatency?.latencyByCallPhase).map((phase, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                          <span className="text-sm">{phase.phase}</span>
+                          <Badge variant="outline">{phase.avgLatency}</Badge>
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
+              </div>
 
-                {/* Opening Lines */}
+              {/* Silence & Interruptions */}
+              <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Best Opening Lines</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <VolumeX className="h-5 w-5 text-gray-600" />
+                      Silence Analysis
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-lg font-semibold mb-3">
+                      Avg Silence: {ins?.conversationIntelligence?.silenceAnalysis?.avgSilenceDuration || "N/A"}
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="text-sm font-medium text-red-600 mb-1">Awkward Silences</h4>
+                        <ul className="space-y-1">
+                          {safeArray(ins?.conversationIntelligence?.silenceAnalysis?.awkwardSilences).map((s, idx) => (
+                            <li key={idx} className="text-sm text-muted-foreground">• {s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium text-green-600 mb-1">Strategic Pauses</h4>
+                        <ul className="space-y-1">
+                          {safeArray(ins?.conversationIntelligence?.silenceAnalysis?.strategicPauses).map((s, idx) => (
+                            <li key={idx} className="text-sm text-muted-foreground">• {s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-5 w-5 text-orange-600" />
+                      Interruption Patterns
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <p className="text-2xl font-bold">{ins?.conversationIntelligence?.interruptionPatterns?.agentInterruptions || 0}</p>
+                        <p className="text-xs text-muted-foreground">Agent Interruptions</p>
+                      </div>
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <p className="text-2xl font-bold">{ins?.conversationIntelligence?.interruptionPatterns?.customerInterruptions || 0}</p>
+                        <p className="text-xs text-muted-foreground">Customer Interruptions</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {safeArray(ins?.conversationIntelligence?.interruptionPatterns?.interruptionImpact).map((impact, idx) => (
+                        <p key={idx} className="text-sm text-muted-foreground">• {impact}</p>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Performance Flags */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card className="border-red-200 dark:border-red-900/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-600">
+                      <Volume2 className="h-5 w-5" />
+                      Over-Talking Flags
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {safeArray(ins?.bestSalesPitch?.openingLines).map((line, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
-                          <Quote className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                          <span className="italic">{line}</span>
+                      {safeArray(ins?.conversationIntelligence?.agentPerformance?.overTalkingFlags).map((flag, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-red-500/10 rounded">
+                          <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                          <span>{flag}</span>
                         </li>
                       ))}
                     </ul>
                   </CardContent>
                 </Card>
 
-                {/* Value Propositions */}
-                <Card>
+                <Card className="border-yellow-200 dark:border-yellow-900/30">
                   <CardHeader>
-                    <CardTitle className="text-lg">Key Value Propositions</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-yellow-600">
+                      <MicOff className="h-5 w-5" />
+                      Under-Talking Flags
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {safeArray(ins?.bestSalesPitch?.valuePropositions).map((prop, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
-                          <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span>{prop}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-
-                {/* Closing Techniques */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Effective Closing Techniques</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {safeArray(ins?.bestSalesPitch?.closingTechniques).map((tech, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
-                          <Target className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                          <span>{tech}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-
-                {/* Tone Guidelines */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Tone Guidelines</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {safeArray(ins?.bestSalesPitch?.toneGuidelines).map((guide, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm">
-                          <MessageSquare className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                          <span>{guide}</span>
+                      {safeArray(ins?.conversationIntelligence?.agentPerformance?.underTalkingFlags).map((flag, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-yellow-500/10 rounded">
+                          <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                          <span>{flag}</span>
                         </li>
                       ))}
                     </ul>
@@ -1069,46 +1345,40 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
               </div>
             </TabsContent>
 
-            {/* Customer Questions Tab */}
+            {/* Questions Tab */}
             <TabsContent value="questions" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card className="md:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <HelpCircle className="h-5 w-5 text-blue-600" />
-                      Most Asked Questions
-                    </CardTitle>
-                    <CardDescription>Common questions from customers with suggested answers</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[400px]">
-                      <div className="space-y-4">
-                        {safeArray(ins?.customerQuestions?.mostAsked).map((q, idx) => (
-                          <div key={idx} className="p-4 border rounded-lg space-y-2">
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{q.question}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary">{q.category}</Badge>
-                                <Badge variant="outline">{q.frequency}x asked</Badge>
-                              </div>
-                            </div>
-                            <div className="p-3 bg-muted/50 rounded text-sm">
-                              <span className="font-medium text-green-600">Suggested Answer: </span>
-                              {q.suggestedAnswer}
-                            </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <HelpCircle className="h-5 w-5 text-blue-600" />
+                    Most Asked Questions
+                  </CardTitle>
+                  <CardDescription>Common questions from customers by frequency and category</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-3">
+                      {safeArray(ins?.customerQuestions?.mostAsked).map((q, idx) => (
+                        <div key={idx} className="p-4 border rounded-lg flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium">{q.question}</p>
                           </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
+                          <div className="flex items-center gap-2 ml-4">
+                            <Badge variant="secondary">{q.category}</Badge>
+                            <Badge variant="outline">{q.frequency}x</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
 
+              <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Critical Questions</CardTitle>
-                    <CardDescription>Questions that lead to conversion if answered well</CardDescription>
+                    <CardDescription>Questions that lead to conversion if handled well</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
@@ -1125,6 +1395,7 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Question Patterns</CardTitle>
+                    <CardDescription>When and how customers typically ask questions</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
@@ -1138,44 +1409,60 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Questions by Phase */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Questions by Call Phase</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {safeArray(ins?.customerQuestions?.questionsByPhase).map((phase, idx) => (
+                      <div key={idx} className="p-4 border rounded-lg">
+                        <h4 className="font-medium mb-2">{phase.phase}</h4>
+                        <ul className="space-y-1">
+                          {safeArray(phase.questions).map((q, qIdx) => (
+                            <li key={qIdx} className="text-sm text-muted-foreground">• {q}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Objections Tab */}
             <TabsContent value="objections" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card className="md:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="h-5 w-5 text-red-600" />
-                      Top Objections & Best Rebuttals
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[400px]">
-                      <div className="space-y-4">
-                        {safeArray(ins?.objectionHandling?.topObjections).map((obj, idx) => (
-                          <div key={idx} className="p-4 border rounded-lg space-y-3">
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-2">
-                                <XCircle className="h-4 w-4 text-red-500" />
-                                <span className="font-medium text-red-700">{obj.objection}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline">{obj.frequency}x</Badge>
-                                <Badge className="bg-green-100 text-green-700">{obj.successRate} success</Badge>
-                              </div>
-                            </div>
-                            <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded text-sm border-l-4 border-green-500">
-                              <span className="font-medium text-green-700">Best Rebuttal: </span>
-                              {obj.bestRebuttal}
-                            </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-red-600" />
+                    Top Objections
+                  </CardTitle>
+                  <CardDescription>Most common objections by frequency and category</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-3">
+                      {safeArray(ins?.objectionHandling?.topObjections).map((obj, idx) => (
+                        <div key={idx} className="p-4 border rounded-lg flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <XCircle className="h-4 w-4 text-red-500" />
+                            <span className="font-medium">{obj.objection}</span>
                           </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">{obj.category}</Badge>
+                            <Badge variant="outline">{obj.frequency}x</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
 
+              <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Objection Categories</CardTitle>
@@ -1198,75 +1485,14 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Killer Rebuttals</CardTitle>
-                    <CardDescription>Rebuttals that converted objections to interest</CardDescription>
+                    <CardTitle className="text-lg">Objection Timing</CardTitle>
+                    <CardDescription>When objections typically arise</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {safeArray(ins?.objectionHandling?.killerRebuttals).map((r, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-green-500/10 rounded">
-                          <Zap className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span>{r}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            {/* Interest Triggers Tab */}
-            <TabsContent value="triggers" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card className="md:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Zap className="h-5 w-5 text-yellow-600" />
-                      What Made Leads Interested
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {safeArray(ins?.interestTriggers?.whatWorked).map((trigger, idx) => (
-                        <div key={idx} className="p-4 border rounded-lg bg-yellow-500/5">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium">{trigger.trigger}</span>
-                            <Badge variant="secondary">{trigger.frequency}x</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{trigger.context}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Buying Signals</CardTitle>
-                    <CardDescription>Phrases indicating purchase intent</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {safeArray(ins?.interestTriggers?.buyingSignals).map((signal, idx) => (
-                        <Badge key={idx} variant="secondary" className="gap-1">
-                          <TrendingUp className="h-3 w-3" />
-                          {signal}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Emotional Triggers</CardTitle>
-                    <CardDescription>Emotional appeals that resonated</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {safeArray(ins?.interestTriggers?.emotionalTriggers).map((t, idx) => (
+                      {safeArray(ins?.objectionHandling?.objectionTiming).map((t, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
-                          <Sparkles className="h-4 w-4 text-pink-500 flex-shrink-0 mt-0.5" />
+                          <Clock className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                           <span>{t}</span>
                         </li>
                       ))}
@@ -1274,50 +1500,37 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardContent>
                 </Card>
               </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Resolution Patterns</CardTitle>
+                  <CardDescription>Patterns in how objections were resolved</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {safeArray(ins?.objectionHandling?.resolutionPatterns).map((p, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-muted/50 rounded">
+                        <RefreshCw className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span>{p}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
             </TabsContent>
 
-            {/* Call Flow Analysis Tab */}
-            <TabsContent value="flow" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
+            {/* Transcript Insights Tab */}
+            <TabsContent value="transcripts" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card className="border-green-200 dark:border-green-900/30">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Clock className="h-5 w-5" />
-                      Optimal Call Duration
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-bold text-primary">{ins?.callFlowAnalysis?.optimalDuration || "N/A"}</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Critical Moments</CardTitle>
-                    <CardDescription>Key decision points in calls</CardDescription>
+                    <CardTitle className="text-lg text-green-600">Positive Indicators</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {safeArray(ins?.callFlowAnalysis?.criticalMoments).map((m, idx) => (
+                      {safeArray(ins?.transcriptInsights?.keyPhrases?.positiveIndicators).map((p, idx) => (
                         <li key={idx} className="flex items-start gap-2 text-sm">
-                          <Target className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                          <span>{m}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg text-red-600">Drop-off Points</CardTitle>
-                    <CardDescription>Where calls typically fail</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {safeArray(ins?.callFlowAnalysis?.dropoffPoints).map((p, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-red-500/10 rounded">
-                          <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                          <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
                           <span>{p}</span>
                         </li>
                       ))}
@@ -1325,26 +1538,157 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-red-200 dark:border-red-900/30">
                   <CardHeader>
-                    <CardTitle className="text-lg text-green-600">Recovery Techniques</CardTitle>
-                    <CardDescription>How to recover failing calls</CardDescription>
+                    <CardTitle className="text-lg text-red-600">Negative Indicators</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {safeArray(ins?.callFlowAnalysis?.recoveryTechniques).map((t, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-green-500/10 rounded">
-                          <RefreshCw className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span>{t}</span>
+                      {safeArray(ins?.transcriptInsights?.keyPhrases?.negativeIndicators).map((p, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm">
+                          <XCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                          <span>{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Engagement Peaks</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {safeArray(ins?.transcriptInsights?.keyPhrases?.engagementPeaks).map((p, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm">
+                          <Sparkles className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                          <span>{p}</span>
                         </li>
                       ))}
                     </ul>
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Sentiment Flow */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-primary" />
+                    Sentiment Flow
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="p-4 border rounded-lg text-center">
+                      <h4 className="text-sm text-muted-foreground mb-1">Opening Mood</h4>
+                      <p className="font-medium">{ins?.transcriptInsights?.sentimentFlow?.openingMood || "N/A"}</p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <h4 className="text-sm text-muted-foreground mb-2 text-center">Turning Points</h4>
+                      <ul className="space-y-1">
+                        {safeArray(ins?.transcriptInsights?.sentimentFlow?.turningPoints).map((t, idx) => (
+                          <li key={idx} className="text-sm text-center">• {t}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="p-4 border rounded-lg text-center">
+                      <h4 className="text-sm text-muted-foreground mb-1">Closing Mood</h4>
+                      <p className="font-medium">{ins?.transcriptInsights?.sentimentFlow?.closingMood || "N/A"}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Topic Analysis */}
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Most Discussed</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-1">
+                      {safeArray(ins?.transcriptInsights?.topicAnalysis?.mostDiscussed).map((t, idx) => (
+                        <li key={idx} className="text-sm">• {t}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-green-200 dark:border-green-900/30">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-green-600">Successful Topics</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-1">
+                      {safeArray(ins?.transcriptInsights?.topicAnalysis?.successfulTopics).map((t, idx) => (
+                        <li key={idx} className="text-sm text-green-700 dark:text-green-400">• {t}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-red-200 dark:border-red-900/30">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-red-600">Problematic Topics</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-1">
+                      {safeArray(ins?.transcriptInsights?.topicAnalysis?.problematicTopics).map((t, idx) => (
+                        <li key={idx} className="text-sm text-red-700 dark:text-red-400">• {t}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Call Structure */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Call Structure Insights</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div>
+                      <h4 className="font-medium text-green-600 mb-2">Optimal Flow</h4>
+                      <ul className="space-y-1">
+                        {safeArray(ins?.transcriptInsights?.callStructure?.optimalFlow).map((f, idx) => (
+                          <li key={idx} className="text-sm flex items-start gap-2">
+                            <ArrowRight className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-red-600 mb-2">Drop-off Points</h4>
+                      <ul className="space-y-1">
+                        {safeArray(ins?.transcriptInsights?.callStructure?.dropoffPoints).map((d, idx) => (
+                          <li key={idx} className="text-sm flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                            {d}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-yellow-600 mb-2">Recovery Opportunities</h4>
+                      <ul className="space-y-1">
+                        {safeArray(ins?.transcriptInsights?.callStructure?.recoveryOpportunities).map((r, idx) => (
+                          <li key={idx} className="text-sm flex items-start gap-2">
+                            <RefreshCw className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                            {r}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
-            {/* AI Recommendations Tab */}
+            {/* Recommendations Tab */}
             <TabsContent value="recommendations" className="space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
                 <Card className="border-red-200 dark:border-red-900">
@@ -1371,9 +1715,9 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-yellow-600">
                       <Clock className="h-5 w-5" />
-                      Short-term Improvements
+                      Short-term Goals
                     </CardTitle>
-                    <CardDescription>Next 1-2 weeks</CardDescription>
+                    <CardDescription>This week</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-3">
@@ -1390,10 +1734,10 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                 <Card className="border-green-200 dark:border-green-900">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-green-600">
-                      <TrendingUp className="h-5 w-5" />
+                      <Target className="h-5 w-5" />
                       Long-term Strategy
                     </CardTitle>
-                    <CardDescription>Strategic recommendations</CardDescription>
+                    <CardDescription>Ongoing improvements</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-3">
@@ -1406,77 +1750,60 @@ export default function AICallInsights({ role }: AICallInsightsProps) {
                     </ul>
                   </CardContent>
                 </Card>
+              </div>
 
-                <Card className="md:col-span-3">
+              {/* Performance Insights */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <BookOpen className="h-5 w-5 text-primary" />
-                      Suggested Script Updates
-                    </CardTitle>
+                    <CardTitle className="text-lg text-green-600">Agent Strengths</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {safeArray(ins?.aiRecommendations?.scriptUpdates).map((update, idx) => (
-                        <div key={idx} className="p-3 border rounded-lg bg-muted/30">
-                          <p className="text-sm">{update}</p>
-                        </div>
+                    <ul className="space-y-2">
+                      {safeArray(ins?.performanceInsights?.agentStrengths).map((s, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-green-500/10 rounded">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                          <span>{s}</span>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </CardContent>
                 </Card>
 
-                {/* Training Recommendations */}
-                <Card className="md:col-span-3">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Users className="h-5 w-5 text-blue-600" />
-                      Training Recommendations
-                    </CardTitle>
+                    <CardTitle className="text-lg text-red-600">Areas to Improve</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {safeArray(ins?.performanceInsights?.trainingRecommendations).map((rec, idx) => (
-                        <div key={idx} className="flex items-start gap-2 p-3 border rounded-lg">
-                          <Lightbulb className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                          <span className="text-sm">{rec}</span>
-                        </div>
+                    <ul className="space-y-2">
+                      {safeArray(ins?.performanceInsights?.agentWeaknesses).map((w, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-red-500/10 rounded">
+                          <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                          <span>{w}</span>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </CardContent>
                 </Card>
               </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Training Recommendations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {safeArray(ins?.performanceInsights?.trainingRecommendations).map((r, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm p-2 bg-muted/50 rounded">
+                        <Target className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
-        )}
-
-        {/* Empty State */}
-        {!analysis && !analyzeMutation.isPending && (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Brain className="h-16 w-16 text-muted-foreground/50 mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Ready to Analyze</h3>
-              <p className="text-muted-foreground text-center max-w-md mb-6">
-                Click "Run AI Analysis" to get comprehensive insights from your call transcripts including best sales pitches, customer questions, objection handling, and more.
-              </p>
-              <Button onClick={() => analyzeMutation.mutate()} className="gap-2">
-                <Sparkles className="h-4 w-4" />
-                Run AI Analysis
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Loading State */}
-        {analyzeMutation.isPending && (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Analyzing Call Transcripts...</h3>
-              <p className="text-muted-foreground text-center max-w-md">
-                Our AI is analyzing your calls to extract insights on sales techniques, customer questions, objections, and more. This may take a moment.
-              </p>
-            </CardContent>
-          </Card>
         )}
       </div>
     </DashboardLayout>
