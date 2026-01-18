@@ -15,6 +15,9 @@ interface AgentSettingsProps {
 }
 
 export function AgentSettings({ value, onChange }: AgentSettingsProps) {
+  // Provide safe defaults if value is undefined
+  const safeValue = value ?? { welcomeMessage: "", systemPrompt: "" };
+  
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-4">
@@ -28,8 +31,8 @@ export function AgentSettings({ value, onChange }: AgentSettingsProps) {
         <Input
           id="welcomeMessage"
           placeholder="Hello"
-          value={value.welcomeMessage}
-          onChange={(e) => onChange({ ...value, welcomeMessage: e.target.value })}
+          value={safeValue.welcomeMessage}
+          onChange={(e) => onChange({ ...safeValue, welcomeMessage: e.target.value })}
           className="border-2"
         />
         <p className="text-xs text-muted-foreground">
@@ -49,8 +52,8 @@ export function AgentSettings({ value, onChange }: AgentSettingsProps) {
         <Textarea
           id="systemPrompt"
           placeholder="Enter your agent's system prompt..."
-          value={value.systemPrompt}
-          onChange={(e) => onChange({ ...value, systemPrompt: e.target.value })}
+          value={safeValue.systemPrompt}
+          onChange={(e) => onChange({ ...safeValue, systemPrompt: e.target.value })}
           className="border-2 min-h-[300px] font-mono text-sm"
         />
         <p className="text-xs text-muted-foreground">
