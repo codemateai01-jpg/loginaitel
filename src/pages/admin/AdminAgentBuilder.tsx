@@ -54,6 +54,7 @@ import { ToolsSettings, ToolsConfig } from "@/components/agent-builder/ToolsSett
 import { AnalyticsSettings, AnalyticsConfig } from "@/components/agent-builder/AnalyticsSettings";
 import { InboundSettings, InboundConfig } from "@/components/agent-builder/InboundSettings";
 import { useAgentBuilder, AgentFullConfig } from "@/hooks/useAgentBuilder";
+import { TestCallDialog } from "@/components/agent-builder/TestCallDialog";
 
 const DEFAULT_CONFIG: AgentFullConfig = {
   agent: {
@@ -128,6 +129,8 @@ export default function AdminAgentBuilder() {
     deleteAgent,
     isDeleting,
     fetchAgentDetails,
+    makeTestCall,
+    stopCall,
   } = useAgentBuilder();
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -138,6 +141,7 @@ export default function AdminAgentBuilder() {
   const [isNewAgent, setIsNewAgent] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [isTestCallDialogOpen, setIsTestCallDialogOpen] = useState(false);
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const filteredAgents = agents.filter((a) =>
@@ -264,6 +268,17 @@ export default function AdminAgentBuilder() {
   };
 
   const isSaving = isCreating || isUpdating;
+
+  const handleTestCall = async (phoneNumber: string) => {
+    if (!selectedAgent) {
+      return { success: false, message: "No agent selected" };
+    }
+    return makeTestCall(selectedAgent.external_agent_id, phoneNumber);
+  };
+
+  const handleStopCall = async (executionId: string) => {
+    await stopCall(executionId);
+  };
 
   return (
     <DashboardLayout role="admin">
@@ -607,12 +622,17 @@ export default function AdminAgentBuilder() {
               </div>
 
               <div className="border-t pt-4 space-y-3">
-                <Button variant="outline" className="w-full gap-2" disabled>
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2"
+                  onClick={() => setIsTestCallDialogOpen(true)}
+                  disabled={isNewAgent || !selectedAgent}
+                >
                   <PhoneCall className="h-4 w-4" />
-                  Test via web call
+                  Test via phone call
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  Test your agent with voice calls
+                  Test your agent with a real phone call
                 </p>
               </div>
 
@@ -629,6 +649,19 @@ export default function AdminAgentBuilder() {
             </div>
           </div>
         </div>
+
+        {/* Test Call Dialog */}
+        {selectedAgent && (
+          <TestCallDialog
+            open={isTestCallDialogOpen}
+            onOpenChange={setIsTestCallDialogOpen}
+            agentName={selectedAgent.agent_name}
+            agentId={selectedAgent.id}
+            externalAgentId={selectedAgent.external_agent_id}
+            onTestCall={handleTestCall}
+            onStopCall={handleStopCall}
+          />
+        )}
       </div>
     </DashboardLayout>
   );

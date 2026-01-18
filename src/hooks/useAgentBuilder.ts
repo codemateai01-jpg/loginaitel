@@ -518,6 +518,86 @@ export function useAgentBuilder() {
     },
   });
 
+  // Make a test call with an agent
+  const makeTestCall = useCallback(async (
+    externalAgentId: string,
+    phoneNumber: string
+  ): Promise<{ success: boolean; message: string; executionId?: string }> => {
+    logProviderAction("Making test call", externalAgentId, "telephony");
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        return { success: false, message: "Not authenticated" };
+      }
+
+      // Call Bolna API directly for test calls (no credit deduction)
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy?action=test-call`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            agent_id: externalAgentId,
+            phone_number: phoneNumber,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { 
+          success: false, 
+          message: data.error || "Failed to initiate test call" 
+        };
+      }
+
+      return { 
+        success: true, 
+        message: "Call initiated successfully",
+        executionId: data.execution_id,
+      };
+    } catch (error) {
+      console.error("Test call error:", error);
+      return { 
+        success: false, 
+        message: (error as Error).message || "Failed to initiate test call" 
+      };
+    }
+  }, []);
+
+  // Stop an active call
+  const stopCall = useCallback(async (executionId: string): Promise<void> => {
+    logProviderAction("Stopping call", executionId, "telephony");
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aitel-proxy?action=stop-call&execution_id=${executionId}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to stop call");
+      }
+    } catch (error) {
+      console.error("Stop call error:", error);
+      throw error;
+    }
+  }, []);
+
   // Fetch a single agent with full config from Bolna
   const fetchAgentDetails = useCallback(async (externalId: string): Promise<AgentFullConfig | null> => {
     logProviderAction("Fetching agent details", externalId, "telephony");
@@ -557,5 +637,7 @@ export function useAgentBuilder() {
     deleteAgent: deleteAgentMutation.mutateAsync,
     isDeleting: deleteAgentMutation.isPending,
     fetchAgentDetails,
+    makeTestCall,
+    stopCall,
   };
 }
