@@ -85,8 +85,23 @@ export default function ClientLogin() {
     setShowConflictDialog(false);
 
     try {
-      const deviceInfo = `${navigator.platform} - ${navigator.userAgent.split(' ').slice(-2).join(' ')}`;
-      
+      const deviceIdKey = "aitel_device_id";
+      const existingDeviceId = localStorage.getItem(deviceIdKey);
+      const deviceId =
+        existingDeviceId ??
+        (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `dev_${Math.random().toString(36).slice(2)}`);
+
+      if (!existingDeviceId) {
+        localStorage.setItem(deviceIdKey, deviceId);
+      }
+
+      const deviceLabel = `${navigator.platform} ${navigator.userAgent
+        .split(" ")
+        .slice(-2)
+        .join(" ")}`.trim();
+      const deviceInfo = `${deviceId}::${deviceLabel}`;
       const response = await supabase.functions.invoke("verify-otp", {
         body: {
           phone: phone.replace(/\D/g, ""),
@@ -96,16 +111,17 @@ export default function ClientLogin() {
         },
       });
 
-      // If the function returns a non-2xx, supabase-js puts details in `response.error`.
-      // We'll try to extract status + JSON body so we can show accurate UI messages.
+      // If the function returns a non-2xx, `invoke` returns { error, response } where
+      // `response` is the real Response object (status + body).
+      // We'll parse it so we can show the exact backend error to the user.
       let httpStatus: number | undefined;
       let errorBody: any = null;
 
-      if (response.error && (response.error as any)?.context?.response) {
+      if (response.response) {
         try {
-          const res = (response.error as any).context.response as Response;
+          const res = response.response;
           httpStatus = res.status;
-          const text = await res.text();
+          const text = await res.clone().text();
           try {
             errorBody = text ? JSON.parse(text) : null;
           } catch {
@@ -127,8 +143,12 @@ export default function ClientLogin() {
       if (isSessionConflict) {
         const conflictData = errorBody || response.data;
 
+        const rawDevice = conflictData?.existingSession?.device;
+        const deviceDisplay =
+          typeof rawDevice === "string" ? rawDevice.split("::")[1] || rawDevice : "Unknown device";
+
         setSessionConflict({
-          device: conflictData?.existingSession?.device || "Unknown device",
+          device: deviceDisplay,
           lastActivity: conflictData?.existingSession?.lastActivity || "Recently",
           loggedInAt: conflictData?.existingSession?.loggedInAt || "",
           upgradeMessage:

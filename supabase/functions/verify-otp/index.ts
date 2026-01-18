@@ -147,35 +147,64 @@ serve(async (req) => {
           .maybeSingle();
 
         if (activeSession && !forceLogin) {
-          // Check if client has paid seats (allows multi-device)
-          const { data: seatSubscription } = await supabaseAdmin
-            .from("seat_subscriptions")
-            .select("seats_count, status")
-            .eq("client_id", userId)
-            .eq("status", "active")
-            .maybeSingle();
+          const activeDeviceInfo = activeSession.device_info || "";
+          const incomingDeviceInfo = deviceInfo || "";
 
-          // If no paid seats, block multi-device login
-          if (!seatSubscription || seatSubscription.seats_count === 0) {
-            const lastActivity = new Date(activeSession.last_activity_at);
-            const minutesAgo = Math.floor((Date.now() - lastActivity.getTime()) / 60000);
-            
-            return new Response(
-              JSON.stringify({
-                error: "session_conflict",
-                message: "You are already logged in on another device",
-                existingSession: {
-                  device: activeSession.device_info || "Unknown device",
-                  lastActivity: minutesAgo < 60 
-                    ? `${minutesAgo} minutes ago` 
-                    : `${Math.floor(minutesAgo / 60)} hours ago`,
-                  loggedInAt: activeSession.logged_in_at,
-                },
-                requiresForceLogin: true,
-                upgradeMessage: "Purchase team seats to enable multi-device access for your team.",
-              }),
-              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+          const activeDeviceId = activeDeviceInfo.includes("::")
+            ? activeDeviceInfo.split("::")[0]
+            : "";
+          const incomingDeviceId = incomingDeviceInfo.includes("::")
+            ? incomingDeviceInfo.split("::")[0]
+            : "";
+
+          const activeDeviceUnknown =
+            !activeDeviceInfo || activeDeviceInfo === "Unknown device" || !activeDeviceId;
+
+          const isSameDevice =
+            (!!incomingDeviceId && incomingDeviceId === activeDeviceId) ||
+            (activeDeviceUnknown && !!incomingDeviceInfo);
+
+          if (isSameDevice) {
+            // Same device (or legacy unknown device): just refresh activity and continue
+            await supabaseAdmin
+              .from("client_active_sessions")
+              .update({
+                last_activity_at: new Date().toISOString(),
+                device_info: incomingDeviceInfo || activeSession.device_info,
+              })
+              .eq("id", activeSession.id);
+          } else {
+            // Check if client has paid seats (allows multi-device)
+            const { data: seatSubscription } = await supabaseAdmin
+              .from("seat_subscriptions")
+              .select("seats_count, status")
+              .eq("client_id", userId)
+              .eq("status", "active")
+              .maybeSingle();
+
+            // If no paid seats, block multi-device login
+            if (!seatSubscription || seatSubscription.seats_count === 0) {
+              const lastActivity = new Date(activeSession.last_activity_at);
+              const minutesAgo = Math.floor((Date.now() - lastActivity.getTime()) / 60000);
+
+              return new Response(
+                JSON.stringify({
+                  error: "session_conflict",
+                  message: "You are already logged in on another device",
+                  existingSession: {
+                    device: activeSession.device_info || "Unknown device",
+                    lastActivity:
+                      minutesAgo < 60
+                        ? `${minutesAgo} minutes ago`
+                        : `${Math.floor(minutesAgo / 60)} hours ago`,
+                    loggedInAt: activeSession.logged_in_at,
+                  },
+                  requiresForceLogin: true,
+                  upgradeMessage: "Purchase team seats to enable multi-device access for your team.",
+                }),
+                { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
           }
         }
 
@@ -294,14 +323,14 @@ serve(async (req) => {
     }
 
     // Sign in the user and get session
-    console.log("Attempting to sign in user:", phoneEmail);
+    console.log("Attempting to sign in phone user");
     const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
       email: phoneEmail,
       password: phonePassword,
     });
 
     if (signInError) {
-      console.error("Sign in error details:", JSON.stringify(signInError));
+      console.error("Error signing in:", signInError.message);
       throw new Error(`Failed to create session: ${signInError.message}`);
     }
 
@@ -323,7 +352,7 @@ serve(async (req) => {
       // Create new active session
       await supabaseAdmin.from("client_active_sessions").insert({
         client_id: clientId,
-        session_token: signInData.session.access_token.slice(-20), // Store only last 20 chars for reference
+        session_token: session.access_token.slice(-20), // Store only last 20 chars for reference
         device_info: deviceInfo || "Unknown device",
         is_active: true,
         logged_in_at: new Date().toISOString(),
