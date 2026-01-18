@@ -88,7 +88,7 @@ export default function ClientLogin() {
       const deviceInfo = `${navigator.platform} - ${navigator.userAgent.split(' ').slice(-2).join(' ')}`;
       
       const response = await supabase.functions.invoke("verify-otp", {
-        body: { 
+        body: {
           phone: phone.replace(/\D/g, ""),
           otp: otp,
           forceLogin,
@@ -96,40 +96,61 @@ export default function ClientLogin() {
         },
       });
 
-      // Check for session conflict (409 status)
-      // The error message contains the JSON response when status is 409
-      const errorMessage = response.error?.message || "";
-      const isSessionConflict = errorMessage.includes("session_conflict") || response.data?.error === "session_conflict";
-      
-      if (isSessionConflict) {
-        let conflictData = response.data;
-        
-        // Try to parse the error message if data is not available
-        if (!conflictData || !conflictData.existingSession) {
+      // If the function returns a non-2xx, supabase-js puts details in `response.error`.
+      // We'll try to extract status + JSON body so we can show accurate UI messages.
+      let httpStatus: number | undefined;
+      let errorBody: any = null;
+
+      if (response.error && (response.error as any)?.context?.response) {
+        try {
+          const res = (response.error as any).context.response as Response;
+          httpStatus = res.status;
+          const text = await res.text();
           try {
-            // Extract JSON from error message like "Edge function returned 409: Error, {...}"
-            const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              conflictData = JSON.parse(jsonMatch[0]);
-            }
-          } catch (e) {
-            console.error("Failed to parse session conflict data:", e);
+            errorBody = text ? JSON.parse(text) : null;
+          } catch {
+            errorBody = text ? { raw: text } : null;
           }
+        } catch {
+          // ignore parsing errors
         }
-        
+      }
+
+      // Check for session conflict (409)
+      const errorMessage = response.error?.message || "";
+      const isSessionConflict =
+        httpStatus === 409 ||
+        errorBody?.error === "session_conflict" ||
+        errorMessage.includes("session_conflict") ||
+        response.data?.error === "session_conflict";
+
+      if (isSessionConflict) {
+        const conflictData = errorBody || response.data;
+
         setSessionConflict({
           device: conflictData?.existingSession?.device || "Unknown device",
           lastActivity: conflictData?.existingSession?.lastActivity || "Recently",
           loggedInAt: conflictData?.existingSession?.loggedInAt || "",
-          upgradeMessage: conflictData?.upgradeMessage || "Purchase team seats to enable multi-device access for your team.",
+          upgradeMessage:
+            conflictData?.upgradeMessage ||
+            "Purchase team seats to enable multi-device access for your team.",
         });
+
         setShowConflictDialog(true);
         setLoading(false);
         return;
       }
 
       if (response.error) {
-        throw new Error(response.error.message || "Failed to verify OTP");
+        const msgFromBody =
+          errorBody?.error ||
+          errorBody?.message ||
+          (typeof errorBody?.raw === "string" ? errorBody.raw : "");
+
+        const statusSuffix = httpStatus ? ` (status ${httpStatus})` : "";
+        throw new Error(
+          `${msgFromBody || response.error.message || "Failed to verify OTP"}${statusSuffix}`
+        );
       }
 
       if (response.data?.error && response.data.error !== "session_conflict") {
