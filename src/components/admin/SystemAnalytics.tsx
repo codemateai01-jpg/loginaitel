@@ -75,7 +75,7 @@ export function SystemAnalytics() {
       const { data: credits } = await supabase
         .from("client_credits")
         .select("balance");
-      
+
       const totalCredits = credits?.reduce((sum, c) => sum + c.balance, 0) || 0;
 
       // Get completed tasks
@@ -183,28 +183,28 @@ export function SystemAnalytics() {
     <div className="space-y-6">
       {/* Key Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <Users className="h-5 w-5 text-chart-1" />
             <span className="text-sm text-muted-foreground">Clients</span>
           </div>
           <p className="text-3xl font-bold">{stats?.clients || 0}</p>
         </div>
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <Users className="h-5 w-5 text-chart-2" />
             <span className="text-sm text-muted-foreground">Engineers</span>
           </div>
           <p className="text-3xl font-bold">{stats?.engineers || 0}</p>
         </div>
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <Bot className="h-5 w-5 text-chart-3" />
             <span className="text-sm text-muted-foreground">Agents</span>
           </div>
           <p className="text-3xl font-bold">{stats?.agents || 0}</p>
         </div>
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <Phone className="h-5 w-5 text-chart-4" />
             <span className="text-sm text-muted-foreground">Total Calls</span>
@@ -215,28 +215,28 @@ export function SystemAnalytics() {
 
       {/* Secondary Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="h-5 w-5 text-chart-2" />
             <span className="text-sm text-muted-foreground">Connection Rate</span>
           </div>
           <p className="text-3xl font-bold">{stats?.connectionRate || 0}%</p>
         </div>
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <Phone className="h-5 w-5 text-chart-2" />
             <span className="text-sm text-muted-foreground">Connected Calls</span>
           </div>
           <p className="text-3xl font-bold">{stats?.connectedCalls || 0}</p>
         </div>
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <CreditCard className="h-5 w-5 text-chart-1" />
             <span className="text-sm text-muted-foreground">Total Credits</span>
           </div>
           <p className="text-3xl font-bold">{stats?.totalCredits?.toLocaleString() || 0}</p>
         </div>
-        <div className="border-2 border-border bg-card p-4">
+        <div className="card-tactile bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle className="h-5 w-5 text-chart-2" />
             <span className="text-sm text-muted-foreground">Tasks Completed</span>
@@ -248,7 +248,7 @@ export function SystemAnalytics() {
       {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Call Trends Chart */}
-        <div className="border-2 border-border bg-card p-6">
+        <div className="card-tactile bg-card p-6">
           <div className="flex items-center gap-2 mb-6">
             <BarChart3 className="h-5 w-5" />
             <h3 className="font-bold">Call Volume (Last 7 Days)</h3>
@@ -291,7 +291,7 @@ export function SystemAnalytics() {
         </div>
 
         {/* Call Status Distribution */}
-        <div className="border-2 border-border bg-card p-6">
+        <div className="card-tactile bg-card p-6">
           <div className="flex items-center gap-2 mb-6">
             <Phone className="h-5 w-5" />
             <h3 className="font-bold">Call Status Distribution</h3>
@@ -339,7 +339,7 @@ export function SystemAnalytics() {
       </div>
 
       {/* Task Trends */}
-      <div className="border-2 border-border bg-card p-6">
+      <div className="card-tactile bg-card p-6">
         <div className="flex items-center gap-2 mb-6">
           <Clock className="h-5 w-5" />
           <h3 className="font-bold">Task Activity (Last 7 Days)</h3>
