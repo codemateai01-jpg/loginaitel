@@ -66,7 +66,7 @@ const statusConfig: Record<string, { label: string; icon: React.ReactNode; class
 // Statuses that allow call testing (prompt approved or later)
 const CALL_ALLOWED_STATUSES = [
   'prompt_approved',
-  'demo_in_progress', 
+  'demo_in_progress',
   'demo_submitted',
   'completed'
 ];
@@ -84,18 +84,17 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
     queryKey: ["agents-for-call", user?.id, role],
     queryFn: async () => {
-      let query = supabase
-        .from("aitel_agents")
-        .select("id, agent_name, external_agent_id, client_id")
-        .eq("status", "active");
+      let query = supabase.from("aitel_agents").select("*");
 
       if (role === "client" && user) {
-        query = query.eq("client_id", user.id);
-      }
-
-      // Engineers can only use agents assigned to them with a client
-      if (role === "engineer" && user) {
-        query = query.eq("engineer_id", user.id).not("client_id", "is", null);
+        query = query.eq("client_id", user.id).eq("status", "active");
+      } else if (role === "engineer" && user) {
+        query = query
+          .eq("engineer_id", user.id)
+          .eq("status", "active")
+          .not("client_id", "is", null);
+      } else if (role === "admin") {
+        // Admins see everything, no extra filters
       }
 
       const { data, error } = await query.order("agent_name");
@@ -110,7 +109,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
     queryKey: ["engineer-approved-prompts", user?.id],
     queryFn: async () => {
       if (!user || role !== "engineer") return { hasApproved: true };
-      
+
       const { data, error } = await supabase
         .from("tasks")
         .select("id")
@@ -156,15 +155,15 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
 
       const { data, error } = await query;
       if (error) throw error;
-      
+
       const agentIds = [...new Set((data || []).map(c => c.agent_id))];
       const { data: agentsData } = await supabase
         .from("aitel_agents")
         .select("id, agent_name")
         .in("id", agentIds);
-      
+
       const agentMap = new Map(agentsData?.map(a => [a.id, a.agent_name]) || []);
-      
+
       return (data || []).map(call => ({
         ...call,
         agent: agentMap.has(call.agent_id) ? { agent_name: agentMap.get(call.agent_id)! } : null
@@ -221,7 +220,12 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
 
     // For engineers and admins, use the agent's client_id; for clients, use their own id
     const agentClientId = selectedAgent?.client_id;
-    const clientId = role === "client" ? user.id : agentClientId;
+    let clientId = role === "client" ? user.id : agentClientId;
+
+    // For admins, if agent has no client, use admin's own ID as client context
+    if (role === "admin" && !clientId) {
+      clientId = user.id;
+    }
 
     // Engineers MUST use an agent that has a client_id assigned
     if (role === "engineer" && !agentClientId) {
@@ -316,7 +320,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
                 <div>
                   <p className="font-semibold">Call Testing Not Available</p>
                   <p className="text-sm mt-1">
-                    You need to have at least one task with an approved prompt before you can test calls. 
+                    You need to have at least one task with an approved prompt before you can test calls.
                     Complete your prompt editing and submit for admin approval first.
                   </p>
                 </div>
@@ -369,7 +373,7 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
                     className="border-2 font-mono"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label>Name (Optional)</Label>
                   <Input

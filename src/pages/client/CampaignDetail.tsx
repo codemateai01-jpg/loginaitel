@@ -46,6 +46,7 @@ import { RetrySettingsDialog } from "@/components/campaigns/RetrySettingsDialog"
 import { RetryTimelineDialog } from "@/components/campaigns/RetryTimelineDialog";
 import { CampaignProgressDashboard } from "@/components/campaigns/CampaignProgressDashboard";
 import { exportLeads, type LeadExportData } from "@/lib/export-utils";
+import { makeCall } from "@/lib/aitel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -392,15 +393,52 @@ export default function CampaignDetail() {
     },
     onSuccess: (_, newStatus) => {
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast({ 
+      toast({
         title: newStatus === "paused" ? "Campaign paused" : "Campaign resumed",
-        description: newStatus === "paused" 
-          ? "No new calls will be initiated" 
+        description: newStatus === "paused"
+          ? "No new calls will be initiated"
           : "Calls will continue processing"
       });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const makeLeadCall = useMutation({
+    mutationFn: async (lead: CampaignLead) => {
+      if (!campaign?.agent_id) {
+        throw new Error("No agent assigned to this campaign");
+      }
+      if (!user?.id) {
+        throw new Error("Not authenticated");
+      }
+
+      const { data, error } = await makeCall({
+        agent_id: campaign.agent_id,
+        client_id: user.id,
+        lead_id: lead.id,
+        phone_number: lead.phone_number,
+        name: lead.name,
+      });
+
+      if (error) throw new Error(error);
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Call Initiated",
+        description: "The AI agent is now calling the lead.",
+      });
+      refetchLeads();
+      refetchQueue();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Call Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -498,14 +536,45 @@ export default function CampaignDetail() {
 
         {/* Real-time Progress Dashboard */}
         {campaignId && (
-          <CampaignProgressDashboard 
-            campaignId={campaignId} 
-            totalLeads={leads?.length || 0} 
+          <CampaignProgressDashboard
+            campaignId={campaignId}
+            totalLeads={leads?.length || 0}
           />
+        )}
+
+        {newCount > 0 && !campaign?.agent_id && (
+          <Button
+            variant="outline"
+            asChild
+            className="border-orange-500 text-orange-600 hover:bg-orange-500/10"
+          >
+            <Link to="/client/agents">
+              <Play className="h-4 w-4 mr-2" />
+              Assign Agent to Start Calls
+            </Link>
+          </Button>
         )}
 
         {/* Actions Bar */}
         <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => {
+              if (!campaign?.agent_id) {
+                toast({
+                  title: "No Agent Assigned",
+                  description: "Please assign an agent to this campaign before starting calls.",
+                  variant: "destructive",
+                });
+                return;
+              }
+              setIsBulkCallOpen(true);
+            }}
+            disabled={selectedLeads.length === 0}
+            className="bg-primary hover:bg-primary/90"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Call Selected ({selectedLeads.length})
+          </Button>
           <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -842,16 +911,16 @@ export default function CampaignDetail() {
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Badge 
-                                      variant="outline" 
+                                    <Badge
+                                      variant="outline"
                                       className={
-                                        lead.call_status === "connected" 
-                                          ? "bg-green-500/10 text-green-600 border-green-500 cursor-help" 
+                                        lead.call_status === "connected"
+                                          ? "bg-green-500/10 text-green-600 border-green-500 cursor-help"
                                           : lead.call_status === "in_progress"
-                                          ? "bg-blue-500/10 text-blue-600 border-blue-500 animate-pulse cursor-help"
-                                          : lead.call_status === "not_connected"
-                                          ? "bg-yellow-500/10 text-yellow-600 border-yellow-500 cursor-help"
-                                          : "bg-muted cursor-help"
+                                            ? "bg-blue-500/10 text-blue-600 border-blue-500 animate-pulse cursor-help"
+                                            : lead.call_status === "not_connected"
+                                              ? "bg-yellow-500/10 text-yellow-600 border-yellow-500 cursor-help"
+                                              : "bg-muted cursor-help"
                                       }
                                     >
                                       {lead.call_status === "in_progress" && (
@@ -913,8 +982,28 @@ export default function CampaignDetail() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" title="Make call">
-                              <Phone className="h-4 w-4" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Make call"
+                              onClick={() => {
+                                if (!campaign?.agent_id) {
+                                  toast({
+                                    title: "No Agent Assigned",
+                                    description: "Please assign an agent to this campaign first.",
+                                    variant: "destructive",
+                                  });
+                                  return;
+                                }
+                                makeLeadCall.mutate(lead);
+                              }}
+                              disabled={makeLeadCall.isPending}
+                            >
+                              {makeLeadCall.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Phone className="h-4 w-4" />
+                              )}
                             </Button>
                             <Button
                               variant="ghost"
@@ -1000,7 +1089,7 @@ export default function CampaignDetail() {
                   <div>
                     <p className="font-medium">Expected API Response Format:</p>
                     <pre className="mt-2 text-xs overflow-x-auto">
-{`{
+                      {`{
   "leads": [
     {
       "name": "John Doe",

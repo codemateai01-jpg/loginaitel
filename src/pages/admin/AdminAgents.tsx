@@ -129,7 +129,7 @@ export default function AdminAgents() {
       for (const agent of aitelAgents as AgentFromAPI[]) {
         // Get full agent details including prompts
         const { data: fullAgent } = await getAitelAgent(agent.id);
-        
+
         const systemPrompt = (fullAgent as AgentFromAPI)?.agent_prompts?.task_1?.system_prompt || "";
         const agentConfig = fullAgent || agent;
 
@@ -160,6 +160,7 @@ export default function AdminAgents() {
             original_system_prompt: systemPrompt,
             current_system_prompt: systemPrompt,
             agent_config: JSON.parse(JSON.stringify(agentConfig)),
+            status: "active", // Set active by default on sync
           }]);
           synced++;
         }
@@ -239,9 +240,9 @@ export default function AdminAgents() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Agent Management</h1>
-            <p className="text-sm text-muted-foreground">
-              Sync and assign agents to clients
-            </p>
+              <p className="text-sm text-muted-foreground">
+                Sync and assign agents to clients
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
