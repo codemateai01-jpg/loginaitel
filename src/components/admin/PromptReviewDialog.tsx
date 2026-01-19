@@ -12,8 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, Bot, User, Trophy, FileText } from "lucide-react";
+import { CheckCircle, XCircle, Bot, User, Trophy, FileText, GitCompare } from "lucide-react";
+import { PromptDiffViewer } from "./PromptDiffViewer";
 
 interface PromptReviewDialogProps {
   open: boolean;
@@ -167,43 +169,85 @@ export function PromptReviewDialog({
               </div>
             </div>
 
-            {/* Current Prompt */}
-            {task.aitel_agents?.current_system_prompt && (
-              <div className="border-2 border-chart-2 bg-chart-2/5 p-4 space-y-2">
-                <h4 className="font-medium flex items-center gap-2">
+            {/* Prompt Comparison Tabs */}
+            <Tabs defaultValue="diff" className="w-full">
+              <TabsList className="grid grid-cols-3 w-full">
+                <TabsTrigger value="diff" className="flex items-center gap-2">
+                  <GitCompare className="h-4 w-4" />
+                  Diff View
+                </TabsTrigger>
+                <TabsTrigger value="current" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Current System Prompt
-                </h4>
-                <pre className="text-sm whitespace-pre-wrap bg-background/50 p-3 max-h-60 overflow-auto border">
-                  {task.aitel_agents.current_system_prompt}
-                </pre>
-              </div>
-            )}
+                  Current
+                </TabsTrigger>
+                <TabsTrigger value="original" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Original
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Original Prompt for comparison */}
-            {task.aitel_agents?.original_system_prompt && (
-              <div className="border-2 border-dashed border-border p-4 space-y-2">
-                <h4 className="font-medium text-muted-foreground">
-                  Original Prompt (Reference)
-                </h4>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-32 overflow-auto">
-                  {task.aitel_agents.original_system_prompt}
-                </pre>
-              </div>
-            )}
+              <TabsContent value="diff" className="mt-4">
+                <div className="border-2 border-chart-4 bg-chart-4/5 p-4 space-y-2">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <GitCompare className="h-4 w-4 text-chart-4" />
+                    Changes Made by Engineer
+                  </h4>
+                  <PromptDiffViewer
+                    originalPrompt={task.aitel_agents?.original_system_prompt || null}
+                    currentPrompt={task.aitel_agents?.current_system_prompt || null}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="current" className="mt-4">
+                {task.aitel_agents?.current_system_prompt && (
+                  <div className="border-2 border-chart-2 bg-chart-2/5 p-4 space-y-2">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Current System Prompt
+                    </h4>
+                    <ScrollArea className="h-[400px]">
+                      <pre className="text-sm whitespace-pre-wrap bg-background/50 p-3 border">
+                        {task.aitel_agents.current_system_prompt}
+                      </pre>
+                    </ScrollArea>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="original" className="mt-4">
+                {task.aitel_agents?.original_system_prompt && (
+                  <div className="border-2 border-dashed border-border p-4 space-y-2">
+                    <h4 className="font-medium text-muted-foreground">
+                      Original Prompt (Reference)
+                    </h4>
+                    <ScrollArea className="h-[400px]">
+                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap p-3">
+                        {task.aitel_agents.original_system_prompt}
+                      </pre>
+                    </ScrollArea>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
 
             {/* Edit History */}
             {editHistory.length > 0 && (
               <div className="border-2 border-border p-4 space-y-2">
-                <h4 className="font-medium">Recent Edit History</h4>
+                <h4 className="font-medium">Recent Edit History ({editHistory.length} edits)</h4>
                 <div className="space-y-2">
                   {editHistory.map((edit, idx) => (
                     <div
                       key={edit.id}
-                      className="text-xs text-muted-foreground border-l-2 border-border pl-2"
+                      className="text-xs text-muted-foreground border-l-2 border-chart-4 pl-2 py-1"
                     >
-                      Edit #{editHistory.length - idx} -{" "}
+                      <span className="font-medium">Edit #{editHistory.length - idx}</span> -{" "}
                       {new Date(edit.created_at).toLocaleString()}
+                      {edit.previous_prompt && edit.new_prompt && (
+                        <span className="ml-2 text-chart-4">
+                          ({Math.abs(edit.new_prompt.length - edit.previous_prompt.length)} chars changed)
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -379,12 +379,22 @@ export default function AdminAgents() {
                             <div className="space-y-4">
                               <div>
                                 <label className="text-sm font-medium">
-                                  System Prompt
+                                  Current System Prompt
                                 </label>
-                                <pre className="text-sm bg-muted p-3 rounded max-h-48 overflow-auto whitespace-pre-wrap">
-                                  {agent.current_system_prompt || "No prompt set"}
+                                <pre className="text-sm bg-muted p-3 rounded max-h-64 overflow-auto whitespace-pre-wrap">
+                                  {agent.current_system_prompt || "No prompt available"}
                                 </pre>
                               </div>
+                              {agent.original_system_prompt && agent.original_system_prompt !== agent.current_system_prompt && (
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Original System Prompt
+                                  </label>
+                                  <pre className="text-sm bg-muted p-3 rounded max-h-48 overflow-auto whitespace-pre-wrap">
+                                    {agent.original_system_prompt}
+                                  </pre>
+                                </div>
+                              )}
                             </div>
                           </DialogContent>
                         </Dialog>

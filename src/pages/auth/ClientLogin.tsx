@@ -85,10 +85,25 @@ export default function ClientLogin() {
     setShowConflictDialog(false);
 
     try {
-      const deviceInfo = `${navigator.platform} - ${navigator.userAgent.split(' ').slice(-2).join(' ')}`;
-      
+      const deviceIdKey = "aitel_device_id";
+      const existingDeviceId = localStorage.getItem(deviceIdKey);
+      const deviceId =
+        existingDeviceId ??
+        (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `dev_${Math.random().toString(36).slice(2)}`);
+
+      if (!existingDeviceId) {
+        localStorage.setItem(deviceIdKey, deviceId);
+      }
+
+      const deviceLabel = `${navigator.platform} ${navigator.userAgent
+        .split(" ")
+        .slice(-2)
+        .join(" ")}`.trim();
+      const deviceInfo = `${deviceId}::${deviceLabel}`;
       const response = await supabase.functions.invoke("verify-otp", {
-        body: { 
+        body: {
           phone: phone.replace(/\D/g, ""),
           otp: otp,
           forceLogin,
@@ -96,40 +111,66 @@ export default function ClientLogin() {
         },
       });
 
-      // Check for session conflict (409 status)
-      // The error message contains the JSON response when status is 409
-      const errorMessage = response.error?.message || "";
-      const isSessionConflict = errorMessage.includes("session_conflict") || response.data?.error === "session_conflict";
-      
-      if (isSessionConflict) {
-        let conflictData = response.data;
-        
-        // Try to parse the error message if data is not available
-        if (!conflictData || !conflictData.existingSession) {
+      // If the function returns a non-2xx, `invoke` returns { error, response } where
+      // `response` is the real Response object (status + body).
+      // We'll parse it so we can show the exact backend error to the user.
+      let httpStatus: number | undefined;
+      let errorBody: any = null;
+
+      if (response.response) {
+        try {
+          const res = response.response;
+          httpStatus = res.status;
+          const text = await res.clone().text();
           try {
-            // Extract JSON from error message like "Edge function returned 409: Error, {...}"
-            const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              conflictData = JSON.parse(jsonMatch[0]);
-            }
-          } catch (e) {
-            console.error("Failed to parse session conflict data:", e);
+            errorBody = text ? JSON.parse(text) : null;
+          } catch {
+            errorBody = text ? { raw: text } : null;
           }
+        } catch {
+          // ignore parsing errors
         }
-        
+      }
+
+      // Check for session conflict (409)
+      const errorMessage = response.error?.message || "";
+      const isSessionConflict =
+        httpStatus === 409 ||
+        errorBody?.error === "session_conflict" ||
+        errorMessage.includes("session_conflict") ||
+        response.data?.error === "session_conflict";
+
+      if (isSessionConflict) {
+        const conflictData = errorBody || response.data;
+
+        const rawDevice = conflictData?.existingSession?.device;
+        const deviceDisplay =
+          typeof rawDevice === "string" ? rawDevice.split("::")[1] || rawDevice : "Unknown device";
+
         setSessionConflict({
-          device: conflictData?.existingSession?.device || "Unknown device",
+          device: deviceDisplay,
           lastActivity: conflictData?.existingSession?.lastActivity || "Recently",
           loggedInAt: conflictData?.existingSession?.loggedInAt || "",
-          upgradeMessage: conflictData?.upgradeMessage || "Purchase team seats to enable multi-device access for your team.",
+          upgradeMessage:
+            conflictData?.upgradeMessage ||
+            "Purchase team seats to enable multi-device access for your team.",
         });
+
         setShowConflictDialog(true);
         setLoading(false);
         return;
       }
 
       if (response.error) {
-        throw new Error(response.error.message || "Failed to verify OTP");
+        const msgFromBody =
+          errorBody?.error ||
+          errorBody?.message ||
+          (typeof errorBody?.raw === "string" ? errorBody.raw : "");
+
+        const statusSuffix = httpStatus ? ` (status ${httpStatus})` : "";
+        throw new Error(
+          `${msgFromBody || response.error.message || "Failed to verify OTP"}${statusSuffix}`
+        );
       }
 
       if (response.data?.error && response.data.error !== "session_conflict") {

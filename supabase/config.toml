@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.setup-seat-autopay]
 verify_jwt = false
+
+[functions.analyze-call-insights]
+verify_jwt = false

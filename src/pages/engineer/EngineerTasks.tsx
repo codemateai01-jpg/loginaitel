@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { TaskTimer } from "@/components/tasks/TaskTimer";
 import { DemoCallDialog } from "@/components/engineer/DemoCallDialog";
+import { CompletedTaskLog } from "@/components/engineer/CompletedTaskLog";
 import { getExecution } from "@/lib/aitel";
 import {
   ClipboardList,
@@ -43,6 +44,8 @@ import {
   Music,
   X,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { formatDistanceToNow, format, differenceInMinutes } from "date-fns";
 
@@ -558,6 +561,137 @@ export default function EngineerTasks() {
     }
   };
 
+  // Completed Task Card with expandable log
+  const CompletedTaskCard = ({ 
+    task, 
+    earnedPoints, 
+    speedScore, 
+    efficiencyScore, 
+    qualityScore 
+  }: { 
+    task: Task; 
+    earnedPoints: number; 
+    speedScore: number; 
+    efficiencyScore: number; 
+    qualityScore: number; 
+  }) => {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+      <div className="border-2 border-chart-2 bg-card overflow-hidden">
+        <div className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg">{task.title}</h3>
+                  {task.description && (
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                      {task.description}
+                    </p>
+                  )}
+                </div>
+                <Badge className={getStatusColor(task.status)}>
+                  {getStatusLabel(task.status)}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1 text-chart-2 font-medium">
+                  <Trophy className="h-4 w-4" />
+                  +{earnedPoints} points earned
+                </span>
+                {task.final_score !== null && (
+                  <span className="flex items-center gap-1 text-chart-4 font-medium">
+                    <Star className="h-4 w-4" />
+                    Score: {task.final_score}/100
+                  </span>
+                )}
+                {task.completed_at && (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle className="h-4 w-4" />
+                    Completed {format(new Date(task.completed_at), "MMM d, yyyy")}
+                  </span>
+                )}
+              </div>
+              
+              {/* Quick Score Preview */}
+              {task.score_breakdown && (
+                <div className="mt-2 p-3 bg-muted/50 text-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium">Score Breakdown:</p>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setExpanded(!expanded)}
+                      className="h-6 text-xs"
+                    >
+                      {expanded ? (
+                        <>
+                          <ChevronUp className="h-3 w-3 mr-1" />
+                          Hide Details
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3 mr-1" />
+                          View Full Log
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span>Speed</span>
+                        <span className="font-mono font-bold">{speedScore}/40</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-chart-4 transition-all"
+                          style={{ width: `${(speedScore / 40) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span>Efficiency</span>
+                        <span className="font-mono font-bold">{efficiencyScore}/30</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-chart-3 transition-all"
+                          style={{ width: `${(efficiencyScore / 30) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span>Quality</span>
+                        <span className="font-mono font-bold">{qualityScore}/30</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-chart-2 transition-all"
+                          style={{ width: `${(qualityScore / 30) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Expanded Task Log */}
+        {expanded && (
+          <div className="border-t-2 border-chart-2/30 p-4 bg-muted/30">
+            <CompletedTaskLog task={task} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const getTimeRemaining = (deadline: string | null) => {
     if (!deadline) return null;
     const deadlineDate = new Date(deadline);
@@ -677,7 +811,10 @@ export default function EngineerTasks() {
             <div className="border-2 border-border bg-card px-4 py-2 flex items-center gap-2">
               <Trophy className="h-4 w-4 text-chart-4" />
               <span className="font-mono font-bold">
-                {completedTasks.reduce((sum, t) => sum + t.points, 0)} pts earned
+                {completedTasks.reduce((sum, t) => {
+                  const earnedPoints = t.score_breakdown?.earned_points ?? t.points;
+                  return sum + earnedPoints;
+                }, 0)} pts earned
               </span>
             </div>
           </div>
@@ -1084,58 +1221,23 @@ export default function EngineerTasks() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {completedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="border-2 border-chart-2 bg-card p-4"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg">{task.title}</h3>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {task.description}
-                              </p>
-                            )}
-                          </div>
-                          <Badge className={getStatusColor(task.status)}>
-                            {getStatusLabel(task.status)}
-                          </Badge>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1 text-chart-2 font-medium">
-                            <Trophy className="h-4 w-4" />
-                            +{task.points} points earned
-                          </span>
-                          {task.final_score !== null && (
-                            <span className="flex items-center gap-1 text-chart-4 font-medium">
-                              <Star className="h-4 w-4" />
-                              Score: {task.final_score}/100
-                            </span>
-                          )}
-                          {task.completed_at && (
-                            <span className="flex items-center gap-1">
-                              <CheckCircle className="h-4 w-4" />
-                              Completed {format(new Date(task.completed_at), "MMM d, yyyy")}
-                            </span>
-                          )}
-                        </div>
-                        {task.score_breakdown && (
-                          <div className="mt-2 p-3 bg-muted/50 text-xs space-y-1">
-                            <p className="font-medium">Score Breakdown:</p>
-                            <div className="grid grid-cols-3 gap-2">
-                              <span>Time: {task.score_breakdown.time_score}/40</span>
-                              <span>Edits: {task.score_breakdown.edit_score}/30</span>
-                              <span>Quality: {task.score_breakdown.demo_quality_score}/30</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {completedTasks.map((task) => {
+                  const earnedPoints = task.score_breakdown?.earned_points ?? task.points;
+                  const speedScore = task.score_breakdown?.speed_score ?? 0;
+                  const efficiencyScore = task.score_breakdown?.efficiency_score ?? 0;
+                  const qualityScore = task.score_breakdown?.quality_score ?? 0;
+                  
+                  return (
+                    <CompletedTaskCard
+                      key={task.id}
+                      task={task}
+                      earnedPoints={earnedPoints}
+                      speedScore={speedScore}
+                      efficiencyScore={efficiencyScore}
+                      qualityScore={qualityScore}
+                    />
+                  );
+                })}
               </div>
             )}
           </TabsContent>
