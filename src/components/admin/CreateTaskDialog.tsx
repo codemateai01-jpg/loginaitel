@@ -46,20 +46,16 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
   const [selectedAgentId, setSelectedAgentId] = useState(task?.aitel_agent_id || "");
   const [selectedEngineerId, setSelectedEngineerId] = useState(task?.assigned_to || "");
 
-  // Fetch agents for selection (include all statuses except inactive)
-  const { data: agents, isLoading: agentsLoading } = useQuery({
+  // Fetch agents for selection
+  const { data: agents } = useQuery({
     queryKey: ["aitel-agents-for-tasks"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("aitel_agents")
-        .select("id, agent_name, client_id, status")
-        .neq("status", "inactive")
-        .order("agent_name");
-      if (error) {
-        console.error("Error fetching agents:", error);
-        throw error;
-      }
-      return data || [];
+        .from("aitel_agents" as any)
+        .select("id, agent_name, client_id")
+        .eq("status", "active");
+      if (error) throw error;
+      return data as any[];
     },
   });
 
@@ -186,28 +182,17 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
             <Label htmlFor="agent">Assign Agent</Label>
             <Select value={selectedAgentId || "none"} onValueChange={(v) => setSelectedAgentId(v === "none" ? "" : v)}>
               <SelectTrigger>
-                <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select an agent to assign"} />
+                <SelectValue placeholder="Select an agent to assign" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No agent</SelectItem>
-                {agents && agents.length > 0 ? (
-                  agents.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.agent_name}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="no-agents" disabled>
-                    No agents available
+                {agents?.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.agent_name}
                   </SelectItem>
-                )}
+                ))}
               </SelectContent>
             </Select>
-            {agents?.length === 0 && !agentsLoading && (
-              <p className="text-xs text-muted-foreground">
-                Sync agents from the Agents page first
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
