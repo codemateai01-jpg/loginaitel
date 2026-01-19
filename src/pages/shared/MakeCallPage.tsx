@@ -94,11 +94,14 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
           .eq("status", "active")
           .not("client_id", "is", null);
       } else if (role === "admin") {
-        // Admins see everything, no extra filters
+        // Broadest possible query for admin
       }
 
       const { data, error } = await query.order("agent_name");
-      if (error) throw error;
+      if (error) {
+        console.error("MakeCallPage Agents Error:", error);
+        throw error;
+      }
       return data as Agent[];
     },
     enabled: !!user,
@@ -355,11 +358,21 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <p className="text-sm text-muted-foreground p-3 bg-muted/50 border-2 border-border">
-                      {role === "engineer"
-                        ? "No eligible agents assigned to you. Ask an admin to assign you an agent and a client."
-                        : "No agents available. Please contact admin to assign agents."}
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground p-3 bg-muted/50 border-2 border-border">
+                        {role === "engineer"
+                          ? "No eligible agents assigned to you. Ask an admin to assign you an agent and a client."
+                          : "No agents available. Please contact admin to assign agents."}
+                      </p>
+                      <div className="flex items-center gap-2 px-1">
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold bg-muted px-1.5 py-0.5 rounded">
+                          Role: {role}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold bg-muted px-1.5 py-0.5 rounded">
+                          Found: {agents.length}
+                        </span>
+                      </div>
+                    </div>
                   )}
                 </div>
 
