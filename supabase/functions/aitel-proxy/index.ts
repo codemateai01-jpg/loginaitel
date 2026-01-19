@@ -465,62 +465,6 @@ serve(async (req) => {
         });
         break;
 
-      case "test-call":
-        // Test call - admin/engineer only, no credit deduction
-        if (userRole !== "admin" && userRole !== "engineer") {
-          return new Response(
-            JSON.stringify({ error: "Forbidden" }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        if (!body.phone_number || !body.agent_id) {
-          return new Response(
-            JSON.stringify({ error: "phone_number and agent_id are required" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        debugLog("Making test call", { hasPhoneNumber: !!body.phone_number });
-
-        // Make test call via Bolna - directly use the external agent ID
-        const testCallPayload = {
-          agent_id: body.agent_id,
-          recipient_phone_number: body.phone_number,
-          retry_if_busy: true,
-          recipient_data: {},
-        };
-
-        response = await fetch(`${BOLNA_API_BASE}/call`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${BOLNA_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(testCallPayload),
-        });
-
-        if (response.ok) {
-          const callResult = await response.json();
-          return new Response(
-            JSON.stringify({
-              success: true,
-              message: "Test call initiated",
-              execution_id: callResult.execution_id || callResult.id,
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } else {
-          const errorData = await response.json();
-          return new Response(
-            JSON.stringify({ 
-              error: errorData.message || "Failed to initiate test call",
-              details: errorData.details,
-            }),
-            { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
       case "stop-call":
         const stopExecutionId = url.searchParams.get("execution_id");
         if (!stopExecutionId) {
