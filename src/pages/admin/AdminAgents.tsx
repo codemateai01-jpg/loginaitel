@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -34,6 +35,7 @@ import {
   Search,
   Users,
   Download,
+  Eye,
   Loader2,
   Wrench,
   Webhook,
@@ -364,6 +366,38 @@ export default function AdminAgents() {
                         >
                           <Webhook className="h-4 w-4" />
                         </Button>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" title="View Prompt">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                              <DialogTitle>{agent.agent_name}</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-sm font-medium">
+                                  Current System Prompt
+                                </label>
+                                <pre className="text-sm bg-muted p-3 rounded max-h-64 overflow-auto whitespace-pre-wrap">
+                                  {agent.current_system_prompt || "No prompt available"}
+                                </pre>
+                              </div>
+                              {agent.original_system_prompt && agent.original_system_prompt !== agent.current_system_prompt && (
+                                <div>
+                                  <label className="text-sm font-medium">
+                                    Original System Prompt
+                                  </label>
+                                  <pre className="text-sm bg-muted p-3 rounded max-h-48 overflow-auto whitespace-pre-wrap">
+                                    {agent.original_system_prompt}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                         <Button
                           variant="outline"
                           size="sm"
