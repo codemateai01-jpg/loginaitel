@@ -41,6 +41,7 @@ const adminNavItems = [
   { icon: Users, label: "Clients", href: "/admin/clients" },
   { icon: ClipboardList, label: "Tasks", href: "/admin/tasks" },
   { icon: Bot, label: "Agents", href: "/admin/agents" },
+  { icon: Bot, label: "Agent Builder", href: "/admin/agent-builder" },
   { icon: Phone, label: "Make Call", href: "/admin/make-call" },
   { icon: Phone, label: "Calls", href: "/admin/calls" },
   { icon: Phone, label: "Phone Numbers", href: "/admin/phone-numbers" },
