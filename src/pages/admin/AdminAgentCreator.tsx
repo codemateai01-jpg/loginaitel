@@ -26,12 +26,46 @@ export default function AdminAgentCreator() {
 
         setIsSaving(true);
         try {
-            // TODO: Integrate with Bolna API
-            console.log("Saving agent:", { name: agentName, config });
+            // Transform config to Bolna format
+            const { transformToBolnaConfig } = await import("@/lib/bolna-transform");
+            const { supabase } = await import("@/integrations/supabase/client");
+            const bolnaConfig = transformToBolnaConfig(agentName, config);
+
+            // Create agent in Bolna
+            const { createAitelAgent } = await import("@/lib/aitel");
+            const { data: agentData, error: bolnaError } = await createAitelAgent(bolnaConfig);
+
+            if (bolnaError || !agentData) {
+                throw new Error(bolnaError || "Failed to create agent in Bolna");
+            }
+
+            // Get current user
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                throw new Error("User not authenticated");
+            }
+
+            // Save to Supabase
+            const { error: dbError } = await supabase
+                .from("aitel_agents")
+                .insert([{
+                    external_agent_id: agentData.agent_id,
+                    agent_name: agentName,
+                    original_system_prompt: config.agentPrompt,
+                    current_system_prompt: config.agentPrompt,
+                    agent_config: bolnaConfig.agent_config,
+                    status: "active",
+                    synced_at: new Date().toISOString(),
+                }]);
+
+            if (dbError) {
+                console.error("Database error:", dbError);
+                throw new Error("Failed to save agent to database");
+            }
 
             toast({
-                title: "Agent Created",
-                description: `${agentName} has been created successfully!`,
+                title: "Agent Created Successfully!",
+                description: `${agentName} has been deployed and is ready to use.`,
             });
 
             // Navigate back to agents list
@@ -39,9 +73,10 @@ export default function AdminAgentCreator() {
                 navigate("/admin/agents");
             }, 1500);
         } catch (error) {
+            console.error("Agent creation error:", error);
             toast({
                 variant: "destructive",
-                title: "Error",
+                title: "Error Creating Agent",
                 description: error instanceof Error ? error.message : "Failed to create agent",
             });
         } finally {
