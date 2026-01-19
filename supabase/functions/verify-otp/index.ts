@@ -56,31 +56,17 @@ serve(async (req) => {
     }
 
     if (!otpRecord) {
-      // Check if OTP was already verified (user might be retrying after partial success)
-      const { data: verifiedOtp } = await supabaseAdmin
-        .from("phone_otps")
-        .select("*")
-        .eq("phone", formattedPhone)
-        .eq("otp_code", otp)
-        .eq("verified", true)
-        .maybeSingle();
-
-      if (verifiedOtp) {
-        // OTP was already verified - proceed with login anyway
-        console.log("OTP already verified, proceeding with login");
-      } else {
-        return new Response(
-          JSON.stringify({ error: "Invalid or expired OTP. Please request a new OTP." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } else {
-      // Mark OTP as verified only if we found an unverified one
-      await supabaseAdmin
-        .from("phone_otps")
-        .update({ verified: true })
-        .eq("id", otpRecord.id);
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired OTP. Please request a new OTP." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    // Mark OTP as verified
+    await supabaseAdmin
+      .from("phone_otps")
+      .update({ verified: true })
+      .eq("id", otpRecord.id);
 
     // Check if this phone belongs to a sub-user
     const { data: subUserData, error: subUserError } = await supabaseAdmin
@@ -147,64 +133,35 @@ serve(async (req) => {
           .maybeSingle();
 
         if (activeSession && !forceLogin) {
-          const activeDeviceInfo = activeSession.device_info || "";
-          const incomingDeviceInfo = deviceInfo || "";
+          // Check if client has paid seats (allows multi-device)
+          const { data: seatSubscription } = await supabaseAdmin
+            .from("seat_subscriptions")
+            .select("seats_count, status")
+            .eq("client_id", userId)
+            .eq("status", "active")
+            .maybeSingle();
 
-          const activeDeviceId = activeDeviceInfo.includes("::")
-            ? activeDeviceInfo.split("::")[0]
-            : "";
-          const incomingDeviceId = incomingDeviceInfo.includes("::")
-            ? incomingDeviceInfo.split("::")[0]
-            : "";
-
-          const activeDeviceUnknown =
-            !activeDeviceInfo || activeDeviceInfo === "Unknown device" || !activeDeviceId;
-
-          const isSameDevice =
-            (!!incomingDeviceId && incomingDeviceId === activeDeviceId) ||
-            (activeDeviceUnknown && !!incomingDeviceInfo);
-
-          if (isSameDevice) {
-            // Same device (or legacy unknown device): just refresh activity and continue
-            await supabaseAdmin
-              .from("client_active_sessions")
-              .update({
-                last_activity_at: new Date().toISOString(),
-                device_info: incomingDeviceInfo || activeSession.device_info,
-              })
-              .eq("id", activeSession.id);
-          } else {
-            // Check if client has paid seats (allows multi-device)
-            const { data: seatSubscription } = await supabaseAdmin
-              .from("seat_subscriptions")
-              .select("seats_count, status")
-              .eq("client_id", userId)
-              .eq("status", "active")
-              .maybeSingle();
-
-            // If no paid seats, block multi-device login
-            if (!seatSubscription || seatSubscription.seats_count === 0) {
-              const lastActivity = new Date(activeSession.last_activity_at);
-              const minutesAgo = Math.floor((Date.now() - lastActivity.getTime()) / 60000);
-
-              return new Response(
-                JSON.stringify({
-                  error: "session_conflict",
-                  message: "You are already logged in on another device",
-                  existingSession: {
-                    device: activeSession.device_info || "Unknown device",
-                    lastActivity:
-                      minutesAgo < 60
-                        ? `${minutesAgo} minutes ago`
-                        : `${Math.floor(minutesAgo / 60)} hours ago`,
-                    loggedInAt: activeSession.logged_in_at,
-                  },
-                  requiresForceLogin: true,
-                  upgradeMessage: "Purchase team seats to enable multi-device access for your team.",
-                }),
-                { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-              );
-            }
+          // If no paid seats, block multi-device login
+          if (!seatSubscription || seatSubscription.seats_count === 0) {
+            const lastActivity = new Date(activeSession.last_activity_at);
+            const minutesAgo = Math.floor((Date.now() - lastActivity.getTime()) / 60000);
+            
+            return new Response(
+              JSON.stringify({
+                error: "session_conflict",
+                message: "You are already logged in on another device",
+                existingSession: {
+                  device: activeSession.device_info || "Unknown device",
+                  lastActivity: minutesAgo < 60 
+                    ? `${minutesAgo} minutes ago` 
+                    : `${Math.floor(minutesAgo / 60)} hours ago`,
+                  loggedInAt: activeSession.logged_in_at,
+                },
+                requiresForceLogin: true,
+                upgradeMessage: "Purchase team seats to enable multi-device access for your team.",
+              }),
+              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
           }
         }
 
@@ -323,23 +280,15 @@ serve(async (req) => {
     }
 
     // Sign in the user and get session
-    console.log("Attempting to sign in phone user");
     const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
       email: phoneEmail,
       password: phonePassword,
     });
 
-    if (signInError) {
-      console.error("Error signing in:", signInError.message);
-      throw new Error(`Failed to create session: ${signInError.message}`);
+    if (signInError || !signInData.session) {
+      console.error("Error signing in:", signInError);
+      throw new Error("Failed to create session");
     }
-
-    if (!signInData.session) {
-      console.error("No session returned from sign in");
-      throw new Error("Failed to create session - no session returned");
-    }
-
-    const session = signInData.session;
 
     // For main clients (not sub-users), track their active session
     if (!isSubUser && clientId) {
@@ -352,7 +301,7 @@ serve(async (req) => {
       // Create new active session
       await supabaseAdmin.from("client_active_sessions").insert({
         client_id: clientId,
-        session_token: session.access_token.slice(-20), // Store only last 20 chars for reference
+        session_token: signInData.session.access_token.slice(-20), // Store only last 20 chars for reference
         device_info: deviceInfo || "Unknown device",
         is_active: true,
         logged_in_at: new Date().toISOString(),
@@ -387,6 +336,7 @@ serve(async (req) => {
       }
     }
 
+    const session = signInData.session;
     // Return a minimal session payload (avoid exposing user/email/phone in response)
     const safeSession = {
       access_token: session.access_token,
