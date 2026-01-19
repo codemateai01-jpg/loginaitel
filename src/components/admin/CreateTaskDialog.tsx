@@ -46,14 +46,14 @@ export function CreateTaskDialog({ open, onOpenChange, task }: CreateTaskDialogP
   const [selectedAgentId, setSelectedAgentId] = useState(task?.aitel_agent_id || "");
   const [selectedEngineerId, setSelectedEngineerId] = useState(task?.assigned_to || "");
 
-  // Fetch agents for selection
+  // Fetch agents for selection (include all statuses except inactive)
   const { data: agents, isLoading: agentsLoading } = useQuery({
     queryKey: ["aitel-agents-for-tasks"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("aitel_agents")
-        .select("id, agent_name, client_id")
-        .eq("status", "active")
+        .select("id, agent_name, client_id, status")
+        .neq("status", "inactive")
         .order("agent_name");
       if (error) {
         console.error("Error fetching agents:", error);
