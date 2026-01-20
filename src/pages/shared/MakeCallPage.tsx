@@ -84,30 +84,54 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
     queryKey: ["agents-for-call", role, user?.id, isSubUser ? clientId : null],
     queryFn: async () => {
-      let query = supabase.from("aitel_agents").select("*");
-
+      // For clients, fetch ALL agents assigned to them (no status filter except inactive)
       if (role === "client" && user) {
-        // If the logged-in user is a sub-user, show agents assigned to their parent client.
         const effectiveClientId = isSubUser && clientId ? clientId : user.id;
-
-        // Agents may be in non-"active" statuses (e.g. "processed") but still valid for the client.
-        // Only exclude explicitly inactive agents.
-        query = query.eq("client_id", effectiveClientId).neq("status", "inactive");
-      } else if (role === "engineer" && user) {
-        query = query
+        console.log("MakeCallPage: Fetching agents for client:", effectiveClientId);
+        
+        const { data, error } = await supabase
+          .from("aitel_agents")
+          .select("*")
+          .eq("client_id", effectiveClientId)
+          .order("agent_name");
+        
+        if (error) {
+          console.error("MakeCallPage Agents Error:", error);
+          throw error;
+        }
+        console.log("MakeCallPage: Found agents:", data?.length, data);
+        return (data || []) as Agent[];
+      }
+      
+      if (role === "engineer" && user) {
+        const { data, error } = await supabase
+          .from("aitel_agents")
+          .select("*")
           .eq("engineer_id", user.id)
-          .neq("status", "inactive")
-          .not("client_id", "is", null);
-      } else if (role === "admin") {
-        // Broadest possible query for admin
+          .not("client_id", "is", null)
+          .order("agent_name");
+        
+        if (error) {
+          console.error("MakeCallPage Agents Error:", error);
+          throw error;
+        }
+        return (data || []) as Agent[];
       }
-
-      const { data, error } = await query.order("agent_name");
-      if (error) {
-        console.error("MakeCallPage Agents Error:", error);
-        throw error;
+      
+      if (role === "admin") {
+        const { data, error } = await supabase
+          .from("aitel_agents")
+          .select("*")
+          .order("agent_name");
+        
+        if (error) {
+          console.error("MakeCallPage Agents Error:", error);
+          throw error;
+        }
+        return (data || []) as Agent[];
       }
-      return data as Agent[];
+      
+      return [] as Agent[];
     },
     enabled: !!user,
   });
@@ -369,13 +393,18 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
                           ? "No eligible agents assigned to you. Ask an admin to assign you an agent and a client."
                           : "No agents available. Please contact admin to assign agents."}
                       </p>
-                      <div className="flex items-center gap-2 px-1">
+                      <div className="flex flex-wrap items-center gap-2 px-1">
                         <span className="text-[10px] text-muted-foreground uppercase font-bold bg-muted px-1.5 py-0.5 rounded">
                           Role: {role}
                         </span>
                         <span className="text-[10px] text-muted-foreground uppercase font-bold bg-muted px-1.5 py-0.5 rounded">
                           Found: {agents.length}
                         </span>
+                        {role === "client" && user && (
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold bg-muted px-1.5 py-0.5 rounded">
+                            ID: {user.id.slice(0, 8)}...
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
