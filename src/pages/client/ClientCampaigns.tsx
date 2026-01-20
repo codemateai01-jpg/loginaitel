@@ -128,7 +128,7 @@ export default function ClientCampaigns() {
         .from("aitel_agents")
         .select("id, agent_name")
         .eq("client_id", user!.id)
-        .eq("status", "active");
+        .neq("status", "inactive");
       if (error) throw error;
       return data || [];
     },

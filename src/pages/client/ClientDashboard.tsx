@@ -53,7 +53,7 @@ export default function ClientDashboard() {
         .from("aitel_agents" as any)
         .select("id, agent_name, status")
         .eq("client_id", user!.id)
-        .eq("status", "active");
+        .neq("status", "inactive");
       if (error) throw error;
       return (data || []) as any[];
     },

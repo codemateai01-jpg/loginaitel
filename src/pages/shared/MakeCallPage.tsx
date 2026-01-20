@@ -72,7 +72,7 @@ const CALL_ALLOWED_STATUSES = [
 ];
 
 export default function MakeCallPage({ role }: MakeCallPageProps) {
-  const { user } = useAuth();
+  const { user, isSubUser, clientId } = useAuth();
   const { toast } = useToast();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [manualPhone, setManualPhone] = useState("");
@@ -82,16 +82,21 @@ export default function MakeCallPage({ role }: MakeCallPageProps) {
 
   // Fetch agents
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
-    queryKey: ["agents-for-call", user?.id, role],
+    queryKey: ["agents-for-call", role, user?.id, isSubUser ? clientId : null],
     queryFn: async () => {
       let query = supabase.from("aitel_agents").select("*");
 
       if (role === "client" && user) {
-        query = query.eq("client_id", user.id).eq("status", "active");
+        // If the logged-in user is a sub-user, show agents assigned to their parent client.
+        const effectiveClientId = isSubUser && clientId ? clientId : user.id;
+
+        // Agents may be in non-"active" statuses (e.g. "processed") but still valid for the client.
+        // Only exclude explicitly inactive agents.
+        query = query.eq("client_id", effectiveClientId).neq("status", "inactive");
       } else if (role === "engineer" && user) {
         query = query
           .eq("engineer_id", user.id)
-          .eq("status", "active")
+          .neq("status", "inactive")
           .not("client_id", "is", null);
       } else if (role === "admin") {
         // Broadest possible query for admin
