@@ -53,7 +53,7 @@ export default function AdminAgentCreator() {
                     agent_name: agentName,
                     original_system_prompt: config.agentPrompt,
                     current_system_prompt: config.agentPrompt,
-                    agent_config: bolnaConfig.agent_config,
+                    agent_config: JSON.parse(JSON.stringify(bolnaConfig.agent_config)),
                     status: "active",
                     synced_at: new Date().toISOString(),
                 }]);

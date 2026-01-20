@@ -387,10 +387,30 @@ export default function AdminAgents() {
                                   Current System Prompt
                                 </label>
                                 <pre className="text-sm bg-muted p-3 rounded max-h-64 overflow-auto whitespace-pre-wrap">
-                                  {agent.current_system_prompt || "No prompt available"}
+                                  {(() => {
+                                    // Check for actual prompt, not placeholder
+                                    const currentPrompt = agent.current_system_prompt;
+                                    const originalPrompt = agent.original_system_prompt;
+                                    
+                                    // If current prompt is placeholder or empty, try to get from agent_config
+                                    if (!currentPrompt || currentPrompt === "[System prompt configured]" || currentPrompt === "System prompt configured") {
+                                      // Try to extract from agent_config
+                                      const config = agent.agent_config as Record<string, unknown>;
+                                      const agentPrompts = config?.agent_prompts as Record<string, unknown> | undefined;
+                                      const task1 = agentPrompts?.task_1 as Record<string, unknown> | undefined;
+                                      const systemPrompt = task1?.system_prompt as string | undefined;
+                                      
+                                      if (systemPrompt) return systemPrompt;
+                                      if (originalPrompt && originalPrompt !== "[System prompt configured]") return originalPrompt;
+                                      return "No prompt available - Re-sync to fetch from API";
+                                    }
+                                    return currentPrompt;
+                                  })()}
                                 </pre>
                               </div>
-                              {agent.original_system_prompt && agent.original_system_prompt !== agent.current_system_prompt && (
+                              {agent.original_system_prompt && 
+                               agent.original_system_prompt !== agent.current_system_prompt && 
+                               agent.original_system_prompt !== "[System prompt configured]" && (
                                 <div>
                                   <label className="text-sm font-medium">
                                     Original System Prompt
