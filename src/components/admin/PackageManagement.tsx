@@ -53,7 +53,7 @@ export function PackageManagement() {
         .from("pricing_packages")
         .select("*")
         .order("display_order");
-      
+
       if (error) throw error;
       return data as PricingPackage[];
     },
@@ -78,6 +78,8 @@ export function PackageManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-packages"] });
+      // Also invalidate client packages to ensure freshness if visited immediately
+      queryClient.invalidateQueries({ queryKey: ["client-packages"] });
       toast.success("Package created successfully");
       setIsDialogOpen(false);
       resetForm();
@@ -109,6 +111,7 @@ export function PackageManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-packages"] });
+      queryClient.invalidateQueries({ queryKey: ["client-packages"] });
       toast.success("Package updated successfully");
       setIsDialogOpen(false);
       setEditingPackage(null);

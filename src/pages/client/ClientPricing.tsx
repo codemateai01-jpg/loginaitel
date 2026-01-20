@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -78,6 +78,32 @@ const safeFeatures = (features: any): string[] => {
 export default function ClientPricing() {
   const { user } = useAuth();
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Subscribe to real-time changes
+  useEffect(() => {
+    console.log("Setting up realtime subscription for pricing_packages");
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pricing_packages'
+        },
+        (payload) => {
+          console.log('Real-time update received:', payload);
+          queryClient.invalidateQueries({ queryKey: ["client-packages"] });
+          toast.info("Packages updated");
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Fetch packages from Supabase
   const { data: packages, isLoading: isLoadingPackages } = useQuery({
