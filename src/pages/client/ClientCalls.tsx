@@ -198,65 +198,85 @@ export default function ClientCalls() {
     return map;
   }, [agents]);
 
-  // Fetch call executions from API for each agent
+  // Parallel fetch call executions from API for each agent
   const { data: calls, isLoading } = useQuery({
     queryKey: ["client-calls-list", user?.id, dateRange, agents?.length],
     enabled: !!user?.id && !!agents && agents.length > 0,
     queryFn: async () => {
       const startDate = subDays(new Date(), parseInt(dateRange));
+      
+      // Prepare all promises
+      const fetchPromises = agents!
+        .filter(agent => agent.external_agent_id)
+        .map(agent => 
+          listAgentExecutions({
+            agent_id: agent.external_agent_id,
+            page_size: 50,
+            from: startDate.toISOString(),
+          })
+            .then(result => ({ agent, result }))
+            .catch(err => {
+              console.error(`Failed to fetch executions for agent ${agent.agent_name}:`, err);
+              return null;
+            })
+        );
+
+      // Execute in parallel
+      const results = await Promise.all(fetchPromises);
+      
       const allCalls: CallDisplay[] = [];
 
-      // Fetch executions for each agent (client's assigned agents only)
-      for (const agent of agents!) {
-        if (!agent.external_agent_id) continue;
+      results.forEach(item => {
+        if (!item?.result?.data?.data) return;
 
-        try {
-          const result = await listAgentExecutions({
-            agent_id: agent.external_agent_id,
-            page_size: 50, // Max 50 per page
-            from: startDate.toISOString(),
+        const { agent, result } = item;
+        
+        // Map execution to our display format
+        const mappedCalls = result.data.data
+          .filter((exec: CallExecution) => {
+            // Filter out any calls with invalid dates immediately
+            try {
+              return !isNaN(new Date(exec.created_at).getTime());
+            } catch {
+              return false;
+            }
+          })
+          .map((exec: CallExecution): CallDisplay => {
+            // Get duration - prefer telephony_data.duration, fallback to conversation_time
+            let durationSeconds: number | null = null;
+            if (exec.telephony_data?.duration) {
+              const parsed = parseFloat(exec.telephony_data.duration);
+              durationSeconds = !isNaN(parsed) ? Math.round(parsed) : null;
+            } else if (exec.conversation_time !== undefined && exec.conversation_time !== null) {
+              durationSeconds = Math.round(exec.conversation_time);
+            }
+
+            // Get phone number - for inbound calls, show from_number; for outbound, show to_number
+            const callType = exec.telephony_data?.call_type || null;
+            const phoneNumber = callType === "inbound" 
+              ? exec.telephony_data?.from_number 
+              : exec.telephony_data?.to_number;
+
+            return {
+              id: exec.id,
+              phone_number: phoneNumber || "Unknown",
+              agent_id: exec.agent_id,
+              agent_name: agent.agent_name,
+              status: exec.status,
+              duration_seconds: durationSeconds,
+              connected: (durationSeconds || 0) >= 45,
+              created_at: exec.created_at,
+              transcript: exec.transcript || null,
+              recording_url: exec.telephony_data?.recording_url || null,
+              summary: exec.summary || null,
+              external_call_id: exec.id,
+              call_type: callType,
+              extracted_data: exec.extracted_data || null,
+            };
           });
-
-          if (result.data?.data) {
-            // Map execution to our display format
-            const mappedCalls = result.data.data.map((exec: CallExecution): CallDisplay => {
-              // Get duration - prefer telephony_data.duration, fallback to conversation_time
-              let durationSeconds: number | null = null;
-              if (exec.telephony_data?.duration) {
-                durationSeconds = Math.round(parseFloat(exec.telephony_data.duration));
-              } else if (exec.conversation_time !== undefined && exec.conversation_time !== null) {
-                durationSeconds = Math.round(exec.conversation_time);
-              }
-
-              // Get phone number - for inbound calls, show from_number; for outbound, show to_number
-              const callType = exec.telephony_data?.call_type || null;
-              const phoneNumber = callType === "inbound" 
-                ? exec.telephony_data?.from_number 
-                : exec.telephony_data?.to_number;
-
-              return {
-                id: exec.id,
-                phone_number: phoneNumber || "Unknown",
-                agent_id: exec.agent_id,
-                agent_name: agent.agent_name,
-                status: exec.status,
-                duration_seconds: durationSeconds,
-                connected: (durationSeconds || 0) >= 45,
-                created_at: exec.created_at,
-                transcript: exec.transcript || null,
-                recording_url: exec.telephony_data?.recording_url || null,
-                summary: exec.summary || null,
-                external_call_id: exec.id,
-                call_type: callType,
-                extracted_data: exec.extracted_data || null,
-              };
-            });
-            allCalls.push(...mappedCalls);
-          }
-        } catch (err) {
-          console.error(`Failed to fetch executions for agent ${agent.agent_name}:`, err);
-        }
-      }
+          
+        allCalls.push(...mappedCalls);
+      });
 
       // Sort by created_at descending
       allCalls.sort((a, b) => 
@@ -294,7 +314,8 @@ export default function ClientCalls() {
   };
 
   // Calculate stats
-  const stats = {
+  // Use useMemo for expensive calculations
+  const stats = useMemo(() => ({
     total: calls?.length || 0,
     completed: calls?.filter((c) => c.status === "completed" || c.status === "call-disconnected").length || 0,
     connected: calls?.filter((c) => c.connected).length || 0,
@@ -306,7 +327,7 @@ export default function ClientCalls() {
     connectionRate: calls?.length
       ? Math.round((calls.filter((c) => c.connected).length / calls.length) * 100)
       : 0,
-  };
+  }), [calls]);
 
   // Prepare chart data
   const statusDistribution = calls
